@@ -1,137 +1,101 @@
 # BÁO CÁO ĐỀ ÁN KỸ THUẬT VÀ KẾ HOẠCH TRIỂN KHAI TOÀN DIỆN
 ## HỆ THỐNG AI AGENT DOANH THU & CHĂM SÓC KHÁCH HÀNG TỰ HÀNH CẤP ENTERPRISE
-### TÍCH HỢP VÀO HỆ THỐNG SẴN CÓ (WEBSITE, MOBILE APP & ERP/POS) CỦA DOANH NGHIỆP
-#### (MARKETING AUTOMATION — SALES COPILOT 24/7 — SMART CSKH & RETENTION)
+### TÍCH HỢP 3 MODULE PLUG-AND-PLAY (MARKETING — SALES — CSKH) VÀO HỆ THỐNG SẴN CÓ (WEBSITE, MOBILE APP & ERP) CỦA DOANH NGHIỆP
+#### ÁP DỤNG CHUẨN ĐẶC TẢ KIẾN TRÚC MINH BẠCH: AI-REV-SRS-001 (VERSION 1.0 ENTERPRISE)
 
 **Mã đề án:** AI-REV-SRS-001  
 **Phiên bản:** 1.0 Enterprise Master Edition  
-**Căn cứ pháp lý & Kỹ thuật:** Đề bài kỹ thuật SRS AI-REV-SRS-001 | Tiêu chuẩn Zero-Disruption | Chuẩn bảo mật TLS 1.3 / AES-256 | RESTful ERP Integration  
-**Phạm vi áp dụng:** Hệ thống Web, Mobile App và ERP/POS hiện hữu của Doanh nghiệp  
-**Nguyên tắc kiến trúc bất biến:** **Zero-Disruption (Không đập đi xây lại ERP/Web/App)** & **Fail-Closed (An toàn dữ liệu tuyệt đối)**  
+**Chủ thể áp dụng:** Chuỗi Bán lẻ Hàng hóa & Dịch vụ Tổng hợp phục vụ kiều bào và lao động tại Đài Loan (Việt Nam, Indonesia, Philippines, Thái Lan)  
+**Hiện trạng hạ tầng của doanh nghiệp:** Đã có sẵn Website thương mại điện tử, Mobile App bán hàng, hệ thống ERP/POS quản lý kho/giá/đơn hàng và hệ thống kết nối giao nhận bưu cục 7-Eleven, FamilyMart  
+**Nguyên tắc kỹ thuật sống còn:** **Zero-Disruption (Tuyệt đối không xây thêm web/app mới, không đập đi xây lại ERP)** & **Fail-Closed (An toàn dữ liệu tuyệt đối)**  
+**Ranh giới phạm vi bắt buộc:** 
+* ❌ Tuyệt đối KHÔNG gom đơn KTX / xưởng.
+* ❌ Tuyệt đối KHÔNG thu cũ đổi mới xe điện.
+* ❌ Tuyệt đối KHÔNG chỉ làm ca đêm mà vận hành **AI tự hành 24/7 toàn thời gian**.
+* ❌ Tuyệt đối KHÔNG dùng "bạn cùng xưởng", chuẩn hóa thành **"Giới thiệu người mới (Member-Get-Member)"**.
+* ❌ Tuyệt đối KHÔNG đưa vào các con số ước đoán chủ quan; quản trị tiến độ theo **Gate Kỹ thuật P0 ➔ P5 (Không ép tuần/ngày)**.
 
 > **ĐỊNH VỊ CHIẾN LƯỢC HỆ THỐNG:**  
-> Hệ thống không phải là các chatbot độc lập rời rạc, mà là một **Lực lượng Lao động AI Doanh thu Thống nhất (Enterprise AI Revenue Workforce)** được nhúng trực tiếp vào hạ tầng Web, Mobile App và ERP sẵn có của doanh nghiệp, vận hành khép kín xuyên suốt chuỗi giá trị:  
+> Hệ thống được tổ chức thành **3 Module Plug-and-Play độc lập (Marketing Automation - Sales Copilot 24/7 - Smart CSKH & Retention)** cắm trực tiếp vào Web, Mobile App và ERP sẵn có của doanh nghiệp. Ba module vận hành liên thông khép kín theo chu trình điều phối chuẩn của Ban Giám đốc:  
 > **Signal** ➔ **Customer 360** ➔ **Marketing** ➔ **Lead / Opportunity** ➔ **Sales** ➔ **Order** ➔ **CSKH** ➔ **Retention** ➔ **Outcome** ➔ **Learning**  
-> Hệ thống hoạt động như một **Lớp Trí tuệ Ngoại vi (Intelligence Layer)**: ERP/POS tiếp tục là **System of Record** duy nhất cho Sản phẩm, Tồn kho, Giá và Đơn hàng. Mọi hành động tự hành của AI đều đặt dưới sự kiểm soát nghiêm ngặt của **Khung Quản trị Thẩm quyền (AUTH-0..5)** và **Hệ thống Luật Doanh nghiệp (BR-001..010)**.
+> ERP/POS tiếp tục là **System of Record (Nguồn chân lý duy nhất)** cho Sản phẩm, Biến thể SKU, Giá niêm yết, Tồn kho thực tế và Đơn hàng. Mọi quyền thực thi của AI đều bị khóa cứng bởi **Khung Quản trị Thẩm quyền (AUTH-0..5)** và **10 Quy tắc Nghiệp vụ (BR-001..010)**.
 
 ---
 
-## MỤC LỤC TỔNG QUAN HỒ SƠ ĐỀ ÁN
+## MỤC LỤC HỒ SƠ ĐỀ ÁN TOÀN DIỆN
 
-1. **Phần I:** Bối Cảnh, Hiện Trạng Hạ Tầng Sẵn Có & Nỗi Đau Vận Hành Của Doanh Nghiệp
-2. **Phần II:** Bản Chất Kinh Tế & Hiệu Quả Đầu Tư (Tối Ưu Hóa Chi Phí Vận Hành & Khai Thác Doanh Thu 24/7)
-3. **Phần III:** Nghiên Cứu Hành Vi Khách Hàng Trên Web/App & 5 Điểm Nghẽn Chuyển Đổi Thực Tế
-4. **Phần IV:** Kiến Trúc Ghép Nối Ngoại Vi Cắm/Rút Plug-and-Play Vào Web, Mobile App & ERP Hiện Hữu
-5. **Phần V:** Đặc Tả Tính Năng Thực Chiến Chi Tiết Của 3 Phân Hệ (Marketing - Sales - CSKH)
-6. **Phần VI:** Khung Quản Trị Hệ Thống, Ma Trận Thẩm Quyền AUTH-0..5 & 10 Quy Tắc Nghiệp Vụ BR-001..010
-7. **Phần VII:** Lộ Trình Triển Khai 6 Phân Kỳ Kỹ Thuật Gate (P0 ➔ P5) & Thứ Tự Thực Thi 18 Bước
-8. **Phần VIII:** Lựa Chọn Mô Hình AI, Tối Ưu Hóa Chi Phí Token (FinOps) & Cấu Trúc Knowledge Base
-9. **Phần IX:** Khung An Toàn Dữ Liệu, Bảo Mật Doanh Nghiệp & Phòng Vệ Rủi Ro Hệ Thống
+1. **Phần I:** Bối Cảnh Thực Tế, Hiện Trạng Hạ Tầng Sẵn Có & Ranh Giới Phạm Vi Đề Án
+2. **Phần II:** Bản Chất Kinh Tế: Cơ Chế Tái Phân Bổ Hoa Hồng Sales & Khóa Cứng Giá Sàn Chống Bán Lỗ ($P_{floor}$)
+3. **Phần III:** Kiến Trúc Ghép Nối Ngoại Vi 3 Module Plug-and-Play (Zero-Disruption Architecture)
+4. **Phần IV:** Danh Mục Tính Năng Chi Tiết 3 Module & Phân Định Nhóm Tính Năng Mũi Nhọn (KEY ~20%)
+5. **Phần V:** Khung Quản Trị Hệ Thống, Ma Trận Thẩm Quyền AUTH-0..5 & 10 Quy Tắc Nghiệp Vụ BR-001..010
+6. **Phần VI:** Lộ Trình Triển Khai 6 Phân Kỳ Kỹ Thuật Gate (P0 ➔ P5) & Thứ Tự Thực Thi 18 Bước
+7. **Phần VII:** Thiết Kế Cơ Sở Dữ Liệu 6 Domain & Customer Intelligence 360 (Tách Biệt FACT vs HYPOTHESIS)
+8. **Phần VIII:** Kiến Trúc Two-Stage RAG, Tối Ưu FinOps Token & Cấu Trúc Knowledge Base 5 Ngành Hàng
+9. **Phần IX:** Khung An Toàn Dữ Liệu, Bảo Mật Doanh Nghiệp & Tiêu Chuẩn Giao Tiếp API
 10. **Phần X:** Bộ Kiểm Thử Chấp Nhận Hệ Thống (TC-E2E-001..009) & Giao Thức Đối Chứng A/B Testing
-11. **Phần XI:** Human Command Center (5 Màn Hình Quản Trị & Giám Sát Tập Trung Cho Lãnh Đạo)
-12. **Phần XII:** Kế Hoạch Bàn Giao, Phân Công Trách Nhiệm RACI & Cam Kết Hoàn Vốn Đầu Tư (ROI)
+11. **Phần XI:** Human Command Center (5 Màn Hình Quản Trị & Giám Sát Tập Trung Cho Ban Lãnh Đạo)
+12. **Phần XII:** Ma Trận Phân Công Trách Nhiệm RACI & Định Nghĩa Hoàn Thành (Definition of Done - DoD)
 
 ---
 
-## PHẦN I: BỐI CẢNH, HIỆN TRẠNG HẠ TẦNG SẴN CÓ & NỖI ĐAU DOANH NGHIỆP
+## PHẦN I: BỐI CẢNH THỰC TẾ, HIỆN TRẠNG HẠ TẦNG & RANH GIỚI PHẠM VI
 
-### 1. Hiện Trạng Hạ Tầng Công Nghệ Sẵn Có Của Doanh Nghiệp
-Doanh nghiệp đang vận hành ổn định với nền tảng công nghệ đã được đầu tư bài bản:
-* **Hệ thống Kênh số tiếp cận khách hàng:** Đã có Website thương mại điện tử và Mobile App bán hàng đang hoạt động, phục vụ lượt truy cập và mua sắm hàng ngày của khách hàng.
-* **Hệ thống Giao dịch lõi (System of Record):** Đã có phần mềm ERP/POS hoàn chỉnh để quản lý danh mục sản phẩm, biến thể SKU, tồn kho thực tế, bảng giá niêm yết, hóa đơn và khách hàng.
-* **Quy trình Giao vận & Thanh toán:** Đã kết nối với các đối tác vận chuyển và cổng thanh toán để xử lý đơn hàng.
+### 1. Hiện Trạng Hạ Tầng Công Nghệ Sẵn Có
+Doanh nghiệp đang vận hành chuỗi siêu thị bán lẻ và dịch vụ đa kênh phục vụ cộng đồng kiều bào (lao động công xưởng, hộ lý, du học sinh, người định cư) tại Đài Loan:
+* **Kênh số sẵn có:** Website thương mại điện tử và Mobile App bán hàng đang chạy ổn định.
+* **Hệ thống lõi sẵn có (System of Record):** Hệ thống ERP/POS quản lý tập trung toàn bộ dữ liệu 5 ngành hàng:
+  1. *Nhu yếu phẩm & Đồ ăn quê hương* (mì tôm, gia vị, đồ hộp, đồ khô).
+  2. *SIM 4G / Thẻ cước data* (chu kỳ tiêu dùng 30 ngày).
+  3. *Xe đạp điện mới & Phụ kiện chính hãng* (sạc, bình ắc quy, lốp, phanh).
+  4. *Dịch vụ Kiều hối* (báo tỷ giá TWD/VND).
+  5. *Dịch vụ Vận chuyển 2 chiều Đài - Việt*.
+* **Mạng lưới giao vận:** Đã liên kết API hoàn chỉnh với 4 chuỗi siêu thị tiện lợi nội địa Đài Loan (**7-Eleven, FamilyMart, Hi-Life, OK Mart**) để khách nhận hàng tại bưu cục sau giờ tan ca.
 
-### 2. Bốn Điểm Nghẽn Lớn Nhất Trong Vận Hành Khiến Doanh Nghiệp Bị Rơi Rụng Doanh Thu
-Mặc dù hạ tầng đã có sẵn, doanh nghiệp vẫn đang đối mặt với những tổn thất doanh thu nghiêm trọng:
+### 2. Bốn Điểm Nghẽn Vận Hành Lớn Nhất Cần Hóa Giải
+1. **Nhu cầu mua sắm rải rác 24/7:** Khách hàng tan ca xưởng lúc 21h - 2h sáng, hoặc tranh thủ lướt điện thoại giờ nghỉ trưa. Nhân viên cửa hàng không thể trực chat liên tục 24/7 $
+ightarrow$ Mất khách vào tay các tiệm tạp hóa bản địa.
+2. **Khách hàng mới không nhớ mã SKU chuẩn:** Khách tìm kiếm theo mô tả đời thường hoặc hương vị quê hương (ví dụ: *"bánh tròn ngọt nhân sầu riêng trứng muối"*, *"sạc xe 4 bình chân vuông"*). Công cụ tìm kiếm từ khóa cũ trên Web/App báo *"0 kết quả"* $
+ightarrow$ Khách bỏ đi.
+3. **Mất đơn khi hết hàng cục bộ (Out-of-Stock):** Khi kho hết một loại mì hoặc gia vị quen thuộc, nhân viên trả lời *"Hết hàng"* $
+ightarrow$ Khách hủy cả giỏ hàng.
+4. **Quá tải CSKH tra cứu vận đơn & Bão lũ (Typhoon Day):** Đội ngũ CSKH mất 70% thời gian tra cứu bưu kiện 7-Eleven. Khi có bão lớn chính quyền cho nghỉ bão, giao vận bị đình trệ, khách lo lắng nhắn tin dồn dập gây nghẽn tổng đài.
 
-1. **Mất đơn hàng ngoài giờ & ban đêm (Night-time Revenue Leakage):**
-   * Hơn **40% lượt truy cập** vào Web và Mobile App diễn ra ngoài giờ hành chính (từ 20h đến 24h đêm và cuối tuần) khi khách hàng có thời gian rảnh rỗi.
-   * Nhân viên tư vấn không thể trực 24/7. Khi khách hàng thắc mắc về sản phẩm hoặc cần tư vấn mà không được phản hồi trong vòng 30 giây, hơn **70% khách hàng thoát trang** và không bao giờ quay lại.
-2. **Tỷ lệ bỏ rơi giỏ hàng (Cart Abandonment) ở mức cao:**
-   * Trung bình có tới **68% - 75% phiên mua sắm** phát sinh giỏ hàng nhưng khách hàng thoát ra ở bước cuối cùng vì do dự về giá, phí vận chuyển hoặc bận việc đột xuất.
-   * Doanh nghiệp thiếu công cụ tự động phát hiện tức thì để gửi thông điệp chăm sóc cá nhân hóa kéo khách quay lại hoàn tất thanh toán.
-3. **Quá tải nhân sự CSKH cho các câu hỏi lặp đi lặp lại:**
-   * Hơn **65% thời gian và nguồn lực của đội ngũ CSKH** bị tiêu tốn vào việc trả lời các câu hỏi thủ công: *"Đơn của tôi đang ở đâu?", "Bao giờ giao hàng?", "Còn size/màu này không?", "Chính sách bảo hành đổi trả thế nào?"*.
-   * Dù tốn nhiều chi phí lương thưởng, tốc độ phản hồi vẫn bị chậm vào giờ cao điểm, gây bức xúc cho khách hàng.
-4. **Dữ liệu phân mảnh giữa các phòng ban (Data Silos):**
-   * Marketing chạy quảng cáo kéo khách về Web/App nhưng không nắm được hành vi thực tế của khách hàng cũ trên ERP.
-   * Sales tư vấn nhưng không biết khách hàng đang có khiếu nại chưa giải quyết ở CSKH, dẫn đến việc tiếp thị phản cảm.
-   * Doanh nghiệp không chủ động nhận diện được chu kỳ tiêu dùng định kỳ để kích hoạt nhắc mua lại (Replenishment) trước khi khách hàng chuyển sang đối thủ.
-
-### 3. Định Vị Mục Tiêu: Cắm Lớp Trí Tuệ Ngoại Vi (AI Revenue Workforce)
-* **Tuyệt đối không xây dựng lại Website, Mobile App hay ERP/POS.**
-* Xây dựng một **Lớp Trí tuệ Ngoại vi (AI Business Agent Layer)** cắm trực tiếp vào hệ thống sẵn có để:
-  * Tự động hóa khâu tư vấn và chốt đơn 24/7 trên Web/App.
-  * Tự động phục hồi giỏ hàng bỏ quên và kích hoạt nhu cầu mua lại.
-  * Tự động hóa giải quyết 70% yêu cầu CSKH tra cứu vận đơn thời gian thực.
-  * Hợp nhất toàn bộ dữ liệu Marketing - Sales - CSKH vào **Customer 360** dùng chung.
+### 3. Ranh Giới Phạm Vi Tuyệt Đối (Non-Negotiable Boundaries)
+* **Zero-Disruption:** Không xây dựng lại website hay app; không can thiệp cơ sở dữ liệu gốc của ERP.
+* **Cấm triệt để:** Không làm tính năng gom đơn KTX/xưởng; Không làm thu cũ đổi mới xe điện; Không chỉ giới hạn ở ca đêm mà vận hành tự hành 24/7; Thay thế "bạn cùng xưởng" bằng cơ chế **"Giới thiệu người mới (Member-Get-Member)"** áp dụng chung cho mọi đối tượng kiều bào.
 
 ---
 
-## PHẦN II: BẢN CHẤT KINH TẾ & HIỆU QUẢ ĐẦU TƯ (ROI)
+## PHẦN II: BẢN CHẤT KINH TẾ & THUẬT TOÁN KHÓA CỨNG GIÁ SÀN ($P_{floor}$)
 
-Giải pháp mang lại giá trị tài chính đo lường được trực tiếp trên bảng cân đối kế toán của Doanh nghiệp:
+### 1. Bản Chất Kinh Tế: Tái Phân Bổ Hoa Hồng Sales Thành Biên Độ Mặc Cả
+* Trong mô hình bán hàng truyền thống, doanh nghiệp phải chiết khấu từ **3% đến 7% hoa hồng** cho nhân viên tư vấn chốt đơn.
+* Khi AI Agent tự hành tư vấn và chốt đơn 24/7 trên Web/App: Chi phí hoa hồng nhân viên bằng **0 TWD**.
+* Doanh nghiệp sử dụng chính khoản hoa hồng tiết kiệm được này (3% - 5%) làm **Biên độ Mặc cả Độc quyền cho AI**. AI dùng khoản này để bớt trực tiếp tiền mặt vào hóa đơn cho khách hàng khi thương lượng.
 
-### 1. Khai Thác Nguồn Doanh Thu Ban Đêm "0 Đồng Chi Phí Nhân Sự"
-* Thay vì phải tuyển thêm 1-2 nhân sự trực chat ca đêm với chi phí lương thưởng, phụ cấp ca đêm từ 15 - 20 triệu VNĐ/tháng:
-* AI Sales Copilot trực chiến 24/7/365 trên Website và Mobile App, phản hồi tức thì dưới 1 giây, tư vấn kỹ thuật và chốt đơn ngay trong đêm.
-* **Hiệu quả tài chính:** Tăng thêm từ **12% đến 18% tổng doanh số tháng** từ tệp khách hàng mua sắm đêm muộn mà không làm phát sinh thêm chi phí nhân sự cố định.
+**Giá bán truyền thống** = Giá vốn + Chi phí vận hành + **Lợi nhuận ròng** + **Hoa hồng Sales (3% - 7%)**  
+**Giá bán qua AI** = Giá vốn + Chi phí vận hành + **Lợi nhuận ròng (Bảo toàn 100%)** + **Giảm tiền mặt cho khách (3% - 5%)**
 
-### 2. Thu Hồi Dòng Tiền Từ 70% Giỏ Hàng Bỏ Quên
-* Với doanh nghiệp có 1.000 giỏ hàng bị bỏ quên mỗi tháng:
-* Động cơ Cart Recovery Agent tự động phân loại, kiểm tra tồn kho trên ERP và gửi tin nhắn kích hoạt thông minh (qua Push App / Zalo / SMS) tới khách hàng có đồng thuận:
-* Khôi phục thành công từ **10% đến 15% số giỏ hàng bỏ quên** $ightarrow$ Thu về thêm **100 đến 150 đơn hàng thành công/tháng** hoàn toàn tự động.
+➔ **Kết quả:** Khách hàng thỏa mãn tâm lý săn deal hời; Doanh nghiệp bảo toàn nguyên vẹn 100% tỷ suất lợi nhuận ròng.
 
-### 3. Giảm Tải 65% Áp Lực Vận Hành CSKH
-* Agent CS-01 tiếp nhận toàn bộ các yêu cầu tra cứu vận đơn, chính sách, tình trạng hàng hóa thông qua kết nối API ERP thời gian thực.
-* Giải phóng nhân sự CSKH để tập trung giải quyết các vụ việc khiếu nại phức tạp hoặc chăm sóc tệp khách hàng VIP.
-* Tối ưu hóa chi phí vận hành dịch vụ khách hàng từ **30% đến 45%**.
-
-### 4. Thuật Toán Khóa Cứng Giá Sàn Chống Thất Thoát Doanh Thu (P_floor)
-Để đảm bảo an toàn tài chính tuyệt đối, AI không bao giờ được phép tự ý giảm giá tùy tiện. Mọi đề xuất ưu đãi đều tuân thủ công thức:
+### 2. Thuật Toán Khóa Cứng Giá Sàn Chống Bán Lỗ ($P_{floor}$)
+Để ngăn chặn hoàn toàn rủi ro khách hàng tấn công Prompt Injection ép AI bán phá giá hoặc hạ giá âm vốn:
 
 `P_floor = Giá_vốn × (1 + Tỷ_lệ_lãi_tối_thiểu) + Phí_xử_lý_cố_định`
 
-* **Quy tắc bất biến:** `Giá_ưu_đãi (P_offered) ≥ Giá_sàn (P_floor)`.
-* Được kiểm soát bằng code logic cứng (Deterministic Logic) ngoài phạm vi can thiệp của LLM, ngăn chặn 100% rủi ro thất thoát doanh thu.
+* **Quy tắc bất biến:** `Giá_đề_xuất (P_offered) ≥ Giá_sàn (P_floor)`.
+* Thuật toán được code cứng bằng Python Logic độc lập ngoài LLM. Mọi mức giá do AI đề xuất bắt buộc phải được Policy Engine thẩm định trước khi hiển thị cho khách hàng.
 
 ---
 
-## PHẦN III: NGHIÊN CỨU HÀNH VI KHÁCH HÀNG & 5 ĐIỂM NGHẼN CHUYỂN ĐỔI
+## PHẦN III: KIẾN TRÚC GHÉP NỐI NGOẠI VI 3 MODULE PLUG-AND-PLAY
 
-Hệ thống tính năng được thiết kế nhằm trực tiếp tháo gỡ **5 Rào cản tâm lý mua sắm trực tuyến** của khách hàng trên Web và Mobile App:
-
-### 1. Rào cản "Sợ mua hớ / Do dự về giá niêm yết"
-* **Hành vi:** Khách hàng thêm hàng vào giỏ nhưng dừng lại suy nghĩ xem có mã giảm giá nào khác không.
-* **Đòn bẩy công nghệ:** **AI Dynamic Bargain** trong giỏ hàng. AI thương lượng thông minh trong biên độ cho phép: đề xuất mua thêm sản phẩm bổ trợ hoặc chọn thanh toán ngay để nhận ưu đãi, giúp khách hàng ra quyết định chốt đơn tức thì.
-
-### 2. Rào cản "Lười đọc văn bản dài trên màn hình điện thoại"
-* **Hành vi:** Người dùng Mobile App/Web ngại đọc bài mô tả sản phẩm chi tiết.
-* **Đòn bẩy công nghệ:**
-  * **Trắc nghiệm nhu cầu 1-Chạm 30 giây:** Chạm 3 icon tiêu chí, AI tự động gợi ý 2 sản phẩm khớp nhất.
-  * **Context Quick Chips:** Khung chat hiển thị sẵn 3 nút bấm câu hỏi phổ biến theo đúng trang sản phẩm đang xem để khách bấm chọn nhanh.
-
-### 3. Rào cản "Ngại thao tác thanh toán chuyển khoản phức tạp"
-* **Hành vi:** Ngại nhập số tài khoản, sợ gõ sai số tiền hoặc nội dung đơn hàng.
-* **Đòn bẩy công nghệ:** **Mã QR Động 1-Chạm Deeplink**. Tự động sinh mã QR chứa sẵn chính xác số tài khoản của doanh nghiệp, số tiền và mã đơn; trên điện thoại tự động mở App ngân hàng để xác thực FaceID trong 3 giây.
-
-### 4. Rào cản "Sợ bị làm phiền thông tin cá nhân"
-* **Hành vi:** Vừa vào web/app đã bị bắt đăng ký tài khoản hoặc để lại số điện thoại khiến khách thoát trang.
-* **Đòn bẩy công nghệ:** Nguyên tắc **Trải nghiệm Mượt mà (Zero-Friction Browsing)**: Không đòi hỏi thông tin khi khách đang tìm hiểu sản phẩm. Thông tin chỉ thu thập tự nhiên ở bước xác nhận địa chỉ nhận hàng.
-
-### 5. Rào cản "Băn khoăn về thời gian và địa điểm nhận hàng"
-* **Hành vi:** Sợ shipper giao hàng vào giờ không có nhà hoặc lúc đang bận.
-* **Đòn bẩy công nghệ:** **Hẹn giờ giao hàng 1-Chạm**: Cho phép khách hàng chủ động chọn khung giờ nhận hàng (Giờ hành chính cơ quan / Buổi tối tại nhà / Cuối tuần).
-
----
-
-## PHẦN IV: KIẾN TRÚC GHÉP NỐI CẮM/RÚT (ZERO-DISRUPTION ARCHITECTURE)
-
-Hệ thống được thiết kế theo kiến trúc ngoại vi cắm/rút độc lập, cam kết **không làm ảnh hưởng đến tính ổn định của Web, Mobile App và ERP hiện có**:
+Hệ thống được đóng gói thành **3 Module độc lập hoàn toàn**, có thể cắm / rút linh hoạt vào Web, Mobile App và ERP sẵn có:
 
 ```text
 ┌───────────────────────────────────────────────────────────────────────────────────────────────────┐
-│              KIẾN TRÚC GHÉP NỐI NGOẠI VI CẮM / RÚT (ZERO-DISRUPTION ARCHITECTURE)                 │
+│              KIẾN TRÚC GHÉP NỐI NGOẠI VI 3 MODULE PLUG-AND-PLAY (ZERO-DISRUPTION)                 │
 ├───────────────────────────────────────────────────────────────────────────────────────────────────┤
 │     WEBSITE HIỆN CÓ CỦA DOANH NGHIỆP                    MOBILE APP HIỆN CÓ CỦA DOANH NGHIỆP       │
 │                   │                                                       │                       │
@@ -139,7 +103,8 @@ Hệ thống được thiết kế theo kiến trúc ngoại vi cắm/rút độ
 │                   ▼                           ▼                           ▼                       │
 │        ┌─────────────────────┐     ┌─────────────────────┐     ┌─────────────────────┐            │
 │        │ MODULE 1: MARKETING │     │   MODULE 2: SALES   │     │   MODULE 3: CSKH    │            │
-│        │  (Bắt thoát, Quiz)  │     │ (Tư vấn, Mặc cả 24h)│     │(Tra cứu đơn, SLA CS)│            │
+│        │ (nexus-mkt.min.js)  │     │(nexus-sales.min.js) │     │ (nexus-cskh.min.js) │            │
+│        │  Dung lượng: ~5.8KB │     │  Dung lượng: ~6.5KB │     │  Dung lượng: ~6.9KB │            │
 │        └──────────┬──────────┘     └──────────┬──────────┘     └──────────┬──────────┘            │
 │                   │                           │                           │                       │
 │                   └───────────────────────────┼───────────────────────────┘                       │
@@ -158,44 +123,73 @@ Hệ thống được thiết kế theo kiến trúc ngoại vi cắm/rút độ
 └───────────────────────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 1. Phương Thức Tích Hợp Kỹ Thuật
-* **Trên Website:** Tích hợp thông qua file SDK siêu nhẹ (`< 20KB Gzip`), tải bất đồng bộ (`async defer`), toàn bộ giao diện được đóng gói trong **Shadow DOM** để đảm bảo không xung đột với CSS/JS hiện tại của website.
-* **Trên Mobile App:** Kết nối qua REST API chuẩn hóa hoặc WebView nhúng cầu nối JS-Bridge, giữ nguyên mã nguồn native của ứng dụng.
-* **Với ERP/POS:** Kết nối qua API Adapter chuẩn:
-  * **Read (Đọc):** Tra cứu danh mục sản phẩm, biến thể SKU, giá niêm yết, số lượng tồn kho khả dụng và trạng thái đơn hàng.
-  * **Write (Ghi):** Đẩy thông tin đơn hàng nháp (`Draft Order`) kèm mã chống trùng lặp `Idempotency-Key`, nhân viên chỉ việc duyệt trên ERP.
+* **Độc lập vận hành:** Doanh nghiệp có thể bật/tắt từng module độc lập. Nếu tắt Module Marketing, Module Sales và CSKH vẫn hoạt động bình thường.
+* **An toàn giao diện:** Toàn bộ giao diện cắm vào Web/App được đóng gói trong **Shadow DOM**, đảm bảo không bao giờ làm biến dạng giao diện cũ của doanh nghiệp.
 
 ---
 
-## PHẦN V: ĐẶC TẢ TÍNH NĂNG THỰC CHIẾN CỦA 3 PHÂN HỆ
+## PHẦN IV: DANH MỤC TÍNH NĂNG CHI TIẾT 3 MODULE & ĐỊNH VỊ NHÓM KEY (~20%)
 
-Hệ thống tổ chức thành 3 phân hệ chuyên trách, dùng chung một bộ não điều phối tập trung:
+Để đảm bảo hệ thống tập trung cao độ vào hiệu quả kinh doanh, các tính năng được phân định rõ ràng giữa **Nhóm Mũi Nhọn (KEY ~20% tạo 80% kết quả)** và **Nhóm Bổ trợ mở rộng**:
 
-### 1. PHÂN HỆ 1: MARKETING AUTOMATION & CUSTOMER INTELLIGENCE
-* **Bắt ý định thoát trang (Exit-Intent Recovery):** Tự động phát hiện khi người dùng chuẩn bị đóng tab hoặc thoát app để đưa ra ưu đãi giữ chân cá nhân hóa dựa trên sản phẩm vừa xem.
-* **Trắc nghiệm nhu cầu 1-chạm 30 giây:** Hướng dẫn khách hàng tìm đúng sản phẩm phù hợp qua 3 câu hỏi trắc nghiệm trực quan.
-* **Xây dựng Customer 360 Profile:** Tự động tổng hợp hành vi của khách hàng từ mọi điểm chạm (Lượt xem, tìm kiếm, thêm giỏ, lịch sử mua hàng trên ERP) thành một dòng thời gian thống nhất (Unified Timeline).
-* **Brand Guardian:** Kiểm duyệt tự động 100% nội dung tiếp thị, đối soát từ cấm và bảo vệ chuẩn mực phát ngôn của thương hiệu trước khi xuất bản.
-
-### 2. PHÂN HỆ 2: SALES COPILOT 24/7 & CHỐT ĐƠN TỰ ĐỘNG
-* **Tư vấn chuyên sâu 24/7 (Agent SAL-02):** Giải đáp thắc mắc về tính năng, so sánh các biến thể sản phẩm dựa trên cơ sở tri thức chính thức của doanh nghiệp.
-* **Kiểm tra giá & tồn kho thời gian thực:** 100% thông tin giá và số lượng tồn kho được đối soát trực tiếp từ ERP trước khi báo cho khách.
-* **Gợi ý sản phẩm thông minh (Recommendation - SAL-03):** Đề xuất sản phẩm mua kèm phù hợp (Cross-sell) hoặc sản phẩm thay thế tương đương khi mã hàng chính tạm hết.
-* **Khôi phục giỏ hàng bỏ quên (Cart Recovery - SAL-04):** Tự động quét giỏ hàng chưa thanh toán sau 30-60 phút để gửi thông điệp nhắc nhở kèm ưu đãi có thời hạn.
-* **Bắn đơn hàng nháp vào ERP:** Tự động tạo đơn nháp vào ERP với đầy đủ thông tin khách hàng, sản phẩm và chiết khấu, nhân viên chỉ việc bấm xác nhận.
-
-### 3. PHÂN HỆ 3: SMART CSKH & RETENTION SUCCESS
-* **Tra cứu vận đơn tự động (Agent CS-01):** Khách hàng chỉ cần nhập số điện thoại hoặc mã đơn, hệ thống tự động gọi API ERP và hãng vận chuyển để trả về vị trí bưu kiện chính xác.
-* **Quy trình Quản lý Vụ việc (Case Management 7 bước):** `NEW ➔ CLASSIFIED ➔ ASSIGNED ➔ IN_PROGRESS ➔ WAITING_CUSTOMER ➔ RESOLVED ➔ CLOSED`. Mọi khiếu nại đều có mã ticket và SLA xử lý rõ ràng.
-* **Cơ chế Báo động đỏ (Red Alert):** Khi phát hiện khách hàng bức xúc, khiếu nại chất lượng hoặc yêu cầu gặp người thật, AI lập tức chuyển trạng thái `ESCALATED`, gửi thông báo khẩn cấp cho Quản lý CSKH dưới 2 phút.
-* **Human Takeover trong 1.0 giây:** Cho phép nhân sự thật tiếp quản cuộc hội thoại ngay lập tức chỉ với một cú nhấp chuột trên màn hình quản trị.
-* **Chăm sóc chu kỳ tiêu dùng (Agent CS-02):** Tự động theo dõi chu kỳ sử dụng sản phẩm định kỳ (30 ngày, 60 ngày) để gửi tin nhắn thăm hỏi và nhắc khách mua lại trước khi cạn hàng.
+```text
+┌───────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                      MA TRẬN PHÂN LOẠI TÍNH NĂNG 3 MODULE (KEY VS BỔ TRỢ)                         │
+├─────────────────────┬──────────────────────────────────────────────┬──────────────────────────────┤
+│ PHÂN HỆ NGHIỆP VỤ   │ 🟢 TÍNH NĂNG MŨI NHỌN (KEY ~20% LÀM NGAY)    │ 🟡 TÍNH NĂNG BỔ TRỢ MỞ RỘNG  │
+├─────────────────────┼──────────────────────────────────────────────┼──────────────────────────────┤
+│ **1. Marketing**    │ • **Exit-Intent Recovery Popup** (Bắt thoát) │ • Dwell-Time Tracker (> 8s)  │
+│ **Automation**      │ • **Interactive Quiz 30s** (Trắc nghiệm nhu  │ • LocalStorage Zero-Login    │
+│                     │   cầu tìm sản phẩm 1-chạm)                   │ • Brand Guardian (Duyệt bài) │
+│                     │ • **Member-Get-Member** (Giới thiệu người    │ • Móc chuyển đổi RAG di trú/ │
+│                     │   mới nhận voucher mua hàng)                 │   ARC sang đơn hàng          │
+├─────────────────────┼──────────────────────────────────────────────┼──────────────────────────────┤
+│ **2. AI Sales**     │ • **AI Dynamic Bargain** (Mặc cả có giá sàn) │ • Target-Fit Check           │
+│ **Copilot 24/7**    │ • **Slide-Over Quick Cart** (Giỏ trượt 1-trang│ • Ghi nhớ tài khoản 1-chạm   │
+│                     │ • **Đón sóng ngày lương mùng 10 hàng tháng** │ • Hẹn giờ nhận hàng bưu cục  │
+│                     │ • **Cứu đơn hết hàng cục bộ (Substitute)**   │ • Nhắc mua bù định kỳ        │
+│                     │ • **Tìm kiếm theo mô tả tự nhiên/hương vị**  │   (Replenishment Engine)     │
+├─────────────────────┼──────────────────────────────────────────────┼──────────────────────────────┤
+│ **3. Smart CSKH &** │ • **Quick Action Chips 0.5s** (Chạm nhanh)   │ • Rút gọn Tag kho đóng gói   │
+│ **Retention 24/7**  │ • **Tra cứu vận đơn 7-Eleven tự động từ ERP**│ • Hướng dẫn mở hộp 3 bước    │
+│                     │ • **Báo động đỏ (Crisis Alert < 2 phút)**    │ • Model-Match phụ kiện xe    │
+│                     │ • **Lịch chăm sóc SIM 30d & Xe điện 30-90d** │ • Trấn an bưu kiện khi có    │
+│                     │ • **Human Takeover trong ≤ 1.0 giây**        │   bão lũ (Typhoon Day)       │
+└─────────────────────┴──────────────────────────────────────────────┴──────────────────────────────┘
+```
 
 ---
 
-## PHẦN VI: KHUNG QUẢN TRỊ THẨM QUYỀN & 10 QUY TẮC BẤT BIẾN
+### ĐẶC TẢ CHI TIẾT CÁC TÍNH NĂNG MŨI NHỌN (KEY):
 
-Để đảm bảo hệ thống tự hành nhưng tuyệt đối không vượt quyền hạn, hệ thống thiết lập khung quản trị chặt chẽ:
+#### Nhóm Marketing:
+1. **Exit-Intent Recovery Popup (MKT-KEY-01):** Bắt chuyển động chuột vọt lên thanh tab hoặc thao tác back nhanh trên mobile $
+ightarrow$ Bung modal giữ chân kèm voucher độc quyền phiên truy cập.
+2. **Interactive Quiz 30s (MKT-KEY-02):** Chạm 3 icon trực quan (Nhu cầu đồ ăn/SIM/xe $
+ightarrow$ Ngân sách $
+ightarrow$ Tiêu chí) $
+ightarrow$ Gợi ý ngay 2 sản phẩm khớp nhất trong 15 giây.
+3. **Member-Get-Member (MKT-KEY-03):** Cơ chế kiều bào giới thiệu người mới (du học sinh mới sang, lao động mới sang xưởng) cùng nhận mã ưu đãi giảm giá bưu cục.
+
+#### Nhóm Sales:
+1. **AI Dynamic Bargain ($P_{floor}$) (SAL-KEY-01):** Mặc cả thông minh 3 hiệp trong giỏ trượt; giằng co và bớt trực tiếp 3% - 5% tiền mặt vào đơn hàng, khóa giá trong 10 phút.
+2. **Slide-Over Quick Cart (SAL-KEY-02):** Bấm mua là giỏ hàng trượt ra từ bên phải màn hình. Xem giỏ, chọn bưu cục 7-Eleven và chốt đơn ngay tại 1 trang duy nhất không tải lại trang.
+3. **Đón sóng ngày lương mùng 10 (SAL-KEY-03):** Tự động hẹn giờ tối ngày 10 (ngày kiều bào nhận lương), quét lịch sử ERP cũ và gửi tin nhắn LINE/Zalo kèm giỏ hàng quen thuộc đã soạn sẵn chỉ cần bấm xác nhận.
+4. **Cứu đơn hết hàng cục bộ (Substitute) (SAL-KEY-04):** Khi sản phẩm khách hỏi tạm hết kho ERP, AI đối soát ngay danh mục thay thế tương đương để chào phương án đổi món trong 0.5 giây, bảo vệ 100% giá trị đơn hàng.
+5. **Tìm kiếm theo mô tả tự nhiên / hương vị (SAL-KEY-05):** Khách gõ mô tả đời thường (*"bánh tròn ngọt sầu riêng"*, *"sạc xe 4 bình"*) $
+ightarrow$ Semantic Search tìm ra chính xác mã SKU trên ERP.
+
+#### Nhóm CSKH:
+1. **Quick Action Chips 0.5s (CS-KEY-01):** Khung chat tự động bung sẵn 3 câu hỏi nhanh theo đúng ngữ cảnh sản phẩm đang xem.
+2. **Tra cứu vận đơn 7-Eleven tự động (CS-KEY-02):** Khách hỏi tiến độ đơn $
+ightarrow$ AI nhận diện danh tính, tra cứu mã vận đơn trên ERP và trả về hành trình bưu kiện chuẩn xác.
+3. **Báo động đỏ & Human Takeover ≤ 1.0s (CS-KEY-03):** Khách bức xúc hoặc yêu cầu gặp người thật $
+ightarrow$ AI ngắt lời ngay lập tức, báo động Telegram cho quản lý dưới 2 phút, nhân viên bấm tiếp quản trong 1.0 giây.
+4. **Lịch chăm sóc SIM 30 ngày & Xe điện 30-90 ngày (CS-KEY-04):** Tự động đếm ngày từ hóa đơn ERP để nhắc nạp cước data trước khi khóa SIM, và nhắc bảo dưỡng ắc quy/phanh xe điện mới định kỳ.
+
+---
+
+## PHẦN V: KHUNG QUẢN TRỊ THẨM QUYỀN & 10 QUY TẮC BẤT BIẾN (BR-001..010)
 
 ### 1. Ma Trận Thẩm Quyền 6 Cấp Độ (`AUTH-0` đến `AUTH-5`)
 
@@ -208,10 +202,10 @@ Hệ thống tổ chức thành 3 phân hệ chuyên trách, dùng chung một b
 │ **AUTH-0**   │ Observe (Chỉ đọc)      │ Đọc dữ liệu sự kiện, phân tích hành vi, không phản hồi.   │
 │ **AUTH-1**   │ Recommend (Đề xuất)    │ Gợi ý sản phẩm, tính điểm tiềm năng lead cho nhân viên.   │
 │ **AUTH-2**   │ Draft (Soạn nháp)      │ Tạo bài viết nháp, soạn tin nhắn nháp, tạo đơn hàng nháp. │
-│ **AUTH-3**   │ Bounded Execute        │ Tự động trả lời FAQ, tra cứu vận đơn, gửi nhắc nhở đơn    │
+│ **AUTH-3**   │ Bounded Execute        │ Tự động trả lời FAQ, tra cứu vận đơn 7-Eleven, gửi nhắc   │
 │              │ (Tự thực thi an toàn)  │ giỏ hàng bỏ quên trong giới hạn chính sách cho phép.      │
 │ **AUTH-4**   │ Approval Required      │ Xuất bản chiến dịch diện rộng, giảm giá vượt ngưỡng,     │
-│              │ (Bắt buộc duyệt)       │ duyệt đổi trả hàng hoặc hoàn tiền tài chính.             │
+│              │ (Bắt buộc duyệt)       │ duyệt bồi thường hoặc hoàn tiền tài chính.               │
 │ **AUTH-5**   │ Prohibited             │ TUYỆT ĐỐI CẤM: Tự ý sửa giá niêm yết ERP, bán phá giá âm  │
 │              │ (Cấm hoàn toàn)        │ vốn, spam khách từ chối nhận tin, cam kết sai chính sách. │
 └──────────────┴────────────────────────┴───────────────────────────────────────────────────────────┘
@@ -220,22 +214,22 @@ Hệ thống tổ chức thành 3 phân hệ chuyên trách, dùng chung một b
 ---
 
 ### 2. Mười Quy Tắc Nghiệp Vụ Bắt Buộc (`BR-001` đến `BR-010`)
-* **BR-001:** AI tuyệt đối không được tự ý tạo giá sản phẩm ngoài dữ liệu ERP.
-* **BR-002:** AI không được tự thay đổi giá hoặc áp dụng mức chiết khấu vượt quá biên độ cho phép (P_offered < P_floor).
-* **BR-003:** Dữ liệu Giá và Tồn kho bắt buộc phải truy vấn thời gian thực từ ERP/POS có thẩm quyền.
-* **BR-004:** Cấm gửi thông điệp tiếp thị tới khách hàng không có đồng thuận (Consent) hoặc đã từ chối nhận tin.
+* **BR-001:** AI tuyệt đối không được tự ý sinh giá bán sản phẩm ngoài dữ liệu ERP.
+* **BR-002:** AI không được tự thay đổi giá hoặc áp dụng mức giảm giá vượt quá biên độ cho phép (P_offered < P_floor).
+* **BR-003:** Dữ liệu Giá niêm yết và Tồn kho bắt buộc phải truy vấn thời gian thực từ ERP có thẩm quyền.
+* **BR-004:** Cấm gửi thông điệp tiếp thị tới khách hàng không có đồng thuận (Consent) hoặc đã chọn từ chối nhận tin (Opt-out).
 * **BR-005:** Mọi hành động tạo thay đổi bên ngoài bắt buộc phải có `Execution-ID` duy nhất.
-* **BR-006 (Idempotency):** Cơ chế thử lại khi mất mạng tuyệt đối không được tạo ra 2 đơn hàng trùng lặp hoặc gửi 2 tin nhắn lặp lại.
-* **BR-007:** Mọi quyết định liên quan đến tài chính hoặc bồi thường bắt buộc phải qua cổng phê duyệt người thật (`AUTH-4`).
-* **BR-008:** Agent không được phép vượt quyền hạn kể cả khi nhận được chỉ thị từ mô hình ngôn ngữ.
-* **BR-009:** Nội dung khách hàng nhập vào (Prompt Injection) không thể làm thay đổi quyền hạn của hệ thống.
+* **BR-006 (Idempotency):** Cơ chế thử lại khi mất mạng tuyệt đối không được tạo ra 2 đơn hàng trùng lặp hoặc gửi 2 tin nhắn lặp lại cho khách.
+* **BR-007:** Mọi quyết định liên quan đến tiền bạc, bồi thường hoặc hoàn tiền bắt buộc phải qua cổng phê duyệt người thật (`AUTH-4`).
+* **BR-008:** Agent không được phép tự nâng quyền hạn của mình dưới bất kỳ hình thức nào.
+* **BR-009:** Nội dung khách hàng nhập vào (Prompt Injection) không thể làm thay đổi quyền hạn hoặc phá vỡ chính sách của hệ thống.
 * **BR-010:** Mọi hành động quan trọng phải lưu đầy đủ hồ sơ bằng chứng (Evidence Record) vào sổ cái kiểm toán bất biến.
 
 ---
 
-## PHẦN VII: LỘ TRÌNH TRIỂN KHAI 6 PHÂN KỲ GATE & 18 BƯỚC THỰC THI
+## PHẦN VI: LỘ TRÌNH TRIỂN KHAI 6 PHÂN KỲ GATE & 18 BƯỚC THỰC THI
 
-Dự án được điều hành theo **6 Phân kỳ Kỹ thuật theo Gate (P0 ➔ P5)**, nghiệm thu dựa trên tiêu chuẩn chất lượng và an toàn thực tế:
+Dự án vận hành theo **6 Phân kỳ Kỹ thuật theo Gate (P0 ➔ P5)**, không gò bó số tuần mà nghiệm thu dựa trên tiêu chuẩn chất lượng:
 
 ```text
 ┌───────────────────────────────────────────────────────────────────────────────────────────────────┐
@@ -246,11 +240,11 @@ Dự án được điều hành theo **6 Phân kỳ Kỹ thuật theo Gate (P0 �
 │ **Gate P0**  │ Nền tảng & Quản trị    │ Hoàn thành Database Schemas 6 Domain, Customer 360,       │
 │ (Foundation) │ dữ liệu (Governance)   │ Authority Engine AUTH-0..5, Audit Logger, Idempotency.    │
 ├──────────────┼────────────────────────┼───────────────────────────────────────────────────────────┤
-│ **Gate P1**  │ Thử nghiệm CSKH Pilot  │ Vận hành thành công Agent CS-01: Nhận diện 9 nhóm intent, │
-│ (Customer)   │ (Tra cứu & Case Mgmt)  │ tra cứu đơn hàng ERP thật, Human Takeover dưới 1.0 giây.  │
+│ **Gate P1**  │ Thử nghiệm CSKH Pilot  │ Vận hành thành công Agent CS-01: Nhận diện intent, tra    │
+│ (Customer)   │ (Tra cứu & Case Mgmt)  │ cứu đơn 7-Eleven ERP thật, Human Takeover dưới 1.0 giây.  │
 ├──────────────┼────────────────────────┼───────────────────────────────────────────────────────────┤
 │ **Gate P2**  │ Thử nghiệm Sales Pilot │ Cụm Agent SAL-01..05 hoạt động: Bảo vệ giá sàn P_floor,   │
-│ (Sales)      │ (Tư vấn & Bắn đơn ERP) │ phục hồi giỏ hàng bỏ quên, tạo đơn hàng nháp vào ERP.     │
+│ (Sales)      │ (Tư vấn & Bắn đơn ERP) │ cứu đơn hết hàng, tạo đơn hàng nháp vào ERP.              │
 ├──────────────┼────────────────────────┼───────────────────────────────────────────────────────────┤
 │ **Gate P3**  │ Thử nghiệm MKT Pilot   │ Vận hành chiến dịch Marketing E2E có kiểm duyệt Brand     │
 │ (Marketing)  │ (Chiến dịch & Content) │ Guardian và Approval Center (AUTH-4); đo lường ROI.       │
@@ -265,16 +259,16 @@ Dự án được điều hành theo **6 Phân kỳ Kỹ thuật theo Gate (P0 �
 
 ---
 
-### Mười Tám Bước Thực Thi Lập Trình Tuần Tự
+### Mười Tám Bước Thực Thi Lập Trình Tuần Tự:
 1. Khởi tạo Database Schemas cho 6 Domain (`Customer`, `Commerce`, `Engagement`, `CS`, `AI`, `Audit`).
 2. Thiết lập Canonical Contracts chuẩn hóa REST API và Pydantic Schemas.
 3. Xây dựng Customer Intelligence 360 Pipeline và Unified Event Timeline.
 4. Xây dựng Event Ingestion Layer tiếp nhận sự kiện từ Web và Mobile App.
 5. Xây dựng Agent Core Runtime Framework quản lý vòng đời tiến trình.
 6. Xây dựng Skill Registry và Tool Execution Contracts độc lập với Agent.
-7. Xây dựng Connector Layer kết nối ERP Adapter (tra cứu SP, giá, tồn kho, bưu kiện).
+7. Xây dựng Connector Layer kết nối ERP Adapter (tra cứu SP, giá, tồn kho, bưu kiện 7-Eleven).
 8. Xây dựng Policy Engine và Thuật toán khóa giá sàn `P_floor` (`BR-001..010`).
-9. Xây dựng Authority Engine (`AUTH-0..5`) và Module cảnh báo vượt quyền.
+9. Xây dựng Authority Engine (`AUTH-0..5`) và Module cảnh báo vi phạm an ninh.
 10. Xây dựng Idempotency Engine và Sổ cái kiểm toán bất biến (Audit / Evidence Ledger).
 11. Xây dựng Central Revenue Orchestrator theo chu trình điều phối 11 bước chuẩn.
 12. Phát triển Cụm CSKH Agent (`CS-01`, Case Management 7 trạng thái, Console Takeover).
@@ -287,95 +281,137 @@ Dự án được điều hành theo **6 Phân kỳ Kỹ thuật theo Gate (P0 �
 
 ---
 
-## PHẦN VIII: LỰA CHỌN MÔ HÌNH AI, TỐI ƯU FINOPS & KNOWLEDGE BASE
+## PHẦN VII: THIẾT KẾ DỮ LIỆU 6 DOMAIN & CUSTOMER 360
 
-### 1. Kiến Trúc Two-Stage RAG & Tối Ưu Hóa Chi Phí Token
-* **Vấn đề:** Nếu gửi toàn bộ danh mục sản phẩm vào LLM, chi phí token sẽ rất cao và tốc độ phản hồi chậm.
-* **Giải pháp Two-Stage RAG:**
-  * **Bước 1 (Lọc thô):** Sử dụng Vector Search nội bộ để tìm ra đúng 2-3 sản phẩm phù hợp nhất với câu hỏi của khách.
-  * **Bước 2 (Sinh phản hồi):** Chỉ cung cấp dữ liệu của 3 sản phẩm này cho LLM để tạo câu tư vấn.
-  * **Kết quả:** Giảm **85% lượng token tiêu thụ**, chi phí trung bình chỉ từ **25 đến 40 VNĐ cho mỗi cuộc hội thoại**, thời gian phản hồi dưới 1 giây.
+Hệ thống tổ chức dữ liệu thành 6 Domain chuẩn hóa:
+
+```text
+1. CUSTOMER DOMAIN
+   ├── customers                # Thông tin định danh kiều bào cốt lõi
+   ├── customer_identities      # Bản đồ định danh đa kênh (SĐT, LINE ID, Zalo, Cookie)
+   ├── consents                 # Lịch sử đồng thuận nhận tin tiếp thị (BR-004)
+   ├── customer_events          # Dòng sự kiện hành vi thô từ Web/App/Chat
+   └── customer_timeline        # Trục dòng thời gian sự kiện hợp nhất (Unified Timeline)
+
+2. COMMERCE DOMAIN (Read-Only Cache từ ERP)
+   ├── products                 # Danh mục sản phẩm đồng bộ từ ERP (5 ngành hàng)
+   ├── skus                     # Mã biến thể, màu sắc, quy cách đóng gói
+   ├── prices                   # Bảng giá niêm yết chính thức
+   ├── inventory                # Số lượng tồn kho khả dụng thời gian thực
+   ├── orders                   # Đơn hàng chính thức và đơn hàng nháp (Draft Orders)
+   └── invoices                 # Hóa đơn thanh toán hợp lệ
+
+3. ENGAGEMENT DOMAIN
+   ├── conversations            # Phiên hội thoại khách hàng đa kênh
+   ├── leads                    # Cơ hội bán hàng được AI chấm điểm
+   ├── campaigns                # Chiến dịch tiếp thị đã được duyệt (AUTH-4)
+   ├── segments                 # Phân khúc khách hàng (công nhân, du học sinh, hộ lý)
+   └── recommendations          # Bản ghi đề xuất sản phẩm do AI tạo ra
+
+4. CS DOMAIN
+   ├── service_cases            # Hồ sơ vụ việc khiếu nại, hỗ trợ (Ticket 7 trạng thái)
+   └── case_events              # Lịch sử thay đổi trạng thái xử lý vụ việc
+
+5. AI & GOVERNANCE DOMAIN
+   ├── agents                   # Danh mục Agent đang hoạt động
+   ├── skills                   # Danh mục Skill được đăng ký
+   ├── decisions                # Quyết định hành động do Orchestrator phê duyệt
+   ├── approvals                # Hồ sơ phê duyệt của Quản lý người thật
+   ├── executions               # Bản ghi thực thi hành động kèm Execution ID
+   └── evidence                 # Bằng chứng dữ liệu chứng minh quyết định AI
+
+6. AUDIT DOMAIN
+   └── agent_runs               # Sổ cái kiểm toán bất biến ghi lại 100% lượt chạy
+```
+
+### Nguyên Tắc Phân Tách Bản Chất Dữ Liệu:
+* **FACT:** Dữ liệu đã xác minh từ ERP (lịch sử mua hàng, hóa đơn, tồn kho).
+* **SIGNAL:** Dấu hiệu hành vi quan sát được (xem bánh pía 3 lần, dừng lại ở sạc xe).
+* **HYPOTHESIS:** Giả thuyết phỏng đoán của AI (khách thích ăn ngọt, xe có dấu hiệu mòn phanh).
+* **Nguyên tắc thép:** *Giả thuyết AI không bao giờ được ghi ngược làm sai lệch Fact của khách hàng.*
+
+---
+
+## PHẦN VIII: KIẾN TRÚC TWO-STAGE RAG, FINOPS & KNOWLEDGE BASE
+
+### 1. Kiến Trúc Two-Stage RAG Tối Ưu Chi Phí
+* Thay vì gửi toàn bộ catalog hàng nghìn sản phẩm vào Prompt (tốn kém và chậm trễ):
+* **Bước 1 (Lọc thô):** Dùng Vector Search nội bộ tìm ra đúng 2-3 sản phẩm phù hợp nhất với câu hỏi của khách hàng.
+* **Bước 2 (Tư vấn):** Chỉ gửi thông tin của 3 sản phẩm này cho LLM để tạo câu trả lời.
+* ➔ Giảm 85% chi phí token, chi phí trung bình chỉ từ **25 - 40 VNĐ cho mỗi cuộc hội thoại**, thời gian phản hồi dưới 1 giây.
 
 ### 2. Cấu Trúc Cây Tri Thức Doanh Nghiệp (Knowledge Base)
-AI được cung cấp cấu trúc thư mục tri thức chuẩn hóa để tra cứu:
-* `/company`: Lịch sử, giá trị thương hiệu và định vị thị trường.
-* `/customer`: Chân dung khách hàng và tiêu chí phân khúc đối tượng.
-* `/product`: Danh mục sản phẩm, biến thể SKU, giá niêm yết và chính sách khuyến mãi.
-* `/brand`: Quy chuẩn văn phong ứng xử và danh mục từ cấm (Prohibited Claims).
-* `/marketing`: Kịch bản chiến dịch và quy chuẩn định dạng nội dung.
-* `/sales`: Quy trình tư vấn chốt đơn và kịch bản xử lý phản bác.
-* `/customer-care`: Bộ câu hỏi thường gặp FAQ, chính sách bảo hành và đổi trả.
-* `/policy`: Quy chế thẩm quyền `AUTH-0..5` và quy trình phê duyệt tài chính.
+AI được cung cấp cây tri thức chuyên sâu về 5 ngành hàng:
+* `/company`: Lịch sử chuỗi siêu thị, vị trí các chi nhánh và mạng lưới đối tác bưu cục.
+* `/customer`: Chân dung đời sống kiều bào tại Đài Loan, văn hóa tiêu dùng và lịch nhận lương.
+* `/product`: Danh mục 5 ngành hàng, bảng giá niêm yết và chính sách giá sàn `P_floor`.
+* `/brand`: Văn phong ứng xử ấm áp, gần gũi và danh mục từ cấm (Prohibited Claims).
+* `/marketing`: Kịch bản tiếp thị ngày lương mùng 10, chiến dịch ngày lễ quê hương.
+* `/sales`: Quy trình tư vấn 5 ngành hàng, kịch bản mặc cả có kiểm soát và cứu đơn hết hàng.
+* `/customer-care`: Bộ FAQ về bưu cục 7-Eleven, chính sách bảo hành xe điện và đổi trả hàng.
+* `/policy`: Quy định phân quyền `AUTH-0..5` và quy trình phê duyệt tài chính.
 
 ---
 
 ## PHẦN IX: KHUNG AN TOÀN DỮ LIỆU & BẢO MẬT DOANH NGHIỆP
 
-1. **Phân tách Dữ liệu Nghiêm ngặt (Evidence Separation):**
-   * **FACT:** Dữ liệu giao dịch thực tế đã xác minh từ ERP (đơn hàng, thanh toán, tồn kho).
-   * **SIGNAL:** Dấu hiệu hành vi quan sát được (xem hàng, bỏ giỏ).
-   * **HYPOTHESIS:** Giả thuyết phỏng đoán của AI (khách thích quà tặng, có nguy cơ rời bỏ).
-   * **Nguyên tắc cốt tử:** *Giả thuyết AI không bao giờ được ghi đè làm sai lệch Fact của khách hàng.*
-2. **An toàn Kết nối & Dữ liệu:**
-   * 100% kết nối truyền tải giữa Web/App/ERP và AI Platform được mã hóa qua giao thức **TLS 1.3**.
-   * Dữ liệu nhạy cảm lưu trữ trong cơ sở dữ liệu được mã hóa bằng thuật toán **AES-256**.
-   * Cơ chế xác thực API Gateway qua Token và ký số toàn vẹn dữ liệu **HMAC-SHA256**.
+1. **Chuẩn mã hóa đường truyền:** 100% dữ liệu truyền tải giữa Web/App/ERP và AI Platform được mã hóa qua giao thức **TLS 1.3**.
+2. **Mã hóa dữ liệu lưu trữ (Data at Rest):** Các trường dữ liệu nhạy cảm (Số điện thoại, Địa chỉ nhận hàng, Tên khách) được mã hóa bằng thuật toán **AES-256**.
+3. **Ký số toàn vẹn Webhook:** Mọi lệnh cập nhật đơn hàng hoặc trạng thái giao vận đều được ký số bằng mã **HMAC-SHA256**.
+4. **Cơ chế Fail-Closed (NFR-008):** Khi mất kết nối ERP hoặc không xác minh được giá/tồn kho, hệ thống tự động từ chối giao dịch an toàn, tuyệt đối không cho phép AI tự phỏng đoán.
 
 ---
 
 ## PHẦN X: BỘ KIỂM THỬ CHẤP NHẬN HỆ THỐNG (TC-E2E-001 ĐẾN 009)
 
-Hệ thống chỉ được nghiệm thu khi vượt qua 100% bộ 9 bài kiểm thử chấp nhận:
-1. **TC-E2E-001 (Chu trình E2E khép kín):** Một tín hiệu đi trọn vẹn từ `Signal ➔ Decision ➔ Action ➔ Execution ➔ Evidence ➔ Outcome`.
+Hệ thống chỉ được bàn giao khi vượt qua 100% bộ 9 bài kiểm thử bắt buộc:
+1. **TC-E2E-001 (Chu trình E2E khép kín):** Một tín hiệu đi trọn vẹn qua chuỗi: `Signal ➔ Decision ➔ Action ➔ Execution ➔ Evidence ➔ Outcome`.
 2. **TC-E2E-002 (Cổng kiểm soát Marketing):** Marketing Agent tuyệt đối không thể xuất bản chiến dịch nếu thiếu phê duyệt `AUTH-4`.
-3. **TC-E2E-003 (Bảo vệ giá niêm yết):** Báo giá sai lệch với ERP lập tức bị hủy bỏ giao dịch (`BR-001..003`).
-4. **TC-E2E-004 (Cô lập dữ liệu khách hàng):** CSKH Agent chỉ được tra cứu thông tin của đúng khách hàng đã xác minh.
-5. **TC-E2E-005 (Khóa chống trùng giao dịch):** Retry mạng 10 lần liên tiếp chỉ tạo đúng 1 đơn hàng nháp và gửi đúng 1 tin nhắn (`BR-006`).
-6. **TC-E2E-006 (Phòng vệ Prompt Injection):** Người dùng nhập prompt ép nâng quyền hoặc hạ giá $ightarrow$ Hệ thống lập tức từ chối (**DENY**) và ghi log cảnh báo an ninh (`BR-008..009`).
+3. **TC-E2E-003 (Bảo vệ giá niêm yết):** Báo giá sai lệch với ERP lập tức bị Policy Engine chặn đứng (`BR-001..003`).
+4. **TC-E2E-004 (Cô lập dữ liệu khách hàng):** CSKH Agent chỉ được tra cứu dữ liệu của đúng khách hàng đã xác minh.
+5. **TC-E2E-005 (Khóa chống trùng đơn):** Giả lập retry mạng 10 lần liên tiếp cùng một yêu cầu; hệ thống chỉ gửi 1 tin nhắn và tạo đúng 1 đơn hàng nháp (`BR-006`).
+6. **TC-E2E-006 (Phòng vệ Prompt Injection):** Người dùng nhập prompt yêu cầu nâng quyền admin hoặc hạ giá $
+ightarrow$ Hệ thống lập tức từ chối (**DENY**), ghi log cảnh báo an ninh (`BR-008..009`).
 7. **TC-E2E-007 (Tuân thủ quyền riêng tư):** Khách hàng chưa cấp quyền hoặc đã opt-out sẽ bị loại trừ tự động khỏi luồng gửi tin (`BR-004`).
-8. **TC-E2E-008 (Cơ chế Fail-Closed):** ERP mất kết nối $ightarrow$ Hệ thống chuyển sang trạng thái an toàn, cấm tự đoán mò giá/tồn kho (`NFR-008`).
+8. **TC-E2E-008 (An toàn khi mất kết nối):** Giả lập ERP ngắt kết nối $
+ightarrow$ Hệ thống chuyển trạng thái retry có kiểm soát, tuyệt đối không báo thành công giả (`NFR-008`).
 9. **TC-E2E-009 (Truy vết nguồn gốc):** Mọi hành động thành công đều truy ngược được đầy đủ chuỗi: `Trigger ➔ Context ➔ Decision ➔ Approval ➔ Evidence`.
 
 ---
 
-## PHẦN XI: HUMAN COMMAND CENTER (5 MÀN HÌNH ĐIỀU HÀNH)
+## PHẦN XI: HUMAN COMMAND CENTER (5 MÀN HÌNH ĐIỀU HÀNH TẬP TRUNG)
 
-Cung cấp cho Ban Lãnh đạo và các Trưởng bộ phận trung tâm điều hành trực quan:
-* **SCR-001 (Executive Dashboard):** Theo dõi tổng doanh thu AI mang lại, tỷ lệ chốt đơn ban đêm, tỷ lệ khôi phục giỏ hàng và hiệu quả chi phí.
-* **SCR-002 (Agent Operations Hub):** Giám sát trạng thái hoạt động của từng Agent, độ trễ phản hồi, chi phí token theo ngày và nhật ký lỗi.
-* **SCR-003 (Approval Center):** Nơi cấp Quản lý bấm **Approve / Reject / Modify** đối với các chiến dịch tiếp thị hoặc chính sách ưu đãi lớn.
-* **SCR-004 (Customer 360 Viewer):** Tra cứu hồ sơ khách hàng, dòng thời gian sự kiện thống nhất và lịch sử tương tác đa kênh.
-* **SCR-005 (Conversation & Takeover Console):** Xem trực tiếp các cuộc trò chuyện của AI; nhân sự có thể bấm nút **"TIẾP QUẢN"** để can thiệp hỗ trợ khách trong vòng **≤ 1.0 giây**.
+Cung cấp cho Ban Giám đốc bộ công cụ giám sát trực quan gồm 5 màn hình:
+* **SCR-001 (Executive Dashboard):** Theo dõi tổng doanh thu AI mang lại, tỷ lệ chốt đơn tự động 24/7, tỷ lệ khôi phục giỏ hàng và chỉ số bảo toàn biên lãi ròng.
+* **SCR-002 (Agent Operations Hub):** Giám sát trạng thái hoạt động của từng Agent, độ trễ phản hồi (ms), chi phí token theo ngày và nhật ký lỗi.
+* **SCR-003 (Approval Center):** Nơi cấp Quản lý bấm **Approve / Reject / Modify** đối với các chiến dịch tiếp thị hoặc chính sách chiết khấu lớn.
+* **SCR-004 (Customer 360 Viewer):** Tra cứu hồ sơ khách hàng, dòng thời gian sự kiện thống nhất và lịch sử giao dịch 5 ngành hàng.
+* **SCR-005 (Conversation & Takeover Console):** Xem trực tiếp hội thoại AI; nhân sự có thể bấm nút **"TIẾP QUẢN"** để can thiệp hỗ trợ khách trong vòng **≤ 1.0 giây**.
 
 ---
 
-## PHẦN XII: KẾ HOẠCH BÀN GIAO, RACI & CAM KẾT HOÀN VỐN (ROI)
+## PHẦN XII: MA TRẬN RACI & ĐỊNH NGHĨA HOÀN THÀNH (DEFINITION OF DONE)
 
 ### 1. Ma Trận Phân Công Trách Nhiệm RACI
 
 | Hạng Mục Công Việc | Ban Giám Đốc | Quản Trị Dự Án (PM/BA) | Kỹ Sư AI / Backend | Đội Ngũ Vận Hành (MKT/Sales/CS) | Đội Ngũ QA |
 | :--- | :---: | :---: | :---: | :---: | :---: |
-| 1. Phê duyệt chính sách giá sàn P_floor & Luật BR | **A** | R | C | C | I |
-| 2. Thiết kế Canonical Contracts & Tích hợp ERP | I | C | **R / A** | I | C |
-| 3. Xây dựng Lõi Orchestrator, Agent & Skills | I | I | **R / A** | C | C |
+| 1. Khóa Business Rules & Ngưỡng duyệt AUTH | **A** | R | C | C | I |
+| 2. Thiết kế Canonical Contracts & Adapter ERP | I | C | **R / A** | I | C |
+| 3. Xây dựng Lõi Orchestrator & Cụm Agent 3 Phân hệ | I | I | **R / A** | C | C |
 | 4. Xây dựng 5 Màn hình Human Command Center | I | C | **R / A** | C | I |
 | 5. Kiểm thử 9 Kịch bản Chấp nhận TC-E2E | I | C | C | I | **R / A** |
 | 6. Nghiệm thu từng Phân kỳ Gate (P0 ➔ P5) | **A** | **R** | R | R | R |
 
-*(Ghi chú: A: Accountable - Chịu trách nhiệm cuối cùng; R: Responsible - Người thực hiện chính; C: Consulted - Tham vấn ý kiến; I: Informed - Nhận thông tin).*
+*(Ghi chú: A: Accountable - Chịu trách nhiệm cao nhất; R: Responsible - Trực tiếp thực hiện; C: Consulted - Tham vấn; I: Informed - Nhận báo cáo).*
 
 ---
 
 ### 2. Định Nghĩa Hoàn Thành Cấp Hệ Thống (Definition of Done - DoD)
-Hệ thống chỉ đạt chuẩn nghiệm thu khi chứng minh được đầy đủ 10 yếu tố:
-**Data thật + Agent thật + Skill thật + Tool thật + Policy thật + Approval thật + Execution thật + Evidence thật + Outcome thật + Test thật.**
+Hệ thống không được coi là hoàn thành chỉ vì Agent có thể trò chuyện qua lại.
 
-### 3. Cam Kết Hoàn Vốn Đầu Tư (ROI)
-* Dự án mang lại dòng tiền ròng thặng dư thông qua 3 nguồn:
-  1. Doanh thu tăng thêm từ việc chốt đơn tự động ban đêm trên Web và Mobile App.
-  2. Doanh thu thu hồi từ 10% - 15% số lượng giỏ hàng bị bỏ quên.
-  3. Tiết kiệm từ 30% - 45% chi phí nhân sự trực ca đêm và xử lý sự vụ CSKH thông thường.
-* **Thời gian hoàn vốn dự kiến:** Từ **45 đến 60 ngày** sau khi đưa vào vận hành chính thức toàn diện.
+Một phân hệ hay một tính năng chỉ đạt chuẩn nghiệm thu khi chứng minh được đầy đủ 10 yếu tố:  
+$$**Data thật + Agent thật + Skill thật + Tool thật + Policy thật + Approval thật + Execution thật + Evidence thật + Outcome thật + Test thật**$$
 
----
-Báo cáo Đề án được hoàn thiện làm căn cứ pháp lý và kỹ thuật phục vụ triển khai thực địa.
+### 3. Kết Luận
+Bản kế hoạch này thiết lập cầu nối vững chắc giữa **Nghiệp vụ thực tế của Chuỗi Bán lẻ Đa kênh tại Đài Loan** và **Khung Kiến trúc Quản trị Chuẩn Enterprise (`AI-REV-SRS-001`)**, sẵn sàng làm cơ sở pháp lý và kỹ thuật phục vụ triển khai thực địa.
