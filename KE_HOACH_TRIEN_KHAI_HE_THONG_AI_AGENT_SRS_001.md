@@ -100,10 +100,10 @@ Hệ thống không phải ba chatbot rời rạc, mà được tổ chức theo
 * **Cấu trúc Customer Profile:**
   ```text
   Customer
-  ├── Identity (Số điện thoại, Zalo ID, Web cookie, ARC/Mã định danh)
+  ├── Identity (Số điện thoại, Email, Zalo ID, Web cookie, Mã định danh khách hàng)
   ├── Consent (Đồng thuận nhận tin marketing, xử lý dữ liệu)
   ├── Purchase History (Lịch sử giao dịch, chu kỳ tiêu dùng)
-  ├── Product Affinity (Ngành hàng yêu thích: đồ ăn, SIM, xe điện)
+  ├── Product Affinity (Ngành hàng và danh mục sản phẩm yêu thích, tần suất mua)
   ├── Web/App Behaviour (Lượt xem, tìm kiếm, giỏ hàng)
   ├── Marketing Interaction (Lịch sử chiến dịch đã tiếp cận)
   ├── Conversation (Lịch sử hội thoại đa kênh)
@@ -189,7 +189,7 @@ Hệ thống không phải ba chatbot rời rạc, mà được tổ chức theo
 * **Hợp nhất chuỗi giá trị xuyên Agent:**
   * Marketing phát hiện phân khúc $\rightarrow$ Bắn chiến dịch $\rightarrow$ Khách phản hồi $\rightarrow$ Sales Agent tư vấn & chốt đơn $\rightarrow$ CSKH Agent theo dõi bưu kiện $\rightarrow$ Customer Success Agent chăm sóc giữ chân (Retention).
 * **CS-02 — Retention & Customer Success Agent:**
-  * Tự động phát hiện nguy cơ mất khách (Inactivity $> 45$ ngày), chu kỳ nạp SIM (T+27), lịch bảo dưỡng xe điện (30 ngày) để kích hoạt Next-Best-Action.
+  * Tự động phát hiện nguy cơ mất khách (Inactivity $> 45$ ngày), chu kỳ tiêu dùng sản phẩm định kỳ (T+30), cảnh báo khiếu nại chưa xử lý để kích hoạt Next-Best-Action.
 * **Chứng minh quy trình Cross-Agent chuẩn:**
   * `Giỏ hàng bỏ quên → Sales phát hiện → Customer 360 lấy context → Recommendation chọn món → Policy kiểm tra → Communication soạn tin → Approval nếu cần → Gửi tin → Khách chốt đơn → Ghi nhận Revenue Evidence`.
 
@@ -223,12 +223,12 @@ AI Agent không chỉ dựa vào kiến thức nội tại của mô hình ngôn
 ```text
 /company
   company.md              # Lịch sử, giá trị cốt lõi, mô hình kinh doanh chuỗi
-  positioning.md          # Định vị thương hiệu kiều bào tại Đài Loan
+  positioning.md          # Định vị thương hiệu, phân khúc thị trường và đối tượng mục tiêu
 /customer
-  customer.md             # Thói quen mua sắm, văn hóa tiêu dùng kiều bào
+  customer.md             # Thói quen mua sắm, chân dung khách hàng và văn hóa tiêu dùng
   segmentation.md         # Tiêu chuẩn phân khúc đối tượng
 /product
-  products.md             # Danh mục 5 ngành hàng: Đồ ăn, SIM, Xe điện, Kiều hối, Vận chuyển
+  products.md             # Danh mục sản phẩm, biến thể SKU và chính sách bảo hành
   pricing.md              # Bảng giá niêm yết chính thức
   promotion-policy.md     # Quy định hạn mức khuyến mãi và giá sàn P_floor
 /brand
@@ -244,8 +244,8 @@ AI Agent không chỉ dựa vào kiến thức nội tại của mô hình ngôn
   qualification.md        # Tiêu chí chấm điểm khách hàng tiềm năng
   objection-handling.md   # Kịch bản xử lý từ chối chuẩn
 /customer-care
-  faq.md                  # Bộ câu hỏi thường gặp (ARC, BHYT, điểm nhận 7-Eleven)
-  support-policy.md       # Chính sách bảo hành xe điện, đổi trả hàng thực phẩm
+  faq.md                  # Bộ câu hỏi thường gặp về sản phẩm, vận chuyển và đổi trả
+  support-policy.md       # Chính sách bảo hành, đổi trả hàng hóa và bồi hoàn
   escalation.md           # Tiêu chí và quy trình phân luồng chuyển giao người thật
 /policy
   authority.md            # Quy chế phân định thẩm quyền AUTH-0..5
@@ -278,7 +278,7 @@ Mỗi Skill được định nghĩa độc lập theo hợp đồng chuẩn:
 ```text
 1. CUSTOMER DOMAIN
    ├── customers                # Thông tin hồ sơ khách hàng cốt lõi
-   ├── customer_identities      # Bản đồ định danh đa kênh (SĐT, Zalo, LINE, ARC)
+   ├── customer_identities      # Bản đồ định danh đa kênh (SĐT, Email, Zalo ID, Web Cookie)
    ├── consents                 # Lịch sử đồng thuận xử lý dữ liệu và nhận tin
    ├── customer_events          # Dòng sự kiện hành vi thô từ Web/App/Chat
    └── customer_timeline        # Trục dòng thời gian sự kiện hợp nhất
@@ -334,14 +334,14 @@ Mỗi lượt chạy của AI Agent (`Agent Run`) bắt buộc phải ghi lại 
   "customer_id": "CUS-TW-1029",
   "trigger": "CART_ABANDONED_45MIN",
   "context": {
-    "channel": "LINE_OA",
-    "cart_value_ntd": 850,
+    "channel": "ZALO_OA",
+    "cart_value": 850000,
     "last_interaction": "2026-09-15T21:00:00Z"
   },
   "skill": "cart-recovery-message-v1",
   "tool": "line-messaging-connector",
   "decision": "SEND_REMINDER",
-  "reason": "Giỏ hàng có mì tôm và dầu ăn tồn kho khả dụng, khách có consent nhận tin",
+  "reason": "Giỏ hàng có các sản phẩm tồn kho khả dụng, khách có consent nhận tin",
   "evidence": [
     "cart_event_ref_9918",
     "erp_stock_verified_sku_882"
@@ -356,7 +356,7 @@ Mỗi lượt chạy của AI Agent (`Agent Run`) bắt buộc phải ghi lại 
   "outcome": {
     "converted": true,
     "draft_order_id": "DRAFT-ORD-8821",
-    "revenue_ntd": 850
+    "revenue": 850000
   },
   "latency_ms": 420,
   "cost_usd": 0.0018,
@@ -461,4 +461,4 @@ Một tính năng hay một phân hệ chỉ được nghiệm thu khi chứng m
 $$\textbf{Data thật} + \textbf{Agent thật} + \textbf{Skill thật} + \textbf{Tool thật} + \textbf{Policy thật} + \textbf{Approval thật} + \textbf{Execution thật} + \textbf{Evidence thật} + \textbf{Outcome thật} + \textbf{Test thật}$$
 
 ### Mục tiêu bàn giao cuối cùng:
-Bàn giao trọn vẹn một **AI Revenue Workforce** có khả năng trực tiếp tham gia vận hành kinh doanh bán lẻ và dịch vụ kiều bào với mức tự động hóa cao, mang lại dòng tiền thực tế, đồng thời mọi rủi ro đều được kiểm soát trong vòng tay con người.
+Bàn giao trọn vẹn một **AI Revenue Workforce** có khả năng trực tiếp tham gia vận hành kinh doanh đa kênh (Omnichannel Commerce & Services) với mức tự động hóa cao, mang lại dòng tiền thực tế, đồng thời mọi rủi ro đều được kiểm soát trong vòng tay con người.
