@@ -7,13 +7,8 @@
 **Phiên bản:** 1.0 Enterprise Master Edition  
 **Chủ thể áp dụng:** Chuỗi Bán lẻ Hàng hóa & Dịch vụ Tổng hợp phục vụ kiều bào và lao động tại Đài Loan (Việt Nam, Indonesia, Philippines, Thái Lan)  
 **Hiện trạng hạ tầng của doanh nghiệp:** Đã có sẵn Website thương mại điện tử, Mobile App bán hàng, hệ thống ERP/POS quản lý kho/giá/đơn hàng và hệ thống kết nối giao nhận bưu cục 7-Eleven, FamilyMart  
-**Nguyên tắc kỹ thuật sống còn:** **Zero-Disruption (Tuyệt đối không xây thêm web/app mới, không đập đi xây lại ERP)** & **Fail-Closed (An toàn dữ liệu tuyệt đối)**  
-**Ranh giới phạm vi bắt buộc:** 
-* ❌ Tuyệt đối KHÔNG gom đơn KTX / xưởng.
-* ❌ Tuyệt đối KHÔNG thu cũ đổi mới xe điện.
-* ❌ Tuyệt đối KHÔNG chỉ làm ca đêm mà vận hành **AI tự hành 24/7 toàn thời gian**.
-* ❌ Tuyệt đối KHÔNG dùng "bạn cùng xưởng", chuẩn hóa thành **"Giới thiệu người mới (Member-Get-Member)"**.
-* ❌ Tuyệt đối KHÔNG đưa vào các con số ước đoán chủ quan; quản trị tiến độ theo **Gate Kỹ thuật P0 ➔ P5 (Không ép tuần/ngày)**.
+**Tiêu chuẩn kỹ thuật cốt lõi:** Zero-Disruption Architecture | Fail-Closed Safety Protocol | RESTful ERP Integration  
+**Phương thức quản trị:** Kiểm soát theo 6 Phân kỳ Gate Kỹ thuật (Phase P0 ➔ P5) & Definition of Done (DoD)  
 
 > **ĐỊNH VỊ CHIẾN LƯỢC HỆ THỐNG:**  
 > Hệ thống được tổ chức thành **3 Module Plug-and-Play độc lập (Marketing Automation - Sales Copilot 24/7 - Smart CSKH & Retention)** cắm trực tiếp vào Web, Mobile App và ERP sẵn có của doanh nghiệp. Ba module vận hành liên thông khép kín theo chu trình điều phối chuẩn của Ban Giám đốc:  
@@ -25,7 +20,7 @@
 ## MỤC LỤC HỒ SƠ ĐỀ ÁN TOÀN DIỆN
 
 1. **Phần I:** Bối Cảnh Thực Tế, Hiện Trạng Hạ Tầng Sẵn Có & Ranh Giới Phạm Vi Đề Án
-2. **Phần II:** Bản Chất Kinh Tế: Cơ Chế Tái Phân Bổ Hoa Hồng Sales & Khóa Cứng Giá Sàn Chống Bán Lỗ ($P_{floor}$)
+2. **Phần II:** Bản Chất Kinh Tế: Cơ Chế Tái Phân Bổ Hoa Hồng Sales & Khóa Cứng Giá Sàn Chống Bán Lỗ (P_floor)
 3. **Phần III:** Kiến Trúc Ghép Nối Ngoại Vi 3 Module Plug-and-Play (Zero-Disruption Architecture)
 4. **Phần IV:** Danh Mục Tính Năng Chi Tiết 3 Module & Phân Định Nhóm Tính Năng Mũi Nhọn (KEY ~20%)
 5. **Phần V:** Khung Quản Trị Hệ Thống, Ma Trận Thẩm Quyền AUTH-0..5 & 10 Quy Tắc Nghiệp Vụ BR-001..010
@@ -53,21 +48,28 @@ Doanh nghiệp đang vận hành chuỗi siêu thị bán lẻ và dịch vụ �
 * **Mạng lưới giao vận:** Đã liên kết API hoàn chỉnh với 4 chuỗi siêu thị tiện lợi nội địa Đài Loan (**7-Eleven, FamilyMart, Hi-Life, OK Mart**) để khách nhận hàng tại bưu cục sau giờ tan ca.
 
 ### 2. Bốn Điểm Nghẽn Vận Hành Lớn Nhất Cần Hóa Giải
-1. **Nhu cầu mua sắm rải rác 24/7:** Khách hàng tan ca xưởng lúc 21h - 2h sáng, hoặc tranh thủ lướt điện thoại giờ nghỉ trưa. Nhân viên cửa hàng không thể trực chat liên tục 24/7 $
-ightarrow$ Mất khách vào tay các tiệm tạp hóa bản địa.
-2. **Khách hàng mới không nhớ mã SKU chuẩn:** Khách tìm kiếm theo mô tả đời thường hoặc hương vị quê hương (ví dụ: *"bánh tròn ngọt nhân sầu riêng trứng muối"*, *"sạc xe 4 bình chân vuông"*). Công cụ tìm kiếm từ khóa cũ trên Web/App báo *"0 kết quả"* $
-ightarrow$ Khách bỏ đi.
-3. **Mất đơn khi hết hàng cục bộ (Out-of-Stock):** Khi kho hết một loại mì hoặc gia vị quen thuộc, nhân viên trả lời *"Hết hàng"* $
-ightarrow$ Khách hủy cả giỏ hàng.
+1. **Nhu cầu mua sắm rải rác 24/7:** Khách hàng tan ca xưởng lúc 21h - 2h sáng, hoặc tranh thủ lướt điện thoại giờ nghỉ trưa. Nhân viên cửa hàng không thể trực chat liên tục 24/7 ➔ Mất khách vào tay các tiệm tạp hóa bản địa.
+2. **Khách hàng mới không nhớ mã SKU chuẩn:** Khách tìm kiếm theo mô tả đời thường hoặc hương vị quê hương (ví dụ: *"bánh tròn ngọt nhân sầu riêng trứng muối"*, *"sạc xe 4 bình chân vuông"*). Công cụ tìm kiếm từ khóa cũ trên Web/App báo *"0 kết quả"* ➔ Khách bỏ đi.
+3. **Mất đơn khi hết hàng cục bộ (Out-of-Stock):** Khi kho hết một loại mì hoặc gia vị quen thuộc, nhân viên trả lời *"Hết hàng"* ➔ Khách hủy cả giỏ hàng.
 4. **Quá tải CSKH tra cứu vận đơn & Bão lũ (Typhoon Day):** Đội ngũ CSKH mất 70% thời gian tra cứu bưu kiện 7-Eleven. Khi có bão lớn chính quyền cho nghỉ bão, giao vận bị đình trệ, khách lo lắng nhắn tin dồn dập gây nghẽn tổng đài.
 
-### 3. Ranh Giới Phạm Vi Tuyệt Đối (Non-Negotiable Boundaries)
-* **Zero-Disruption:** Không xây dựng lại website hay app; không can thiệp cơ sở dữ liệu gốc của ERP.
-* **Cấm triệt để:** Không làm tính năng gom đơn KTX/xưởng; Không làm thu cũ đổi mới xe điện; Không chỉ giới hạn ở ca đêm mà vận hành tự hành 24/7; Thay thế "bạn cùng xưởng" bằng cơ chế **"Giới thiệu người mới (Member-Get-Member)"** áp dụng chung cho mọi đối tượng kiều bào.
+### 3. Ranh Giới Phạm Vi Triển Khai (Project Scope & System Boundaries)
+
+#### A. Phạm vi trong đề án (In-Scope):
+1. **Kiến trúc ngoại vi Zero-Disruption:** Đóng gói 3 Module Plug-and-Play (Marketing Automation, Sales Copilot 24/7, Smart CSKH & Retention) cắm vào Website, Mobile App và ERP hiện hữu qua API / Webhook.
+2. **Vận hành tự hành 24/7 toàn thời gian:** Phục vụ khách hàng liên tục không gián đoạn, giải phóng hoàn toàn sự phụ thuộc vào thời gian làm việc của nhân sự.
+3. **Cơ chế Giới thiệu người mới (Member-Get-Member):** Xây dựng mạng lưới phát triển khách hàng tự nhiên trong cộng đồng kiều bào (du học sinh, người lao động, hộ lý).
+4. **Phân phối chính hãng 5 ngành hàng:** Nhu yếu phẩm quê hương, SIM 4G định kỳ, Xe điện mới và linh kiện, Dịch vụ kiều hối, Vận chuyển 2 chiều.
+5. **Quản trị chất lượng theo Gate:** Nghiệm thu từng giai đoạn (Gate P0 ➔ P5) dựa trên bằng chứng dữ liệu thực tế và 9 kịch bản kiểm thử E2E.
+
+#### B. Ranh giới ngoài phạm vi (Out-of-Scope):
+1. **Hệ thống lõi:** Không can thiệp, không thay thế và không tạo bảng dữ liệu giao dịch song song với ERP/POS hiện có.
+2. **Giao nhận:** Không triển khai các phương thức giao nhận tập trung ngoài mạng lưới bưu cục tiện ích chính thức (7-Eleven, FamilyMart, Hi-Life, OK Mart).
+3. **Nghiệp vụ hàng hóa:** Doanh nghiệp chỉ phân phối xe điện mới 100% và phụ tùng chính hãng; không triển khai các dịch vụ thu mua hoặc đổi trả xe cũ.
 
 ---
 
-## PHẦN II: BẢN CHẤT KINH TẾ & THUẬT TOÁN KHÓA CỨNG GIÁ SÀN ($P_{floor}$)
+## PHẦN II: BẢN CHẤT KINH TẾ & THUẬT TOÁN KHÓA CỨNG GIÁ SÀN (P_floor)
 
 ### 1. Bản Chất Kinh Tế: Tái Phân Bổ Hoa Hồng Sales Thành Biên Độ Mặc Cả
 * Trong mô hình bán hàng truyền thống, doanh nghiệp phải chiết khấu từ **3% đến 7% hoa hồng** cho nhân viên tư vấn chốt đơn.
@@ -79,7 +81,7 @@ ightarrow$ Khách hủy cả giỏ hàng.
 
 ➔ **Kết quả:** Khách hàng thỏa mãn tâm lý săn deal hời; Doanh nghiệp bảo toàn nguyên vẹn 100% tỷ suất lợi nhuận ròng.
 
-### 2. Thuật Toán Khóa Cứng Giá Sàn Chống Bán Lỗ ($P_{floor}$)
+### 2. Thuật Toán Khóa Cứng Giá Sàn Chống Bán Lỗ (P_floor)
 Để ngăn chặn hoàn toàn rủi ro khách hàng tấn công Prompt Injection ép AI bán phá giá hoặc hạ giá âm vốn:
 
 `P_floor = Giá_vốn × (1 + Tỷ_lệ_lãi_tối_thiểu) + Phí_xử_lý_cố_định`
@@ -163,28 +165,21 @@ Hệ thống được đóng gói thành **3 Module độc lập hoàn toàn**, 
 ### ĐẶC TẢ CHI TIẾT CÁC TÍNH NĂNG MŨI NHỌN (KEY):
 
 #### Nhóm Marketing:
-1. **Exit-Intent Recovery Popup (MKT-KEY-01):** Bắt chuyển động chuột vọt lên thanh tab hoặc thao tác back nhanh trên mobile $
-ightarrow$ Bung modal giữ chân kèm voucher độc quyền phiên truy cập.
-2. **Interactive Quiz 30s (MKT-KEY-02):** Chạm 3 icon trực quan (Nhu cầu đồ ăn/SIM/xe $
-ightarrow$ Ngân sách $
-ightarrow$ Tiêu chí) $
-ightarrow$ Gợi ý ngay 2 sản phẩm khớp nhất trong 15 giây.
+1. **Exit-Intent Recovery Popup (MKT-KEY-01):** Bắt chuyển động chuột vọt lên thanh tab hoặc thao tác back nhanh trên mobile ➔ Bung modal giữ chân kèm voucher độc quyền phiên truy cập.
+2. **Interactive Quiz 30s (MKT-KEY-02):** Chạm 3 icon trực quan (Nhu cầu đồ ăn/SIM/xe ➔ Ngân sách ➔ Tiêu chí) ➔ Gợi ý ngay 2 sản phẩm khớp nhất trong 15 giây.
 3. **Member-Get-Member (MKT-KEY-03):** Cơ chế kiều bào giới thiệu người mới (du học sinh mới sang, lao động mới sang xưởng) cùng nhận mã ưu đãi giảm giá bưu cục.
 
 #### Nhóm Sales:
-1. **AI Dynamic Bargain ($P_{floor}$) (SAL-KEY-01):** Mặc cả thông minh 3 hiệp trong giỏ trượt; giằng co và bớt trực tiếp 3% - 5% tiền mặt vào đơn hàng, khóa giá trong 10 phút.
+1. **AI Dynamic Bargain (P_floor) (SAL-KEY-01):** Mặc cả thông minh 3 hiệp trong giỏ trượt; giằng co và bớt trực tiếp 3% - 5% tiền mặt vào đơn hàng, khóa giá trong 10 phút.
 2. **Slide-Over Quick Cart (SAL-KEY-02):** Bấm mua là giỏ hàng trượt ra từ bên phải màn hình. Xem giỏ, chọn bưu cục 7-Eleven và chốt đơn ngay tại 1 trang duy nhất không tải lại trang.
 3. **Đón sóng ngày lương mùng 10 (SAL-KEY-03):** Tự động hẹn giờ tối ngày 10 (ngày kiều bào nhận lương), quét lịch sử ERP cũ và gửi tin nhắn LINE/Zalo kèm giỏ hàng quen thuộc đã soạn sẵn chỉ cần bấm xác nhận.
 4. **Cứu đơn hết hàng cục bộ (Substitute) (SAL-KEY-04):** Khi sản phẩm khách hỏi tạm hết kho ERP, AI đối soát ngay danh mục thay thế tương đương để chào phương án đổi món trong 0.5 giây, bảo vệ 100% giá trị đơn hàng.
-5. **Tìm kiếm theo mô tả tự nhiên / hương vị (SAL-KEY-05):** Khách gõ mô tả đời thường (*"bánh tròn ngọt sầu riêng"*, *"sạc xe 4 bình"*) $
-ightarrow$ Semantic Search tìm ra chính xác mã SKU trên ERP.
+5. **Tìm kiếm theo mô tả tự nhiên / hương vị (SAL-KEY-05):** Khách gõ mô tả đời thường (*"bánh tròn ngọt sầu riêng"*, *"sạc xe 4 bình"*) ➔ Semantic Search tìm ra chính xác mã SKU trên ERP.
 
 #### Nhóm CSKH:
 1. **Quick Action Chips 0.5s (CS-KEY-01):** Khung chat tự động bung sẵn 3 câu hỏi nhanh theo đúng ngữ cảnh sản phẩm đang xem.
-2. **Tra cứu vận đơn 7-Eleven tự động (CS-KEY-02):** Khách hỏi tiến độ đơn $
-ightarrow$ AI nhận diện danh tính, tra cứu mã vận đơn trên ERP và trả về hành trình bưu kiện chuẩn xác.
-3. **Báo động đỏ & Human Takeover ≤ 1.0s (CS-KEY-03):** Khách bức xúc hoặc yêu cầu gặp người thật $
-ightarrow$ AI ngắt lời ngay lập tức, báo động Telegram cho quản lý dưới 2 phút, nhân viên bấm tiếp quản trong 1.0 giây.
+2. **Tra cứu vận đơn 7-Eleven tự động (CS-KEY-02):** Khách hỏi tiến độ đơn ➔ AI nhận diện danh tính, tra cứu mã vận đơn trên ERP và trả về hành trình bưu kiện chuẩn xác.
+3. **Báo động đỏ & Human Takeover ≤ 1.0s (CS-KEY-03):** Khách bức xúc hoặc yêu cầu gặp người thật ➔ AI ngắt lời ngay lập tức, báo động Telegram cho quản lý dưới 2 phút, nhân viên bấm tiếp quản trong 1.0 giây.
 4. **Lịch chăm sóc SIM 30 ngày & Xe điện 30-90 ngày (CS-KEY-04):** Tự động đếm ngày từ hóa đơn ERP để nhắc nạp cước data trước khi khóa SIM, và nhắc bảo dưỡng ắc quy/phanh xe điện mới định kỳ.
 
 ---
@@ -370,11 +365,9 @@ Hệ thống chỉ được bàn giao khi vượt qua 100% bộ 9 bài kiểm th
 3. **TC-E2E-003 (Bảo vệ giá niêm yết):** Báo giá sai lệch với ERP lập tức bị Policy Engine chặn đứng (`BR-001..003`).
 4. **TC-E2E-004 (Cô lập dữ liệu khách hàng):** CSKH Agent chỉ được tra cứu dữ liệu của đúng khách hàng đã xác minh.
 5. **TC-E2E-005 (Khóa chống trùng đơn):** Giả lập retry mạng 10 lần liên tiếp cùng một yêu cầu; hệ thống chỉ gửi 1 tin nhắn và tạo đúng 1 đơn hàng nháp (`BR-006`).
-6. **TC-E2E-006 (Phòng vệ Prompt Injection):** Người dùng nhập prompt yêu cầu nâng quyền admin hoặc hạ giá $
-ightarrow$ Hệ thống lập tức từ chối (**DENY**), ghi log cảnh báo an ninh (`BR-008..009`).
+6. **TC-E2E-006 (Phòng vệ Prompt Injection):** Người dùng nhập prompt yêu cầu nâng quyền admin hoặc hạ giá ➔ Hệ thống lập tức từ chối (**DENY**), ghi log cảnh báo an ninh (`BR-008..009`).
 7. **TC-E2E-007 (Tuân thủ quyền riêng tư):** Khách hàng chưa cấp quyền hoặc đã opt-out sẽ bị loại trừ tự động khỏi luồng gửi tin (`BR-004`).
-8. **TC-E2E-008 (An toàn khi mất kết nối):** Giả lập ERP ngắt kết nối $
-ightarrow$ Hệ thống chuyển trạng thái retry có kiểm soát, tuyệt đối không báo thành công giả (`NFR-008`).
+8. **TC-E2E-008 (An toàn khi mất kết nối):** Giả lập ERP ngắt kết nối ➔ Hệ thống chuyển trạng thái retry có kiểm soát, tuyệt đối không báo thành công giả (`NFR-008`).
 9. **TC-E2E-009 (Truy vết nguồn gốc):** Mọi hành động thành công đều truy ngược được đầy đủ chuỗi: `Trigger ➔ Context ➔ Decision ➔ Approval ➔ Evidence`.
 
 ---
