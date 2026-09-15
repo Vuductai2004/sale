@@ -159,16 +159,16 @@ Mọi hành vi của AI Agent đều bị khóa cứng theo ma trận phân quy�
 
 ---
 
-## CHƯƠNG VI: LỘ TRÌNH TRIỂN KHAI 6 GIAI ĐOẠN / 16 TUẦN (PHASE 0 ➔ PHASE 5)
+## CHƯƠNG VI: LỘ TRÌNH TRIỂN KHAI 6 PHÂN KỲ THEO GATE (PHASE P0 ➔ PHASE P5)
 
-```
+```text
 ┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐     ┌──────────────┐
 │ P0: NỀN TẢNG │ ──> │   P1: CSKH   │ ──> │  P2: SALES   │ ──> │ P3: MARKETING│ ──> │P4: HỢP NHẤT  │ ──> │P5: TỰ HÀNH   │
-│ (Tuần 1–3)   │     │ (Tuần 4–6)   │     │ (Tuần 7–9)   │     │ (Tuần 10–12) │     │ (Tuần 13–14) │     │ (Tuần 15–16) │
+│ (Foundation) │     │ (Care Pilot) │     │(Sales Pilot) │     │ (Mkt Pilot)  │     │(Cross-Domain)│     │(Autonomy)    │
 └──────────────┘     └──────────────┘     └──────────────┘     └──────────────┘     └──────────────┘     └──────────────┘
 ```
 
-### Phase 0: Nền Tảng Dữ Liệu & Khung Quản Trị (Tuần 1 – 3)
+### Phase 0: Nền Tảng Dữ Liệu & Khung Quản Trị 
 * **Nhiệm vụ:**
   1. Khóa các giả định vận hành (`ASM-001..005`) cùng Ban Giám đốc và IT cơ sở.
   2. Thiết lập Data Contracts cho Customer 360, Event, Skill, Action, Evidence.
@@ -177,7 +177,7 @@ Mọi hành vi của AI Agent đều bị khóa cứng theo ma trận phân quy�
   5. Thiết lập cây tri thức Second Brain (/company, /product, /brand, /policy).
 * **Exit Gate P0:** Agent tuân thủ 100% ranh giới quyền hạn; không thể tự ý hạ giá; mọi hành động sinh ID truy vết.
 
-### Phase 1: Thử Nghiệm CSKH & Bám Bưu Kiện 7-Eleven (Tuần 4 – 6)
+### Phase 1: Thử Nghiệm CSKH & Bám Bưu Kiện 7-Eleven 
 * **Nhiệm vụ:**
   1. Triển khai CS-01 tiếp nhận đa kênh (Web, LINE OA, Messenger), nhận diện 9 nhóm Intent.
   2. Tích hợp API đọc trạng thái bưu kiện giao vận 7-Eleven / FamilyMart.
@@ -186,7 +186,7 @@ Mọi hành vi của AI Agent đều bị khóa cứng theo ma trận phân quy�
   5. Triển khai Conversation Console (`SCR-005`) hỗ trợ nhân viên tiếp quản trong 1.0 giây.
 * **Exit Gate P1:** 01 ca khiếu nại giao vận thực tế được xử lý thành công E2E; fail-closed chuẩn khi lỗi mạng; có bằng chứng Evidence.
 
-### Phase 2: Thử Nghiệm Bán Hàng 24/7 & Phục Hồi Giỏ Hàng (Tuần 7 – 9)
+### Phase 2: Thử Nghiệm Bán Hàng 24/7 & Phục Hồi Giỏ Hàng 
 * **Nhiệm vụ:**
   1. Triển khai cụm Agent Sales: SAL-01 (Lead Qualify), SAL-02 (Advisor), SAL-03 (Recommendation), SAL-04 (Cart Recovery).
   2. Tích hợp Semantic Product Finder: Tìm kiếm hàng theo mô tả đời sống và hương vị quê hương.
@@ -194,7 +194,7 @@ Mọi hành vi của AI Agent đều bị khóa cứng theo ma trận phân quy�
   4. Tạo đơn hàng nháp (Draft Order) vào ERP có mã khóa chống trùng lặp tuyệt đối.
 * **Exit Gate P2:** Chứng minh luồng thực tế: Khách chat đêm $\rightarrow$ AI tư vấn chuẩn tồn kho $\rightarrow$ Đơn nháp được tạo trên ERP $\rightarrow$ Bằng chứng doanh thu được ghi nhận.
 
-### Phase 3: Thử Nghiệm Tiếp Thị Tự Động & Brand Guardian (Tuần 10 – 12)
+### Phase 3: Thử Nghiệm Tiếp Thị Tự Động & Brand Guardian 
 * **Nhiệm vụ:**
   1. Triển khai MKT-01 đến MKT-06: Phân tích Cohort kiều bào, lập kế hoạch chiến dịch.
   2. Triển khai Cổng RAG hỏi đáp thẻ cư trú ARC, BHYT kéo khách tự nhiên (M1-01).
@@ -203,14 +203,14 @@ Mọi hành vi của AI Agent đều bị khóa cứng theo ma trận phân quy�
   5. Cổng phê duyệt chiến dịch (`AUTH-4`) trước khi xuất bản tin nhắn tiếp thị hàng loạt.
 * **Exit Gate P3:** Chiến dịch tiếp thị không thể phát đi nếu thiếu phê duyệt của Quản lý; đo lường chính xác Attribution đơn hàng từ mã giới thiệu và cổng RAG.
 
-### Phase 4: Điều Phối Hợp Nhất 5 Ngành Hàng (Tuần 13 – 14)
+### Phase 4: Điều Phối Hợp Nhất 5 Ngành Hàng 
 * **Nhiệm vụ:**
   1. Nâng cấp Revenue Orchestrator: Định tuyến thông minh giữa MKT $\rightarrow$ Sales $\rightarrow$ CSKH $\rightarrow$ Retention.
   2. Triển khai CS-02 (Retention Agent): Tự động nhắc nạp SIM ngày $T+27$, nhắc bảo dưỡng xe điện ngày thứ 30 và 90, tự động báo đỉnh tỷ giá kiều hối.
   3. Hợp nhất toàn bộ hành trình kiều bào trên một Timeline duy nhất.
 * **Exit Gate P4:** Vượt qua bài test **TC-E2E-001**: Một khách hàng đi hết chu trình từ Hỏi luật ARC $\rightarrow$ Mua đồ ăn $\rightarrow$ Nhận hàng 7-11 $\rightarrow$ Nạp SIM $\rightarrow$ Mua xe điện mà không đứt gãy ngữ cảnh.
 
-### Phase 5: Tự Hành Có Kiểm Soát & Human Command Center (Tuần 15 – 16)
+### Phase 5: Tự Hành Có Kiểm Soát & Human Command Center 
 * **Nhiệm vụ:**
   1. Hoàn thiện bộ 5 màn hình Human Command Center (`SCR-001..005`).
   2. Tự động nâng các tác vụ rủi ro thấp đạt chuẩn từ AUTH-2 (Draft) lên AUTH-3 (Bounded Execute).

@@ -1,7 +1,7 @@
 # KẾ HOẠCH XÂY DỰNG HỆ THỐNG AI AGENT DOANH THU & TƯƠNG TÁC KHÁCH HÀNG
 ## MARKETING — SALES — CHĂM SÓC KHÁCH HÀNG (CUSTOMER SUCCESS)
 ### CĂN CỨ THEO TÀI LIỆU ĐẶC TẢ YÊU CẦU HỆ THỐNG: AI-REV-SRS-001 (VERSION 0.1)
-#### LỘ TRÌNH TRIỂN KHAI 6 GIAI ĐOẠN / 16 TUẦN — THỨ TỰ THỰC THI 18 BƯỚC — ĐỊNH NGHĨA HOÀN THÀNH (DOD)
+#### LỘ TRÌNH TRIỂN KHAI 6 PHÂN KỲ THEO GATE (P0 ➔ P5) — THỨ TỰ THỰC THI 18 BƯỚC — ĐỊNH NGHĨA HOÀN THÀNH (DOD)
 
 > **THÔNG TIN DỰ ÁN & ĐỊNH VỊ CỐT LÕI:**  
 > **Mã đặc tả căn cứ:** `AI-REV-SRS-001` (Phiên bản 0.1, ngày 15/09/2026).  
@@ -10,19 +10,19 @@
 
 ---
 
-## PHẦN I: TỔNG QUAN LỘ TRÌNH TRIỂN KHAI (6 GIAI ĐOẠN / 16 TUẦN)
+## PHẦN I: TỔNG QUAN LỘ TRÌNH TRIỂN KHAI 6 PHÂN KỲ THEO GATE (P0 ➔ P5)
 
-Hệ thống được chia thành **6 giai đoạn / 16 tuần** bám sát chặt chẽ theo Roadmap của Đề bài:  
+Hệ thống được chia thành **6 phân kỳ kỹ thuật theo Gate (P0 ➔ P5)** bám sát chặt chẽ theo Roadmap của Đề bài:  
 $$\textbf{Customer Care (P1)} \longrightarrow \textbf{Sales (P2)} \longrightarrow \textbf{Marketing (P3)} \longrightarrow \textbf{Cross-domain (P4)} \longrightarrow \textbf{Controlled Autonomy (P5)}$$
 
-| Giai Đoạn (Gate) | Thời Gian | Trọng Tâm Nghiệp Vụ | Deliverables Chính Cần Bàn Giao | Tiêu Chí Hoàn Thành (Exit Gate) |
-| :--- | :---: | :--- | :--- | :--- |
-| **P0: Foundation & Governance** | **Tuần 1 – 3** | Nền tảng dữ liệu, bảo mật, khung Agent & Skill | Data Contracts, C360 Pipeline, Authority Engine, Audit Logger, Connector Core. | Agent tuân thủ 100% boundary quyền, không vượt quyền, mọi action sinh ID truy vết. |
-| **P1: Customer Care Pilot** | **Tuần 4 – 6** | Triển khai CS-01 tiếp nhận đa kênh & Case Mgmt | CS-01 Agent, Tra cứu ERP/Order, FAQ/Escalation, Console takeover 1.0s. | Hội thoại thật E2E: tra cứu đúng order, fail-closed khi lỗi, escalation chuẩn. |
-| **P2: Sales Pilot** | **Tuần 7 – 9** | Bán hàng, đề xuất & phục hồi giỏ hàng | SAL-01 đến SAL-05, Pricing/Stock Validator, Cart Recovery Engine, Bắn đơn nháp ERP. | Chứng minh luồng: AI Action $\rightarrow$ Order $\rightarrow$ Revenue Evidence; không sai giá/tồn. |
-| **P3: Marketing Pilot** | **Tuần 10 – 12** | Chiến dịch, phân khúc, content & duyệt bài | MKT-01 đến MKT-06, Brand Guardian, Campaign Approval flow (AUTH-4). | Vận hành E2E chiến dịch có kiểm duyệt; đo lường chính xác Attribution doanh thu. |
-| **P4: Cross-domain Orchestration** | **Tuần 13 – 14** | Hợp nhất luồng MKT $\rightarrow$ Sales $\rightarrow$ CS $\rightarrow$ Success | Revenue Orchestrator định tuyến đa tác vụ, Retention Agent (CS-02), Unified Timeline. | Xuyên suốt vòng đời khách hàng trên 1 Timeline duy nhất không bị mất context. |
-| **P5: Controlled Autonomy & Scale** | **Tuần 15 – 16** | Mở rộng tự động hóa có kiểm soát & FinOps | Scoring Engine, Auto-promotion policy (AUTH-2 $\rightarrow$ AUTH-3), Human Command Center. | Đạt Definition of Done: Real Data + Real Execution + Evidence + Test. |
+| Giai Đoạn (Gate) | Trọng Tâm Nghiệp Vụ | Deliverables Chính Cần Bàn Giao | Tiêu Chí Hoàn Thành (Exit Gate) |
+| :--- | :--- | :--- | :--- |
+| **P0: Foundation & Governance** | Nền tảng dữ liệu, bảo mật, khung Agent & Skill | Data Contracts, C360 Pipeline, Authority Engine, Audit Logger, Connector Core. | Agent tuân thủ 100% boundary quyền, không vượt quyền, mọi action sinh ID truy vết. |
+| **P1: Customer Care Pilot** | Triển khai CS-01 tiếp nhận đa kênh & Case Mgmt | CS-01 Agent, Tra cứu ERP/Order, FAQ/Escalation, Console takeover 1.0s. | Hội thoại thật E2E: tra cứu đúng order, fail-closed khi lỗi, escalation chuẩn. |
+| **P2: Sales Pilot** | Bán hàng, đề xuất & phục hồi giỏ hàng | SAL-01 đến SAL-05, Pricing/Stock Validator, Cart Recovery Engine, Bắn đơn nháp ERP. | Chứng minh luồng: AI Action $\rightarrow$ Order $\rightarrow$ Revenue Evidence; không sai giá/tồn. |
+| **P3: Marketing Pilot** | Chiến dịch, phân khúc, content & duyệt bài | MKT-01 đến MKT-06, Brand Guardian, Campaign Approval flow (AUTH-4). | Vận hành E2E chiến dịch có kiểm duyệt; đo lường chính xác Attribution doanh thu. |
+| **P4: Cross-domain Orchestration** | Hợp nhất luồng MKT $\rightarrow$ Sales $\rightarrow$ CS $\rightarrow$ Success | Revenue Orchestrator định tuyến đa tác vụ, Retention Agent (CS-02), Unified Timeline. | Xuyên suốt vòng đời khách hàng trên 1 Timeline duy nhất không bị mất context. |
+| **P5: Controlled Autonomy & Scale** | Mở rộng tự động hóa có kiểm soát & FinOps | Scoring Engine, Auto-promotion policy (AUTH-2 $\rightarrow$ AUTH-3), Human Command Center. | Đạt Definition of Done: Real Data + Real Execution + Evidence + Test. |
 
 ---
 
@@ -78,10 +78,10 @@ Hệ thống không phải ba chatbot rời rạc, mà được tổ chức theo
 
 ---
 
-### GIAI ĐOẠN P0: NỀN TẢNG CỐT LÕI & QUẢN TRỊ (FOUNDATION — TUẦN 1 ĐẾN 3)
+### GIAI ĐOẠN P0: NỀN TẢNG CỐT LÕI & QUẢN TRỊ (FOUNDATION )
 *Mục tiêu: Xây dựng nền tảng dữ liệu, quyền hạn, kiểm toán và điều phối. Nếu làm Agent trước mà chưa có Governance thì hệ thống sẽ mất kiểm soát.*
 
-#### Tuần 1: Chuẩn hóa Data Model & Canonical Contracts
+#### Hạng mục 1: Chuẩn hóa Data Model & Canonical Contracts
 * **Xây dựng các Entity cốt lõi:**
   * `Customer`, `CustomerIdentity`, `Consent`, `CustomerEvent`.
   * `Product`, `SKU`, `Price`, `Inventory`.
@@ -96,7 +96,7 @@ Hệ thống không phải ba chatbot rời rạc, mà được tổ chức theo
   * API contract chuẩn REST/JSON Schema.
   * Event schema định danh duy nhất: Customer ID, Product/SKU ID, Order ID, Event ID.
 
-#### Tuần 2: Customer Intelligence 360 & Timeline
+#### Hạng mục 2: Customer Intelligence 360 & Timeline
 * **Cấu trúc Customer Profile:**
   ```text
   Customer
@@ -120,7 +120,7 @@ Hệ thống không phải ba chatbot rời rạc, mà được tổ chức theo
   * **DECISION & ACTION:** Quyết định và hành động được hệ thống phê duyệt.
   * *Nguyên tắc thép:* **Giả thuyết AI không bao giờ được ghi ngược thành Customer Fact.**
 
-#### Tuần 3: Agent Runtime, Policy Engine & Revenue Orchestrator
+#### Hạng mục 3: Agent Runtime, Policy Engine & Revenue Orchestrator
 * **Xây dựng Core Platform Runtime:**
   * `Agent Registry`, `Skill Registry`, `Tool Registry`.
   * `Policy Engine`: Khóa cứng $P_{floor}$, kiểm tra tồn kho, kiểm tra consent (`BR-001..010`).
@@ -131,7 +131,7 @@ Hệ thống không phải ba chatbot rời rạc, mà được tổ chức theo
 
 ---
 
-### GIAI ĐOẠN P1: THỬ NGHIỆM CHĂM SÓC KHÁCH HÀNG (CUSTOMER CARE — TUẦN 4 ĐẾN 6)
+### GIAI ĐOẠN P1: THỬ NGHIỆM CHĂM SÓC KHÁCH HÀNG (CUSTOMER CARE )
 *Mục tiêu: Đưa vào vận hành Agent CSKH đầu tiên chạy thực tế E2E.*
 
 #### Hạng mục triển khai:
@@ -147,7 +147,7 @@ Hệ thống không phải ba chatbot rời rạc, mà được tổ chức theo
 
 ---
 
-### GIAI ĐOẠN P2: THỬ NGHIỆM BÁN HÀNG TỰ ĐỘNG (SALES — TUẦN 7 ĐẾN 9)
+### GIAI ĐOẠN P2: THỬ NGHIỆM BÁN HÀNG TỰ ĐỘNG (SALES )
 *Mục tiêu: Xây dựng cụm 4 Agent bán hàng cốt lõi, bảo vệ giá và phục hồi giỏ hàng bỏ quên.*
 
 #### Hạng mục triển khai:
@@ -167,7 +167,7 @@ Hệ thống không phải ba chatbot rời rạc, mà được tổ chức theo
 
 ---
 
-### GIAI ĐOẠN P3: THỬ NGHIỆM TIẾP THỊ TỰ ĐỘNG (MARKETING — TUẦN 10 ĐẾN 12)
+### GIAI ĐOẠN P3: THỬ NGHIỆM TIẾP THỊ TỰ ĐỘNG (MARKETING )
 *Mục tiêu: Vận hành chiến dịch Marketing tự động theo quy chuẩn có kiểm duyệt Brand Guardian.*
 
 #### Hạng mục triển khai:
@@ -182,7 +182,7 @@ Hệ thống không phải ba chatbot rời rạc, mà được tổ chức theo
 
 ---
 
-### GIAI ĐOẠN P4: ĐIỀU PHỐI HỢP NHẤT XUYÊN PHÂN HỆ (CROSS-DOMAIN — TUẦN 13 ĐẾN 14)
+### GIAI ĐOẠN P4: ĐIỀU PHỐI HỢP NHẤT XUYÊN PHÂN HỆ (CROSS-DOMAIN )
 *Mục tiêu: Đưa hệ thống trở thành AI Revenue Platform thống nhất, không đứt gãy dữ liệu.*
 
 #### Hạng mục triển khai:
@@ -195,7 +195,7 @@ Hệ thống không phải ba chatbot rời rạc, mà được tổ chức theo
 
 ---
 
-### GIAI ĐOẠN P5: TỰ HÀNH CÓ KIỂM SOÁT & MỞ RỘNG (CONTROLLED AUTONOMY — TUẦN 15 ĐẾN 16)
+### GIAI ĐOẠN P5: TỰ HÀNH CÓ KIỂM SOÁT & MỞ RỘNG (CONTROLLED AUTONOMY )
 *Mục tiêu: Tăng dần quyền tự động của Agent dựa trên hiệu quả thực chứng; vận hành Command Center và FinOps.*
 
 #### Hạng mục triển khai:
@@ -371,7 +371,7 @@ Mỗi lượt chạy của AI Agent (`Agent Run`) bắt buộc phải ghi lại 
 Mô hình đội ngũ tinh gọn từ 6 – 8 nhân sự theo đúng đề xuất tại Điều 28 SRS:
 
 | Vai Trò Dự Án | Số Lượng | Nhiệm Vụ Trọng Tâm Phụ Trách |
-| :--- | :---: | :--- |
+| :--- | :--- |
 | **Product Manager / BA Lead** | 1 | Quản lý yêu cầu, khóa KPI baseline, thiết lập Business Rules & Approval Policy. |
 | **Solution Architect** | 1 | Thiết kế Kiến trúc tổng thể, bảo mật, Data Contracts & Governance Engine. |
 | **AI Engineers** | 2 | Phát triển Agent Runtime, Orchestrator, Prompts, RAG & Evaluation Harness. |
@@ -382,7 +382,7 @@ Mô hình đội ngũ tinh gọn từ 6 – 8 nhân sự theo đúng đề xuấ
 ### Ma trận phân bổ trách nhiệm RACI:
 
 | Hạng Mục Công Việc | BA / PO | Solution Architect | AI Engineering | Backend / IT | Frontend | QA / QC |
-| :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| :--- | :---: | :---: | :---: | :---: | :---: |
 | 1. Khóa KPI, Connector & Policy Ngân sách | **R / A** | C | I | C | I | I |
 | 2. Thiết kế Canonical Contracts & Authority | C | **R / A** | C | C | I | I |
 | 3. Xây dựng Runtime, Orchestrator & Skills | I | C | **R / A** | C | I | I |
