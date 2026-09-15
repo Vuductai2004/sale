@@ -91,7 +91,7 @@ Hệ thống không phải ba chatbot rời rạc, mà được tổ chức theo
   * `ServiceCase`.
   * `Agent`, `Skill`, `Workflow`.
   * `Decision`, `Action`, `Approval`, `Execution`, `Evidence`, `Outcome`, `Learning`.
-* **Kết quả bắt buộc bàn giao cuối Tuần 1:**
+* **Kết quả bắt buộc bàn giao cuối Giai đoạn P0:**
   * Database schema hoàn chỉnh cho 6 domain.
   * API contract chuẩn REST/JSON Schema.
   * Event schema định danh duy nhất: Customer ID, Product/SKU ID, Order ID, Event ID.
