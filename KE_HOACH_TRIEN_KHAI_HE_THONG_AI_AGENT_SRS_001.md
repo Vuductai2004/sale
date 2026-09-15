@@ -30,7 +30,7 @@
 9. **Phần IX: Kiến Trúc Two-Stage RAG, Tối Ưu FinOps Token & Cấu Trúc Knowledge Base 5 Ngành Hàng**
 10. **Phần X: Khung An Toàn Dữ Liệu, Bảo Mật Doanh Nghiệp & Phòng Vệ Tấn Công Hệ Thống**
 11. **Phần XI: Bộ 9 Kịch Bản Kiểm Thử Chấp Nhận E2E (TC-E2E-001..009) Theo Chuẩn Given-When-Then**
-12. **Phần XII: Thiết Kế Chi Tiết 5 Màn Hình Human Command Center & Ma Trận Trách Nhiệm RACI**
+12. **Phần XII: Hệ Thống 5 Màn Hình Human Command Center, Tiêu Chuẩn Nghiệm Thu (DoD) & Bàn Giao Kỹ Thuật (Handoff)**
 
 ---
 
@@ -636,67 +636,106 @@ Hệ thống chỉ được bàn giao nghiệm thu khi vượt qua 100% bộ 9 b
 
 ---
 
-## PHẦN XII: THIẾT KẾ 5 MÀN HÌNH HUMAN COMMAND CENTER & MA TRẬN RACI
+## PHẦN XII: HỆ THỐNG 5 MÀN HÌNH HUMAN COMMAND CENTER, TIÊU CHUẨN NGHIỆM THU (DoD) & BÀN GIAO KỸ THUẬT (HANDOFF)
 
-### 1. Thiết Kế Chi Tiết 5 Màn Hình Quản Trị Tập Trung
+### 1. Đặc Tả Kỹ Thuật 5 Màn Hình Human Command Center (SCR-001..005)
+Căn cứ Điều 18 của Đề bài (`AI-REV-SRS-001`), hệ thống cung cấp 5 giao diện điều hành chuyên biệt phục vụ giám sát, can thiệp và phê duyệt của con người (Human-in-the-Loop):
 
 ```text
 ┌───────────────────────────────────────────────────────────────────────────────────────────────────┐
-│                             HỆ THỐNG 5 MÀN HÌNH HUMAN COMMAND CENTER                              │
-├──────────────────────┬────────────────────────────────────────────────────────────────────────────┤
-│ MÃ MÀN HÌNH          │ CẤU TRÚC GIAO DIỆN & TÁC VỤ ĐIỀU HÀNH CHUYÊN BIỆT                          │
-├──────────────────────┼────────────────────────────────────────────────────────────────────────────┤
-│ **SCR-001**          │ **Executive Dashboard (Bảng Điều Hành Giám Đốc):**                         │
-│                      │ • Thẻ chỉ số: Doanh thu AI mang lại, Số đơn chốt 24/7, Tỷ lệ cứu giỏ hàng. │
-│                      │ • Biểu đồ: Doanh thu theo 5 ngành hàng; Tỷ lệ bảo toàn biên lãi ròng.      │
-│                      │ • Cảnh báo: Số lượng sự cố vận hành cần lưu ý trong ngày.                  │
-├──────────────────────┼────────────────────────────────────────────────────────────────────────────┤
-│ **SCR-002**          │ **Agent Operations Hub (Giám Sát Kỹ Thuật & FinOps):**                     │
-│                      │ • Bảng trạng thái: Trạng thái Online/Offline của 3 Module Agent.           │
-│                      │ • Thước đo hiệu năng: Độ trễ phản hồi (Latency ms), Tỷ lệ lỗi API ERP.     │
-│                      │ • Theo dõi chi phí: Lượng token tiêu thụ theo ngày và chi phí USD quy đổi. │
-├──────────────────────┼────────────────────────────────────────────────────────────────────────────┤
-│ **SCR-003**          │ **Approval Center (Trung Tâm Phê Duyệt Cấp Quản Lý):**                      │
-│                      │ • Danh sách chờ duyệt: Các chiến dịch Marketing, đề xuất giảm giá lớn.     │
-│                      │ • Thao tác 1-chạm: **[APPROVE (Duyệt)]**, **[REJECT (Hủy)]**, **[MODIFY]**. │
-│                      │ • Nhật ký duyệt: Lưu trữ người duyệt, thời gian và lý do phê duyệt.        │
-├──────────────────────┼────────────────────────────────────────────────────────────────────────────┤
-│ **SCR-004**          │ **Customer 360 Viewer (Bảng Soi Hồ Sơ Khách Hàng Toàn Diện):**            │
-│                      │ • Thông tin định danh: SĐT, LINE ID, Mã bưu cục 7-Eleven quen thuộc.       │
-│                      │ • Dòng thời gian Unified Timeline: Xem ➔ Hỏi ➔ Thêm giỏ ➔ Chốt đơn.        │
-│                      │ • Phân loại dữ liệu: Phân định rõ ràng cột FACT và cột HYPOTHESIS.         │
-├──────────────────────┼────────────────────────────────────────────────────────────────────────────┤
-│ **SCR-005**          │ **Conversation & Takeover Console (Giám Sát Hội Thoại & Tiếp Quản):**     │
-│                      │ • Màn hình Live Chat: Đọc trực tiếp các cuộc hội thoại AI đang nói chuyện. │
-│                      │ • Nút đỏ khẩn cấp: **[TIẾP QUẢN NGAY (TAKE OVER)]** ngắt lời AI trong ≤1.0s│
-│                      │ • Công cụ hỗ trợ: Cho phép nhân viên sửa câu trả lời của AI và bàn giao lại│
-└──────────────────────┴────────────────────────────────────────────────────────────────────────────┘
+│                      ĐẶC TẢ KỸ THUẬT 5 MÀN HÌNH ĐIỀU HÀNH HUMAN COMMAND CENTER                    │
+├──────────────────────┬──────────────────────────────────────────┬─────────────────────────────────┤
+│ MÃ MÀN HÌNH          │ TRƯỜNG THÔNG TIN HIỂN THỊ (DATA FIELDS) │ CƠ CHẾ ĐIỀU KHIỂN & CAN THIỆP   │
+├──────────────────────┼──────────────────────────────────────────┼─────────────────────────────────┤
+│ **SCR-001**          │ • Revenue: Doanh thu tổng & Doanh thu AI │ • Bộ lọc 5 ngành hàng & Chi     │
+│ Executive Dashboard  │ • Leads & Tỷ lệ chuyển đổi (Conversion)  │   nhánh siêu thị/kho            │
+│ (Bảng Điều Hành Cấp  │ • Active Campaigns & Tỷ lệ hoàn thành KPI│ • Bộ lọc kênh (Web/App/LINE OA) │
+│ Quản Trị Doanh Thu)  │ • CS Status & Tỷ lệ giải quyết tự động   │ • Xuất báo cáo FinOps & P&L     │
+│                      │ • Retention Rate & Phân bổ AI Actions    │ • Báo động đỏ sự cố vận hành    │
+│                      │ • Approval Pending Queue Count           │   (Abnormal Events Alert)       │
+├──────────────────────┼──────────────────────────────────────────┼─────────────────────────────────┤
+│ **SCR-002**          │ • Trạng thái Online/Offline 3 Module     │ • Nút [RESTART AGENT RUNTIME]   │
+│ Agent Operations     │ • Task hiện tại & Hàng đợi thực thi      │ • Nút [FLUSH MEMORY CACHE]      │
+│ (Trung Tâm Giám Sát  │ • Lịch sử Run ID, Mã lỗi (Error Stack)   │ • Cấu hình giới hạn Token/Phút  │
+│ Kỹ Thuật & FinOps)   │ • Danh mục Tool Call & Tỷ lệ lỗi API ERP │ • Tự động ngắt khi chạm ngưỡng  │
+│                      │ • Chi phí Token & USD theo giờ/ngày      │   ngân sách FinOps tối đa       │
+├──────────────────────┼──────────────────────────────────────────┼─────────────────────────────────┤
+│ **SCR-003**          │ • Danh sách Ticket chờ duyệt cấp quản lý │ • **[APPROVE]**: Ký duyệt chạy  │
+│ Approval Center      │ • Chi tiết Request: Trigger, Agent ID,   │ • **[REJECT]**: Từ chối kèm lý  │
+│ (Trung Tâm Phê Duyệt │   Ngân sách đề xuất, Mức chiết khấu      │   do bắt buộc                   │
+│ Thẩm Quyền AUTH-3..5)│ • Bằng chứng đi kèm (Evidence Artifact)  │ • **[MODIFY]**: Sửa tham số     │
+│                      │ • Đánh giá rủi ro biên lãi ròng (P_floor)│ • **[PAUSE] / [CANCEL]**        │
+├──────────────────────┼──────────────────────────────────────────┼─────────────────────────────────┤
+│ **SCR-004**          │ • Định danh: SĐT, LINE ID, Bưu cục 7-11  │ • Bộ lọc xem FACT vs HYPOTHESIS │
+│ Customer 360 Viewer  │ • Unified Timeline: Xem ➔ Hỏi ➔ Thêm     │ • Ghi chú thủ công của nhân viên│
+│ (Soi Hồ Sơ Khách     │   giỏ ➔ Chốt đơn ➔ Khiếu nại ➔ Mua lại   │ • Điều chỉnh Consent (Opt-in /  │
+│ Hàng Thống Nhất)     │ • Điểm RFM, Hạn mức nợ & Lịch sử SIM/xe  │   Opt-out chính sách dữ liệu)   │
+│                      │ • Bằng chứng tương tác & Evidence Log    │ • Xem chuỗi Run ID của khách    │
+├──────────────────────┼──────────────────────────────────────────┼─────────────────────────────────┤
+│ **SCR-005**          │ • Luồng Live Chat thời gian thực (Web,   │ • **[TAKEOVER]** Khẩn cấp: Ngắt │
+│ Conversation Console │   Mobile App, LINE OA)                   │   quyền AI trong ≤ 1.0 giây     │
+│ (Giám Sát Hội Thoại  │ • Context hiện tại & Đề xuất hành động   │ • **[RETURN TO AGENT]**: Trả lại│
+│ & Tiếp Quản Khẩn Cấp)│ • Phân tích cảm xúc (Sentiment Score)    │ • Chỉnh sửa câu trả lời trước gửi│
+│                      │ • Nhật ký Tool calls đang chạy ngầm      │ • Gắn nhãn đánh giá chất lượng  │
+└──────────────────────┴──────────────────────────────────────────┴─────────────────────────────────┘
 ```
 
 ---
 
-### 2. Ma Trận Phân Công Trách Nhiệm RACI Toàn Diện
+### 2. Định Nghĩa Hoàn Thành Cấp Hệ Thống (Definition of Done - DoD)
+Căn cứ Điều 27 của Đề bài (`AI-REV-SRS-001`), hệ thống **tuyệt đối không được coi là hoàn thành chỉ vì Agent có thể trò chuyện qua lại**. Một năng lực (capability) hay phân hệ chỉ đạt chuẩn nghiệm thu khi chứng minh được đầy đủ **10 tiêu chuẩn vàng**:
 
-| Hạng Mục Trọng Tâm | Ban Giám Đốc | Quản Trị Dự Án (PM/BA) | Kỹ Sư AI / Backend | Vận Hành (MKT/Sales/CS) | Đội Ngũ QA |
-| :--- | :---: | :---: | :---: | :---: | :---: |
-| 1. Khóa Business Rules & Giá sàn P_floor | **A** | R | C | C | I |
-| 2. Thiết kế Schemas 6 Domain & Adapter ERP | I | C | **R / A** | I | C |
-| 3. Xây dựng Lõi Orchestrator & Cụm 3 Module | I | I | **R / A** | C | C |
-| 4. Xây dựng 5 Màn hình Command Center | I | C | **R / A** | C | I |
-| 5. Kiểm thử Suite 9 Kịch bản E2E | I | C | C | I | **R / A** |
-| 6. Nghiệm thu từng Phân kỳ Gate (P0 ➔ P5) | **A** | **R** | R | R | R |
+$$\mathbf{Data\ thật} + \mathbf{Agent\ thật} + \mathbf{Skill\ thật} + \mathbf{Tool\ thật} + \mathbf{Policy\ thật} + \mathbf{Approval\ thật} + \mathbf{Execution\ thật} + \mathbf{Evidence\ thật} + \mathbf{Outcome\ thật} + \mathbf{Test\ thật}$$
 
-*(Ghi chú: A: Accountable - Chịu trách nhiệm cao nhất; R: Responsible - Trực tiếp thực hiện; C: Consulted - Tham vấn chuyên môn; I: Informed - Nhận báo cáo tiến độ).*
+* **Tiêu chuẩn dữ liệu & thực thi:** 100% truy vấn và giao dịch chạy trên cơ sở dữ liệu thật của ERP/POS; không chấp nhận dữ liệu giả lập, không chấp nhận việc AI tự sinh kết quả ảo mà không gọi tool.
+* **Tiêu chuẩn an toàn & kiểm soát:** Mọi hành động có tác động bên ngoài (tạo đơn, sửa giá, gửi thông báo diện rộng, hoàn tiền) bắt buộc phải có Policy kiểm tra, Approval hợp lệ và Audit Trail ghi nhận.
+* **Mục tiêu cuối cùng:** Xây dựng một **AI Revenue Workforce** có khả năng trực tiếp tham gia vận hành Marketing, Sales và Chăm sóc khách hàng với mức tự động hóa cao, nhưng mọi quyền thực thi đều có giới hạn, có thể kiểm soát và truy vết 100%.
 
 ---
 
-### 3. Định Nghĩa Hoàn Thành Cấp Hệ Thống (Definition of Done - DoD)
-Hệ thống không bao giờ được coi là hoàn thành chỉ vì Agent có thể trò chuyện qua lại.
+### 3. Kế Hoạch Bàn Giao Triển Khai Kỹ Thuật (Handoff Matrix)
+Căn cứ Điều 28 của Đề bài (`AI-REV-SRS-001`), việc chuyển giao giữa các bộ phận kỹ thuật được chuẩn hóa thành 7 gói bàn giao rõ ràng, cụ thể, không trùng lặp:
 
-Một phân hệ hay một tính năng chỉ đạt chuẩn nghiệm thu khi chứng minh được đầy đủ 10 yếu tố:  
-**Data thật + Agent thật + Skill thật + Tool thật + Policy thật + Approval thật + Execution thật + Evidence thật + Outcome thật + Test thật.**
+```text
+┌───────────────────────────────────────────────────────────────────────────────────────────────────┐
+│                        KẾ HOẠCH BÀN GIAO TRIỂN KHAI KỸ THUẬT (HANDOFF MATRIX)                     │
+├────┬─────────────────────────────┬───────────────────────────────────────────────────────────────┤
+│ STT│ ĐỘI NGŨ TIẾP NHẬN BÀN GIAO  │ DANH MỤC ĐẦU RA KỸ THUẬT BẮT BUỘC BÀN GIAO (DELIVERABLES)    │
+├────┼─────────────────────────────┼───────────────────────────────────────────────────────────────┤
+│ 1  │ **Business / BA**           │ • Khóa bộ chỉ số KPI baseline & target (Mục 20).              │
+│    │ (Phân Tích Nghiệp Vụ)       │ • Khóa danh mục connector production (ASM-001).               │
+│    │                             │ • Khóa ngưỡng phê duyệt giảm giá và ngân sách (ASM-003).      │
+│    │                             │ • Khóa chính sách dữ liệu Customer 360 được phép lưu (ASM-005)│
+├────┼─────────────────────────────┼───────────────────────────────────────────────────────────────┤
+│ 2  │ **Solution Architect**      │ • Khóa Canonical Contracts cho Customer, Agent, Skill,        │
+│    │ (Kiến Trúc Sư Hệ Thống)     │   Decision, Action, Approval, Evidence và Outcome.            │
+│    │                             │ • Thiết kế kiến trúc chịu lỗi (Fault Tolerance) & Idempotency.│
+│    │                             │ • Ban hành chuẩn giao tiếp RESTful/Event-Driven với ERP/POS.  │
+├────┼─────────────────────────────┼───────────────────────────────────────────────────────────────┤
+│ 3  │ **AI Engineering**          │ • Xây dựng Lõi Orchestrator, Agent Runtime, Prompt Templates. │
+│    │ (Kỹ Sư AI & Mô Hình)        │ • Đóng gói Kiến trúc Two-Stage RAG và Vector Store 5 ngành.   │
+│    │                             │ • Xây dựng Skill Framework và Harness tự động đánh giá model. │
+├────┼─────────────────────────────┼───────────────────────────────────────────────────────────────┤
+│ 4  │ **Backend / Integration**   │ • Xây dựng API Gateway, Event Ingestion (Kafka/RabbitMQ).     │
+│    │ (Kỹ Sư Hệ Thống Nền Tảng)   │ • Phát triển Connector Adapter cắm ERP/POS, Webhook LINE/Web. │
+│    │                             │ • Lập trình Idempotency Engine và Audit Logger ghi nhận DB.   │
+├────┼─────────────────────────────┼───────────────────────────────────────────────────────────────┤
+│ 5  │ **Frontend Engineering**    │ • Xây dựng bộ 5 Màn hình Human Command Center (SCR-001..005). │
+│    │ (Kỹ Sư Giao Diện Vận Hành)  │ • Tích hợp Web Widget Chat và Mobile SDK vào App khách hàng.  │
+│    │                             │ • Thiết kế nút khẩn cấp [Takeover] đạt SLA phản hồi ≤ 1.0s.   │
+├────┼─────────────────────────────┼───────────────────────────────────────────────────────────────┤
+│ 6  │ **QA & Testing Team**       │ • Thiết lập Acceptance Suite kiểm thử tự động 9 kịch bản E2E  │
+│    │ (Đội Ngũ Đảm Bảo Chất Lượng)│   (TC-E2E-001 đến TC-E2E-009).                                │
+│    │                             │ • Triển khai Negative Test, Prompt Injection Test, Jailbreak. │
+│    │                             │ • Đo lường SLA độ trễ phản hồi (P95 ≤ 3.0s) và Fail-closed.   │
+├────┼─────────────────────────────┼───────────────────────────────────────────────────────────────┤
+│ 7  │ **Pilot Operation Team**    │ • Vận hành thử nghiệm môi trường Production-like theo 5 bước: │
+│    │ (Đội Ngũ Triển Khai Pilot)  │   Customer Care ➔ Sales ➔ Marketing ➔ Cross-Domain ➔ Controlled│
+│    │                             │   Autonomy. Đánh giá Exit Gate từng giai đoạn trước Go-Live.  │
+└────┴─────────────────────────────┴───────────────────────────────────────────────────────────────┘
+```
 
 ---
 
-### KẾT LUẬN & CAM KẾT
-Bản Báo cáo Đề án Kỹ thuật và Kế hoạch Triển khai Toàn diện này là hồ sơ quy chuẩn duy nhất kết hợp hoàn hảo giữa **Nghiệp vụ thực tế của Chuỗi Bán lẻ Đa kênh tại Đài Loan** và **Khung Đặc tả Kiến trúc Minh bạch Cấp Enterprise (`AI-REV-SRS-001`)**, sẵn sàng làm căn cứ pháp lý và kỹ thuật phục vụ triển khai thực địa.
+### KẾT LUẬN & CAM KẾT TRIỂN KHAI
+Bản Báo cáo Đề án Kỹ thuật và Kế hoạch Triển khai Toàn diện này là hồ sơ quy chuẩn duy nhất kết hợp hoàn hảo giữa **Nghiệp vụ thực tế của Chuỗi Bán lẻ Đa kênh tại Đài Loan** và **Khung Đặc tả Kiến trúc Minh bạch Cấp Enterprise (`AI-REV-SRS-001`)**, loại bỏ hoàn toàn các cấu phần hình thức thừa thãi, sẵn sàng làm căn cứ kỹ thuật và pháp lý phục vụ thi công thực địa.
