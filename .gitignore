@@ -1,0 +1,17 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.env
+.venv/
+env/
+
+# Scratch & logs
+scratch/
+*.log
+
+# OS & Office temps
+Thumbs.db
+Desktop.ini
+~$*.docx
+.DS_Store
