@@ -15,6 +15,7 @@
 | :---: | :--- | :---: | :--- |
 | **01** | **Kế Hoạch Triển Khai Master (SRS-001)** | [Bản Markdown](KE_HOACH_TRIEN_KHAI_HE_THONG_AI_AGENT_SRS_001.md) \| [Bản PDF](KE_HOACH_TRIEN_KHAI_HE_THONG_AI_AGENT_SRS_001.pdf) | Lộ trình kỹ thuật 6 giai đoạn / 16 tuần, 18 bước thực thi, ma trận RACI, 9 bài test TC-E2E-001..009 và Definition of Done (DoD). |
 | **02** | **Đề Bài Kỹ Thuật (SRS Baseline)** | [Bản Markdown](De_bai_Xay_dung_He_thong_AI_Agent_Marketing_Sales_CSKH_v0.1.md) | Bản đặc tả yêu cầu nghiệp vụ và kỹ thuật AI-REV-SRS-001 do Ban Giám đốc ban hành. |
+| **03** | **Đề Án Chuỗi Siêu Thị Đài Loan (Enterprise SRS)** | [Bản Markdown](DE_AN_AI_AGENT_CHUOI_BAN_LE_DAI_LOAN_ENTERPRISE_SRS.md) \| [Bản PDF](DE_AN_AI_AGENT_CHUOI_BAN_LE_DAI_LOAN_ENTERPRISE_SRS.pdf) | Bản áp dụng trọn vẹn khung SRS minh bạch cho 5 ngành hàng kiều bào Đài Loan (AUTH-0..5, Zero-Disruption, Fail-Closed, 9 bài test). |
 
 ---
 
