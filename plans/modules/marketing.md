@@ -12,7 +12,7 @@ Phân hệ Tiếp thị vận hành với mục tiêu: **Chủ động lắng ng
 
 ### Ranh giới nghiệp vụ:
 1. **Tuân thủ quy định tiếp thị:** Mọi thông điệp xuất bản ra bên ngoài đều phải qua bộ lọc kiểm duyệt **MKT-04 Brand Guardian** để đối soát từ cấm, cam kết sai lệch và chính sách bảo vệ người tiêu dùng.
-2. **Quyền riêng tư & Chống spam:** Chỉ gửi tin nhắn chủ động tới khách hàng khi có đồng thuận (Consent) hợp lệ theo Đạo luật Bảo vệ Dữ liệu Cá nhân (Taiwan PDPA) (**BR-004**). Tần suất tối đa 2 tin/tuần, tự động ngừng khi khách không tương tác.
+2. **Quyền riêng tư & Chống spam:** Chỉ gửi tin nhắn chủ động tới khách hàng khi có đồng thuận (Consent) hợp lệ theo Đạo luật Bảo vệ Dữ liệu Cá nhân (Taiwan PDPA) (**BR-004**). Tự động kiểm tra trạng thái Consent và danh sách hạn chế (Suppression List) trước khi gửi tin, tự động ngừng khi khách từ chối.
 3. **Chuẩn hóa ngôn từ:** Sử dụng thuật ngữ thương mại chuẩn xác **"Chương trình Giới thiệu người mới (Member-Get-Member Referral)"**, tuyệt đối không dùng cụm từ thiếu chuyên nghiệp.
 
 ---

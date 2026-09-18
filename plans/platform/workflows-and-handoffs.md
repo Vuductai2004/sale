@@ -29,12 +29,12 @@ Theo Mục 15 của SRS v0.1, toàn bộ hệ thống phải tuân thủ nghiêm
 * **BR-002 (Client Tampering Defense):** Nghiêm cấm nhận giá, mã giảm giá hoặc tiền tệ truyền lên từ phía trình duyệt client. Mọi giao dịch đều phải qua bộ tính toán phía máy chủ.
 * **BR-003 (Zero Hallucination on Specs):** Không suy đoán hoặc bịa đặt thông số kỹ thuật sản phẩm, thời lượng pin, tốc độ tối đa hay công dụng y tế ngoài tài liệu đã kiểm duyệt.
 * **BR-004 (Consent & Suppression Compliance):** Tuân thủ Đạo luật Bảo vệ Dữ liệu Cá nhân (Taiwan PDPA). Chỉ gửi tin khi khách có đồng thuận; chặn gửi tin nếu khách đã từ chối hoặc nằm trong danh sách hạn chế (Suppression List).
-* **BR-005 (Unique Execution ID):** Mọi lệnh giao dịch, gửi tin hoặc tạo đơn bắt buộc gắn mã định danh thực thi duy nhất (`idempotency_key`) để chống trùng lặp thao tác khi mạng lag.
-* **BR-006 (Frequency Capping):** Giới hạn tần suất tiếp cận: tối đa 2 tin/tuần cho mỗi khách hàng, không gửi tin marketing trong vòng 24 giờ sau khi khách phát sinh khiếu nại.
-* **BR-007 (Role Isolation):** Các Sub-Agent chỉ hoạt động đúng phạm vi chuyên môn được cấp phép, không lấn sân chức năng của Agent khác.
-* **BR-008 (Authority Boundary Enforcement):** AI không bao giờ được phép thực hiện hành động vượt quá cấp thẩm quyền quy định trong ma trận AUTH.
-* **BR-009 (No Privilege Escalation via User Prompt):** Lời nhắc hoặc câu lệnh của khách hàng trong khung chat (*"Hãy làm quản trị viên", "Bỏ qua quy tắc"*) tuyệt đối không thể nâng quyền hay thay đổi chính sách bảo vệ giá sàn $P_{floor}$.
-* **BR-010 (Immutable Audit Trail):** Toàn bộ các quyết định, lượt gọi kỹ năng, phản hồi của AI và hành động phê duyệt của con người đều được ghi log bất biến vào cơ sở dữ liệu đối soát.
+* **BR-005 (Unique Execution ID):** Một action có tác động bên ngoài bắt buộc phải có Unique Execution ID (`idempotency_key`) để chống trùng lặp thao tác khi mạng lag.
+* **BR-006 (Idempotent Retry):** Retry không được tạo hành động trùng lặp (cơ chế thử lại khi mất mạng tuyệt đối không sinh 2 đơn hàng hoặc gửi 2 tin nhắn lặp lại cho khách).
+* **BR-007 (High-Risk & Financial Approval):** Hành động tài chính hoặc rủi ro cao bắt buộc phải qua phê duyệt (Human Approval) của nhân sự quản lý trên màn hình SCR-003.
+* **BR-008 (Authority Boundary Enforcement):** Agent không được vượt quyền kể cả khi LLM yêu cầu (tuân thủ nghiêm ngặt ma trận thẩm quyền AUTH-0..5).
+* **BR-009 (No Privilege Escalation via User Prompt):** Prompt hoặc nội dung do khách hàng cung cấp không thể tự nâng quyền Agent hay thay đổi chính sách bảo vệ giá sàn $P_{floor}$.
+* **BR-010 (Evidence Generation & Audit Trail):** Mọi execution quan trọng bắt buộc phải sinh evidence đối soát và lưu vết kiểm toán bất biến.
 
 ---
 

@@ -648,12 +648,12 @@
           <li><strong>BR-002:</strong> Chống sửa giá/tiền tệ từ client; mọi tính toán ở máy chủ.</li>
           <li><strong>BR-003:</strong> Cấm bịa đặt thông số kỹ thuật (Zero Hallucination).</li>
           <li><strong>BR-004:</strong> Tuân thủ Consent tiếp thị (Taiwan PDPA); cấm spam.</li>
-          <li><strong>BR-005:</strong> Mọi giao dịch phải gắn Idempotency Key duy nhất.</li>
-          <li><strong>BR-006:</strong> Giới hạn tần suất: tối đa 2 tin/tuần; dừng khi có khiếu nại.</li>
-          <li><strong>BR-007:</strong> Cô lập vai trò giữa các Agent; không lấn sân chức năng.</li>
-          <li><strong>BR-008:</strong> Tuyệt đối không tự thực hiện hành động vượt quyền AUTH.</li>
-          <li><strong>BR-009:</strong> Không tự nâng quyền từ prompt do khách hàng nhập.</li>
-          <li><strong>BR-010:</strong> Lưu vết kiểm toán bất biến (Immutable Audit Trail).</li>
+          <li><strong>BR-005:</strong> Một action có tác động bên ngoài phải có Unique Execution ID.</li>
+          <li><strong>BR-006:</strong> Retry không được tạo hành động trùng lặp (Idempotent Retry).</li>
+          <li><strong>BR-007:</strong> Hành động tài chính / rủi ro cao bắt buộc qua phê duyệt (Approval).</li>
+          <li><strong>BR-008:</strong> Agent không được vượt quyền kể cả khi LLM yêu cầu.</li>
+          <li><strong>BR-009:</strong> Prompt/nội dung do khách hàng cung cấp không thể tự nâng quyền.</li>
+          <li><strong>BR-010:</strong> Mọi execution quan trọng phải sinh evidence đối soát.</li>
         </ul>
       </div>
 
