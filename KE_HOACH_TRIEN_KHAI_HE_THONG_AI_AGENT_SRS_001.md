@@ -233,7 +233,7 @@ sequenceDiagram
 
 #### A. Tính năng Mũi nhọn (KEY):
 1. **Exit-Intent Recovery Popup (MKT-KEY-01):** Theo dõi gia tốc chuột và cử chỉ vuốt ngược trên màn hình cảm ứng để kích hoạt thông điệp giữ chân đúng thời điểm khách chuẩn bị thoát.
-2. **Interactive Quiz 30s (MKT-KEY-02):** Widget trắc nghiệm chọn 3 icon: Nhu cầu (Ăn uống / SIM / Xe điện) ➔ Ngân sách ➔ Ưu tiên. AI lọc danh mục và đề xuất 2 sản phẩm khớp 99% trong 15 giây.
+2. **Interactive Quiz 30s (MKT-KEY-02):** Widget trắc nghiệm chọn 3 icon: Nhu cầu (Ăn uống / SIM / Xe điện) ➔ Ngân sách ➔ Ưu tiên. AI lọc danh mục và đề xuất 2 sản phẩm tối ưu theo nhu cầu trong 15 giây.
 3. **Member-Get-Member Referral (MKT-KEY-03):** Cơ chế kiều bào giới thiệu người mới (bạn mới sang Đài Loan, du học sinh mới nhập học) cùng nhận mã giảm giá 30 TWD cho đơn hàng bưu cục tiện lợi đầu tiên.
 
 #### B. Tính năng Bổ trợ mở rộng:

@@ -41,7 +41,7 @@ Phân hệ Tiếp thị vận hành với mục tiêu: **Chủ động lắng ng
   * *Bước 1 - Nhu cầu:* Đặc sản quê hương / Nạp data SIM / Xe máy điện thông minh.
   * *Bước 2 - Ngân sách:* Dưới 500 TWD / 500–1.000 TWD / Trên 1.000 TWD.
   * *Bước 3 - Ưu tiên:* Giao nhanh trong ngày / Bán chạy nhất / Ưu đãi lớn nhất.
-* **Kết quả:** AI phân tích và đề xuất đúng **2 sản phẩm khớp 99%** trong vòng 15 giây, điều hướng thẳng vào giỏ hàng trượt.
+* **Kết quả:** AI phân tích và đề xuất đúng **2 sản phẩm tối ưu theo nhu cầu** trong vòng 15 giây, điều hướng thẳng vào giỏ hàng trượt.
 
 ### MKT-KEY-03: Member-Get-Member Referral (Giới Thiệu Người Mới Cùng Nhận Ưu Đãi)
 * **Cơ chế lan tỏa:** Kiều bào đang sử dụng dịch vụ chia sẻ mã giới thiệu cho bạn bè, người mới sang Đài Loan hoặc du học sinh mới nhập học.
