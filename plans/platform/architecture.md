@@ -60,6 +60,24 @@ Mọi tương tác từ khách hàng hoặc sự kiện hệ thống đều đư
 [11. LEARNING MEMORY] ◄──────────────── [10. OUTCOME TRACKING] ◄────────────┘
 ```
 
+```mermaid
+flowchart TD
+    Client["Khách Hàng (Web Chat / App / LINE OA / Zalo OA)"] --> Step1["1. Signal Ingestion (Tín hiệu sự kiện)"]
+    Step1 --> Step2["2. Context Enrichment (Customer 360 & Timeline)"]
+    Step2 --> Step3["3. Intent Classification (Điều phối 13 Sub-Agents)"]
+    Step3 --> Step4["4. Policy & Authority Gate (AUTH-0..5 & BR-001..010)"]
+    Step4 --> Engine["Deterministic Policy Engine (Khóa Cứng P_floor)"]
+    Engine --> Step5["5. Skill Execution (search-product, check-stock)"]
+    Step5 --> Step6["6. Evidence Gathering (Đối soát ERP / POS / WMS)"]
+    Step6 --> Step7["7. Decision & Proposal (Đóng gói 7 trường chuẩn)"]
+    Step7 --> CheckAuth{"Cần duyệt?"}
+    CheckAuth -- "AUTH-4 (Vượt trần)" --> Step8["8. Human Approval (Màn hình SCR-003)"]
+    CheckAuth -- "AUTH-3 (Tự động)" --> Step9["9. Client Delivery (Giỏ trượt / Trả lời)"]
+    Step8 --> Step9
+    Step9 --> Step10["10. Outcome Tracking (Đo lường chuyển đổi)"]
+    Step10 --> Step11["11. Learning Memory (Cập nhật trọng số gợi ý)"]
+```
+
 1. **SIGNAL:** Tiếp nhận tín hiệu sự kiện (tin nhắn chat, mở trang, giỏ hàng bỏ quên, sự kiện ngày lương mùng 10).
 2. **CONTEXT ENRICHMENT:** Truy vấn Customer 360 lấy lịch sử mua hàng, thiết bị tương thích, consent và điểm tín nhiệm.
 3. **INTENT CLASSIFICATION:** Phân loại ý định của khách, gán nhãn mức độ ưu tiên và chuyển giao cho Sub-Agent phù hợp.

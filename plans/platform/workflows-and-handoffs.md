@@ -65,3 +65,60 @@ Theo Mục 15 của SRS v0.1, toàn bộ hệ thống phải tuân thủ nghiêm
 │ - Trò chuyện trực tiếp với khách mà không bắt lặp lại  │
 └────────────────────────────────────────────────────────┘
 ```
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Customer as Khách Hàng
+    participant ChatWidget as Web / App Chat Widget
+    participant Bot as AI CSKH (CS-01)
+    participant Tele as Telegram Alert Bot
+    participant Console as Command Center (SCR-005)
+    actor Agent as Nhân Viên Hỗ Trợ
+
+    Customer->>ChatWidget: "Bưu phẩm dập nát hết rồi! Đòi người thật ra nói chuyện ngay!"
+    ChatWidget->>Bot: Bắt Intent Crisis / Bức xúc
+    activate Bot
+    Bot->>Bot: Dừng toàn bộ bot tự động (< 0.2s)
+    Bot-->>ChatWidget: "Em đã chuyển ngay hội thoại đến Quản lý. Anh giữ máy 1 phút nhé ạ!"
+    deactivate Bot
+    Bot->>Tele: Bắn cảnh báo khẩn cấp [CRISIS ALERT] (< 2 phút)
+    Bot->>Console: Đẩy hội thoại lên đầu hàng đợi khẩn cấp
+    Agent->>Console: Nhận thông báo Telegram, mở màn hình SCR-005
+    Agent->>Console: Bấm nút [Tiếp quản hội thoại] (< 1.0s)
+    Console->>ChatWidget: Khóa quyền AI, cấp quyền chat trực tiếp cho Nhân viên
+    Agent->>ChatWidget: "Chào anh, em là Linh - Quản lý shop. Em xử lý gửi bù hàng mới cho anh ngay ạ!"
+```
+
+---
+
+## 4. Sơ Đồ Trình Tự Bán Hàng Đầu Cuối (End-to-End Lead-to-Cash Sequence)
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Customer as Khách Hàng Kiều Bào
+    participant Storefront as Slide-Over Quick Cart
+    participant Orchestrator as Revenue Orchestrator
+    participant Engine as Deterministic Policy Engine
+    participant ERP as System of Record (ERP/WMS)
+    participant CVS as Mạng Lưới Bưu Cục CVS
+
+    Customer->>Storefront: Xem hàng & Đề xuất mặc cả ($P_{offered}$)
+    Storefront->>Orchestrator: Gửi yêu cầu thẩm định giá
+    Orchestrator->>ERP: Đọc $P_{base}$, $C$, tồn kho WMS
+    Orchestrator->>Engine: Kiểm tra điều kiện qua code cứng ngoài LLM
+    alt $P_{offered} < P_{floor}$ (Dưới sàn hoặc Prompt Injection)
+        Engine-->>Orchestrator: REJECT (Chặn đứng, không bán lỗ)
+        Orchestrator-->>Storefront: Báo từ chối & Đề xuất mức giá kịch sàn $P_{floor}$
+    else $P_{offered} \ge P_{floor}$ (Hợp lệ trong ngân sách)
+        Engine-->>Orchestrator: ACCEPT (Chấp thuận mức giá)
+        Orchestrator->>ERP: Atomic Budget Hold & Khóa giữ chỗ tồn kho (TTL 10m)
+        Orchestrator-->>Storefront: Phát hành báo giá kèm Token HMAC
+    end
+    Customer->>Storefront: Chọn chi nhánh bưu cục CVS qua E-Map & Bấm chốt đơn
+    Storefront->>Orchestrator: Xác nhận đơn hàng CVS COD
+    Orchestrator->>ERP: Tạo đơn hàng chính thức & Cam kết ngân sách
+    ERP->>CVS: Phát hành mã vận đơn bưu cục tiện lợi
+    Orchestrator-->>Customer: Gửi mã vận đơn & Lời cảm ơn 1-chạm
+```

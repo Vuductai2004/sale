@@ -153,70 +153,76 @@ Toàn bộ hệ thống AI được thiết kế theo kiến trúc ngoại vi c�
 
 ### 2. Luồng Vận Hành 1: Chốt Đơn Bán Hàng Tự Hành 24/7 (Sales Copilot Flow)
 
-```text
-Khách Hàng (Web/App)      AI Sales Copilot          Policy Engine         ERP/POS System
-     │                           │                        │                     │
-     │── 1. Hỏi tìm sản phẩm ───►│                        │                     │
-     │                           │── 2. Đọc tồn kho & giá ─────────────────────►│
-     │                           │◄─ 3. Trả về giá & tồn ───────────────────────│
-     │                           │                        │                     │
-     │◄─ 4. Tư vấn + Gợi ý món ──│                        │                     │
-     │                           │                        │                     │
-     │── 5. Mặc cả giảm giá ────►│                        │                     │
-     │                           │── 6. Thẩm định giá ───►│                     │
-     │                           │◄─ 7. Pass: P ≥ P_floor─│                     │
-     │                           │                        │                     │
-     │◄─ 8. Chốt giá + Mời mua ──│                        │                     │
-     │                           │                        │                     │
-     │── 9. Chọn bưu cục 7-11 ──►│                        │                     │
-     │                           │── 10. Tạo đơn nháp (Idempotent Draft Order)─►│
-     │                           │◄─ 11. Trả về mã đơn DRAFT-ORD-XXXX ──────────│
-     │                           │                        │                     │
-     │◄─ 12. Xác nhận thành công─│                        │                     │
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Customer as Khách Hàng (Web/App)
+    participant Sales as AI Sales Copilot
+    participant Policy as Deterministic Engine (Code Cứng)
+    participant ERP as System of Record (ERP/POS)
+    participant CVS as Bưu Cục Tiện Lợi (CVS)
+
+    Customer->>Sales: 1. Hỏi tìm sản phẩm / hương vị
+    Sales->>ERP: 2. Đọc tồn kho khả dụng & bảng giá
+    ERP-->>Sales: 3. Trả về giá niêm yết $P_{base}$ & tồn kho
+    Sales-->>Customer: 4. Tư vấn + Gợi ý giải pháp phù hợp
+    Customer->>Sales: 5. Mặc cả giảm giá ($P_{offered}$)
+    Sales->>Policy: 6. Thẩm định điều kiện $P_{offered} \ge P_{floor}$
+    Policy-->>Sales: 7. Pass: Mức giá hợp lệ (bảo toàn lãi $L$)
+    Sales-->>Customer: 8. Chốt giá kịch sàn + Khóa giữ chỗ 10 phút
+    Customer->>Sales: 9. Chọn bưu cục CVS qua E-Map (CVS COD)
+    Sales->>ERP: 10. Tạo đơn hàng nháp có Idempotency Key
+    ERP-->>Sales: 11. Trả về mã đơn DRAFT-ORD-XXXX & mã vận đơn
+    Sales-->>Customer: 12. Xác nhận thành công & gửi hành trình
 ```
 
 ---
 
 ### 3. Luồng Vận Hành 2: Khôi Phục Giỏ Hàng Bỏ Quên (Cart Recovery Flow)
 
-```text
-Cron Trigger          Cart Recovery Agent        Customer 360           ERP & Zalo/LINE
-     │                         │                       │                       │
-     │── 1. Quét mỗi 15 phút ─►│                       │                       │
-     │                         │── 2. Lấy giỏ bỏ rơi ─►│                       │
-     │                         │◄─ 3. Trả về ds giỏ ───│                       │
-     │                         │                       │                       │
-     │                         │── 4. Kiểm tra Consent & Suppression (BR-004) ─│
-     │                         │── 5. Kiểm tra tồn kho hàng hóa trên ERP ─────►│
-     │                         │◄─ 6. Còn hàng khả dụng ───────────────────────│
-     │                         │                       │                       │
-     │                         │── 7. Bắn tin nhắn chăm sóc cá nhân hóa ──────►│
-     │                         │   (Kèm link phục hồi giỏ hàng 1-chạm)         │
-     │                         │                       │                       │
-     │                         │── 8. Ghi nhận Evidence vào Audit Ledger ─────►│
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Cron as Cron Trigger (15 phút/lần)
+    participant Agent as Cart Recovery Agent (SAL-04)
+    participant C360 as Customer 360 & Consent
+    participant ERP as Kho Hàng ERP / WMS
+    participant Gateway as Communication Gateway (LINE/Zalo)
+
+    Cron->>Agent: 1. Kích hoạt quét giỏ hàng bỏ quên
+    Agent->>C360: 2. Lấy danh sách giỏ hàng không thanh toán
+    C360-->>Agent: 3. Trả về danh sách giỏ kèm lịch sử
+    Agent->>C360: 4. Kiểm tra Consent & Suppression Rules (BR-004)
+    Agent->>ERP: 5. Kiểm tra tồn kho khả dụng thời gian thực
+    ERP-->>Agent: 6. Xác nhận còn hàng trong kho
+    Agent->>Gateway: 7. Bắn tin nhắn chăm sóc cá nhân hóa (Link 1-chạm)
+    Agent->>C360: 8. Ghi nhận Evidence vào Audit Ledger bất biến
 ```
 
 ---
 
 ### 4. Luồng Vận Hành 3: Tra Cứu Vận Đơn & Báo Động Đỏ CSKH (CSKH Escalation Flow)
 
-```text
-Khách Hàng (Chat)             Agent CS-01            ERP Logistics       Human Takeover Console
-     │                             │                       │                       │
-     │── 1. Hỏi tình trạng đơn ───►│                       │                       │
-     │                             │── 2. Tra mã vận đơn ─►│                       │
-     │                             │◄─ 3. Trả về bưu kiện ─│                       │
-     │                             │                       │                       │
-     │◄─ 4. Trả lời vị trí 7-11 ───│                       │                       │
-     │                             │                       │                       │
-     │── 5. Khách chửi/Bức xúc ───►│                       │                       │
-     │                             │── 6. Phát hiện tiêu cực (Crisis Alert) ──────►│
-     │                             │   (Ngắt quyền tự trả lời của AI trong < 2p)   │
-     │                             │                       │                       │
-     │                             │                       │◄─ 7. Nhân viên bấm ───│
-     │                             │                       │    "TIẾP QUẢN"        │
-     │◄─ 8. Nhân viên thật chat ───────────────────────────────────────────────────│
-     │   (AI rút lui trong ≤ 1.0s) │                       │                       │
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Customer as Khách Hàng (Chat)
+    participant CS as Agent CSKH (CS-01)
+    participant Logistics as Cổng Logistics Bưu Cục CVS
+    participant Tele as Telegram Alert Bot
+    participant Console as Human Console (SCR-005)
+    actor Agent as Quản Lý Trực Ca
+
+    Customer->>CS: 1. Hỏi tình trạng đơn hàng
+    CS->>Logistics: 2. Tra cứu API mã vận đơn
+    Logistics-->>CS: 3. Trả về hành trình bưu phẩm chi tiết
+    CS-->>Customer: 4. Thông báo bưu kiện đã tới bưu cục chờ nhận
+    Customer->>CS: 5. Khách bức xúc khiếu nại (Crisis Intent)
+    CS->>CS: 6. Ngắt quyền tự động của bot (< 0.2s)
+    CS->>Tele: 7. Bắn cảnh báo khẩn cấp [CRISIS ALERT] (< 2 phút)
+    CS->>Console: 8. Đẩy hội thoại lên đầu danh sách khẩn cấp
+    Agent->>Console: 9. Bấm nút [TIẾP QUẢN HỘI THOẠI] (≤ 1.0s)
+    Agent-->>Customer: 10. Nhân viên thật trực tiếp giải quyết khiếu nại
 ```
 
 ---
