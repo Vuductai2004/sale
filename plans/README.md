@@ -85,3 +85,42 @@ plans/
 | **SCR-001..005** | Command Center | 5 Màn hình quản trị: Executive Dashboard (001), Agent Ops (002), Approval Center (003), Customer 360 (004), Live Console (005) | [plans/platform/architecture.md](platform/architecture.md) |
 | **GATE P0..P5** | Phân kỳ triển khai | 6 Cổng nghiệm thu kỹ thuật: Foundation (P0), Care Pilot (P1), Sales Pilot (P2), MKT Pilot (P3), Cross-Domain (P4), Autonomy (P5) | [plans/delivery/mvp-and-roadmap.md](delivery/mvp-and-roadmap.md) |
 | **TC-E2E-001..009** | Kịch bản kiểm thử | 9 Bộ test E2E chấp nhận nghiệm thu theo chuẩn Given-When-Then bao quát toàn diện chu trình vận hành | [plans/delivery/mvp-and-roadmap.md](delivery/mvp-and-roadmap.md) |
+| **GLOSSARY** | Từ điển thuật ngữ | Bảng giải nghĩa toàn bộ thuật ngữ Công nghệ AI & Nghiệp vụ Bán lẻ Đài Loan | [plans/glossary.md](glossary.md) |
+
+---
+
+## 4. Ma Trận Truy Vết Yêu Cầu 28 Điều Khoản SRS v0.1 (Requirements Traceability Matrix - RTM)
+
+Bảng đối soát chi tiết chứng minh hệ thống kế hoạch đáp ứng **100% đầy đủ 28 điều khoản** của Đề bài gốc (`AI-REV-SRS-001`):
+
+| Mục SRS | Tiêu Đề Điều Khoản Đề Bài | Mã Yêu Cầu Kỹ Thuật | Tệp Hồ Sơ Đáp Ứng & Phân Hệ Chịu Trách Nhiệm |
+|:---:|---|---|---|
+| **1** | Thông tin tài liệu & Phiên bản | AI-REV-SRS-001 | [plans/README.md](README.md), [KE_HOACH_TRIEN_KHAI...md](../../KE_HOACH_TRIEN_KHAI_HE_THONG_AI_AGENT_SRS_001.md) |
+| **2** | Tuyên bố vấn đề & 6 Mục tiêu | OBJ-001..OBJ-006 | [plans/README.md](README.md), [plans/delivery/analytics.md](delivery/analytics.md) |
+| **3** | Ranh giới phạm vi hệ thống | In-Scope & Out-of-Scope | [plans/modules/sales.md](modules/sales.md), [plans/platform/architecture.md](platform/architecture.md) |
+| **4** | 10 Khối chức năng bắt buộc | Architecture Overview | [plans/platform/architecture.md](platform/architecture.md) |
+| **5** | Customer Intelligence 360 | FR-C360-001..003 | [plans/platform/data-and-knowledge.md](platform/data-and-knowledge.md) |
+| **6** | Marketing AI Agents (6 agents) | FR-MKT-001..006 | [plans/modules/marketing.md](modules/marketing.md) |
+| **7** | Sales AI Agents (5 agents) | FR-SAL-001..005 | [plans/modules/sales.md](modules/sales.md) |
+| **8** | CSKH & Retention Agents (2 agents)| FR-CS-001..003 | [plans/modules/customer-support.md](modules/customer-support.md) |
+| **9** | Revenue Orchestrator 11 bước | FR-ORCH-001..005 | [plans/platform/architecture.md](platform/architecture.md), [plans/platform/workflows-and-handoffs.md](platform/workflows-and-handoffs.md) |
+| **10** | Human Command Center (5 screens) | FR-SCR-001..005 | [plans/platform/architecture.md](platform/architecture.md) |
+| **11** | Agent-Skill Architecture | FR-SKL-001..003 | [plans/platform/api-and-integrations.md](platform/api-and-integrations.md) |
+| **12** | Knowledge Base & 5-Tier Memory | FR-KNB-001..004 | [plans/platform/data-and-knowledge.md](platform/data-and-knowledge.md) |
+| **13** | Data Platform & 6 Domains | FR-DAT-001..003 | [plans/platform/data-and-knowledge.md](platform/data-and-knowledge.md) |
+| **14** | Connectors & 4 Chuỗi CVS | FR-CON-001..004 | [plans/platform/api-and-integrations.md](platform/api-and-integrations.md) |
+| **15** | Policy, Authority (AUTH-0..5) | FR-POL-001..004 | [plans/platform/workflows-and-handoffs.md](platform/workflows-and-handoffs.md) |
+| **16** | Audit, Telemetry & Observability | FR-AUD-001..003 | [plans/platform/workflows-and-handoffs.md](platform/workflows-and-handoffs.md), [plans/delivery/analytics.md](delivery/analytics.md) |
+| **17** | Evidence, Evaluation & Learning | FR-LRN-001..003 | [plans/platform/architecture.md](platform/architecture.md), [plans/modules/sales.md](modules/sales.md) |
+| **18** | Non-Functional Reqs (10 NFRs) | NFR-001..NFR-010 | [plans/platform/api-and-integrations.md](platform/api-and-integrations.md), [plans/delivery/mvp-and-roadmap.md](delivery/mvp-and-roadmap.md) |
+| **19** | Test Cases E2E (9 test suites) | TC-E2E-001..009 | [plans/delivery/mvp-and-roadmap.md](delivery/mvp-and-roadmap.md) |
+| **20** | 5 Nhóm KPIs & Unit Economics | Business/Tech KPIs | [plans/delivery/analytics.md](delivery/analytics.md) |
+| **21** | 10 Quy tắc nghiệp vụ bất biến | BR-001..BR-010 | [plans/platform/workflows-and-handoffs.md](platform/workflows-and-handoffs.md) |
+| **22** | Deliverables & Hồ sơ bàn giao | DEL-001..DEL-006 | [plans/README.md](README.md), [presentation/](presentation/) |
+| **23** | Giả định & Ràng buộc hệ thống | ASM-001..ASM-005 | [plans/platform/architecture.md](platform/architecture.md) |
+| **24** | Kế hoạch triển khai Pilot | Pilot Taiwan FMCG/EV | [plans/delivery/mvp-and-roadmap.md](delivery/mvp-and-roadmap.md) |
+| **25** | Lộ trình 6 Cổng Gate kỹ thuật | Gate P0 đến P5 | [plans/delivery/mvp-and-roadmap.md](delivery/mvp-and-roadmap.md) |
+| **26** | Tiêu chí nghiệm thu từng Gate | Acceptance Criteria | [plans/delivery/mvp-and-roadmap.md](delivery/mvp-and-roadmap.md) |
+| **27** | Tiêu chuẩn hoàn thành (DoD) | DoD 10 Tiêu chuẩn | [plans/delivery/mvp-and-roadmap.md](delivery/mvp-and-roadmap.md) |
+| **28** | Bàn giao kỹ thuật 7 nhóm | 7 Engineering Teams | [plans/delivery/mvp-and-roadmap.md](delivery/mvp-and-roadmap.md) |
+

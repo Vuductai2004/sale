@@ -25,13 +25,14 @@ Mục lục chi tiết tại 👉 **[plans/README.md](plans/README.md)**:
 
 ```text
 plans/
-├── README.md                              # Điều hướng tổng thể, kiến trúc 3 tầng & ma trận mã hiệu
+├── README.md                              # Điều hướng tổng thể, kiến trúc 3 tầng & RTM 28 mục SRS
+├── glossary.md                            # Bảng tra cứu toàn bộ thuật ngữ Công nghệ AI & Bán lẻ Đài Loan
 ├── modules/                               # 3 Phân hệ Trợ lý AI thực chiến
 │   ├── marketing.md                       # MKT-01..06, MKT-KEY-01..03, Brand Guardian, Quiz 30s
 │   ├── sales.md                           # SAL-01..05, SAL-KEY-01..04 (Khóa giá sàn P_floor bằng code cứng)
 │   └── customer-support.md                # CS-01..02, CS-KEY-01..03 (Crisis Alert <=1s), Logistics 4 chuỗi CVS
 ├── platform/                              # Khung gầm kỹ thuật & Điều phối trung tâm
-│   ├── architecture.md                    # Kiến trúc lõi, Orchestrator 11 bước, 5 màn hình Command Center
+│   ├── architecture.md                    # Kiến trúc lõi, Orchestrator 11 bước, 5 màn hình Command Center, Rủi ro RSK
 │   ├── data-and-knowledge.md              # Data Dictionary 6 Domain, Customer 360, Two-Stage RAG, 5 tầng Memory
 │   ├── workflows-and-handoffs.md          # Sequence Flows, Thẩm quyền AUTH-0..5, 10 Quy tắc BR-001..010
 │   └── api-and-integrations.md            # Skill Contracts, Connectors 4 chuỗi CVS, ERP/WMS Sync, Bảo mật NFR

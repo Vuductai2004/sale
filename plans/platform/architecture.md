@@ -119,3 +119,18 @@ Theo Mục 18 của SRS v0.1, hệ thống cung cấp bảng điều khiển qu�
 ### SCR-005: Conversation Console & Human Takeover (Giám Sát Hội Thoại & Tiếp Quản Khẩn Cấp)
 * Cho phép nhân viên hỗ trợ giám sát các cuộc hội thoại trực tiếp đang diễn ra giữa AI và khách hàng.
 * Nút bấm **Tiếp quản khẩn cấp (Human Takeover)** với độ trễ chuyển giao dưới **1.0 giây**, tự động ngắt bot và bàn giao toàn bộ ngữ cảnh hội thoại cho nhân sự phụ trách.
+
+---
+
+## 4. Ma Trận Quản Trị Rủi Ro & Kế Hoạch Ứng Phó (Risk Mitigation & Fallback Matrix)
+
+Hệ thống thiết lập cơ chế phòng vệ chủ động đối với 5 kịch bản rủi ro vận hành thực tế tại Đài Loan:
+
+| Mã Rủi Ro | Tình Huống Sự Cố Thực Tế | Mức Độ | Cơ Chế Tự Động Phòng Vệ & Fallback của Hệ Thống |
+|---|---|:---:|---|
+| **RSK-01** | **API ERP / POS / WMS bị mất kết nối hoặc timeout > 3.0s** | Nghiêm trọng | **Kích hoạt Fail-Closed (NFR-008):** Dừng toàn bộ luồng tạo đơn và báo giá; bot phát thông báo hệ thống đang bảo trì dữ liệu; ghi nhận thông tin khách và đẩy vào hàng đợi nhân viên hỗ trợ xử lý sau khi kết nối phục hồi. |
+| **RSK-02** | **Lệnh nghỉ bão lũ Đài Loan (Typhoon Day 停班停課) làm tê liệt bưu cục CVS** | Trung bình | **Lắng nghe Webhook đối tác vận chuyển:** Khi có thông báo hoãn giao từ 4 chuỗi bưu cục, hệ thống tự động lọc danh sách đơn hàng bị ảnh hưởng; gửi tin nhắn Zalo/LINE chủ động giải trình và trấn an khách trước khi khách lo lắng. |
+| **RSK-03** | **Tấn công Prompt Injection / Jailbreak bot ép giá hoặc hack giá 0 đồng** | Cao | **Deterministic Policy Engine ngoài LLM:** Mọi giao dịch bắt buộc qua code cứng kiểm tra $P_{offered} \ge P_{floor}$. Lớp code cứng tự động từ chối và ghi log cảnh báo an ninh bảo mật (**BR-002**, **BR-009**), LLM không thể can thiệp. |
+| **RSK-04** | **Khách không nhận hàng tại siêu thị dẫn đến bưu phẩm hoàn trả (未取貨)** | Trung bình | **Cơ chế chế tài vi phạm:** Hệ thống C360 tự động ghi cờ Delivery Default, hạ điểm tín nhiệm Trust Score, tạm khóa phương thức thanh toán CVS COD và tước quyền mặc cả trợ cấp giá trong 90–180 ngày tiếp theo. |
+| **RSK-05** | **Khách hàng bức xúc gay gắt, chửi bới hoặc đòi khiếu nại pháp lý** | Cao | **Báo động đỏ Crisis Alert:** Ngắt quyền trả lời của bot ngay lập tức (<0.2s); phát cảnh báo khẩn cấp Telegram Bot cho Quản lý CSKH (<2 phút); nhân sự bấm tiếp quản trên màn hình SCR-005 trong vòng $\le 1.0\text{s}$. |
+
