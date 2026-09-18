@@ -16,6 +16,7 @@ Hồ sơ dự án được cung cấp dưới 2 hình thức: **Bản in tổng 
 
 ### 1. Hồ Sơ Báo Cáo Cấp Lãnh Đạo & Toàn Văn Đặc Tả (Executive & Full Spec)
 * 📊 **Bản Slide Thuyết Trình Điều Hành (Executive Deck):** [BAO_CAO_THUYET_TRINH_AI_AGENT_ENTERPRISE.pdf](BAO_CAO_THUYET_TRINH_AI_AGENT_ENTERPRISE.pdf) *(Bản in màu 6 trang khổ A4 thiết kế chuyên nghiệp dành cho báo cáo Sếp/Hội đồng)*.
+* 📐 **Bản Blueprint Đặc Tả Kỹ Thuật (Technical Spec Blueprint):** [DAC_TA_KY_THUAT_HE_THONG_AI_AGENT.pdf](DAC_TA_KY_THUAT_HE_THONG_AI_AGENT.pdf) *(Bản in 10 trang tiêu chuẩn công nghiệp: Data Models, Two-Stage RAG, 5-Tier Memory, Tool Contracts, Hard-coded Price Floor Policy Engine, UI Command Center, CVS Logistics, Test Scenarios & Team Handover)*.
 * 📄 **Bản Đặc Tả Kế Hoạch Triển Khai Master:** [KE_HOACH_TRIEN_KHAI_HE_THONG_AI_AGENT_SRS_001.pdf](KE_HOACH_TRIEN_KHAI_HE_THONG_AI_AGENT_SRS_001.pdf) *(Bản in tài liệu kỹ thuật đầy đủ 12 phần)*.
 * 📝 **Bản Markdown nguồn:** [KE_HOACH_TRIEN_KHAI_HE_THONG_AI_AGENT_SRS_001.md](KE_HOACH_TRIEN_KHAI_HE_THONG_AI_AGENT_SRS_001.md).
 * 📋 **Đề bài kỹ thuật gốc của Sếp:** [De_bai_Xay_dung_He_thong_AI_Agent_Marketing_Sales_CSKH_v0.1.md](De_bai_Xay_dung_He_thong_AI_Agent_Marketing_Sales_CSKH_v0.1.md).
