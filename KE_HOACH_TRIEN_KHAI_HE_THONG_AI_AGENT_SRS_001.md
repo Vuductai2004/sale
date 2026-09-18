@@ -6,7 +6,7 @@
 **Mã đề án:** AI-REV-SRS-001  
 **Phiên bản:** 1.0 Enterprise Master Blueprint (Bản Đặc Tả Kỹ Thuật & Kế Hoạch Thi Công Chi Tiết)  
 **Chủ thể áp dụng:** Chuỗi Siêu thị Bán lẻ Hàng hóa & Dịch vụ Tổng hợp phục vụ kiều bào và lao động tại Đài Loan (Việt Nam, Indonesia, Philippines, Thái Lan)  
-**Hiện trạng hạ tầng của doanh nghiệp:** Đã có sẵn Website thương mại điện tử, Mobile App bán hàng, hệ thống ERP/POS quản lý kho/giá/đơn hàng và hệ thống kết nối giao nhận bưu cục tiện ích 7-Eleven, FamilyMart  
+**Hiện trạng hạ tầng của doanh nghiệp:** Đã có sẵn Website thương mại điện tử, Mobile App bán hàng, hệ thống ERP/POS quản lý kho/giá/đơn hàng và hệ thống kết nối giao nhận bưu cục tiện ích 7-Eleven, FamilyMart, Hi-Life, OK Mart  
 **Tiêu chuẩn kỹ thuật cốt lõi:** Zero-Disruption Architecture | Fail-Closed Safety Protocol | RESTful ERP Integration | Event-Driven Ingestion  
 **Phương thức quản trị:** Kiểm soát theo 6 Phân kỳ Gate Kỹ thuật (Phase P0 ➔ P5) & Definition of Done (DoD 10 Tiêu chí)  
 
@@ -54,7 +54,7 @@ Doanh nghiệp đang vận hành chuỗi siêu thị bán lẻ và dịch vụ t
 * **Điểm nghẽn 1 - Nhu cầu mua sắm rải rác 24/7:** Công nhân tăng ca tan xưởng lúc 21h - 2h sáng; hộ lý rảnh rỗi lúc nửa đêm. Khi khách phát sinh nhu cầu mua sắm thì nhân viên cửa hàng đã nghỉ làm ➔ Không có ai tư vấn, khách thoát web/app và sang mua ở tiệm tạp hóa bản địa gần xưởng.
 * **Điểm nghẽn 2 - Khách hàng mới không nhớ mã SKU:** Khách hàng nhớ theo hương vị quê hương hoặc mô tả đời thường (*"cái bánh pía tròn ngọt nhân sầu riêng trứng muối"*, *"cục sạc xe đạp điện 4 bình ắc quy chân vuông"*). Công cụ tìm kiếm cũ so khớp từ khóa chính xác ra 0 kết quả ➔ Khách tưởng hết hàng và rời đi.
 * **Điểm nghẽn 3 - Hết hàng cục bộ làm mất trọn giỏ hàng:** Kho hết một món hàng quen (ví dụ hết mì sườn hầm), nhân viên trả lời cộc lốc *"Hết hàng"* ➔ Khách hủy bỏ toàn bộ giỏ hàng, doanh nghiệp mất trắng doanh thu.
-* **Điểm nghẽn 4 - Quá tải CSKH & Rủi ro thiên tai bão lũ:** 70% thời gian của nhân sự trực tổng đài bị chiếm bởi việc tra cứu mã bưu kiện 7-Eleven. Vào các ngày bão lớn (Typhoon Day), giao vận đình trệ, khách hàng lo lắng nhắn tin dồn dập khiến đường dây hỗ trợ tê liệt.
+* **Điểm nghẽn 4 - Quá tải CSKH & Rủi ro thiên tai bão lũ:** 70% thời gian của nhân sự trực tổng đài bị chiếm bởi việc tra cứu mã bưu kiện bưu cục tiện lợi. Vào các ngày bão lớn (Typhoon Day), giao vận đình trệ, khách hàng lo lắng nhắn tin dồn dập khiến đường dây hỗ trợ tê liệt.
 
 ### 3. Ranh Giới Phạm Vi Triển Khai (System Boundaries)
 
@@ -228,7 +228,7 @@ Khách Hàng (Chat)             Agent CS-01            ERP Logistics       Human
 #### A. Tính năng Mũi nhọn (KEY):
 1. **Exit-Intent Recovery Popup (MKT-KEY-01):** Theo dõi gia tốc chuột và cử chỉ vuốt ngược trên màn hình cảm ứng để kích hoạt thông điệp giữ chân đúng thời điểm khách chuẩn bị thoát.
 2. **Interactive Quiz 30s (MKT-KEY-02):** Widget trắc nghiệm chọn 3 icon: Nhu cầu (Ăn uống / SIM / Xe điện) ➔ Ngân sách ➔ Ưu tiên. AI lọc danh mục và đề xuất 2 sản phẩm khớp 99% trong 15 giây.
-3. **Member-Get-Member Referral (MKT-KEY-03):** Cơ chế kiều bào giới thiệu người mới (bạn mới sang Đài Loan, du học sinh mới nhập học) cùng nhận mã giảm giá 30 TWD cho đơn hàng bưu cục 7-Eleven đầu tiên.
+3. **Member-Get-Member Referral (MKT-KEY-03):** Cơ chế kiều bào giới thiệu người mới (bạn mới sang Đài Loan, du học sinh mới nhập học) cùng nhận mã giảm giá 30 TWD cho đơn hàng bưu cục tiện lợi đầu tiên.
 
 #### B. Tính năng Bổ trợ mở rộng:
 * **Dwell-Time Tracker (> 8s):** Nhận diện khách dừng lại xem một sản phẩm quá 8 giây để hiển thị gợi ý hỗ trợ tinh tế.
@@ -240,13 +240,14 @@ Khách Hàng (Chat)             Agent CS-01            ERP Logistics       Human
 ### 2. PHÂN HỆ SALES COPILOT 24/7 (AI ADVISOR & CONVERSION)
 
 #### A. Tính năng Mũi nhọn (KEY):
-1. **AI Dynamic Bargain ($P_P_floor) (SAL-KEY-01):** Trợ lý mặc cả tự động trong giỏ hàng trượt. AI giằng co 3 hiệp, bớt tối đa 3% - 5% tiền mặt (trích từ hoa hồng sales tiết kiệm được) và khóa giá 10 phút.
-2. **Slide-Over Quick Cart (SAL-KEY-02):** Giỏ hàng trượt 1 trang duy nhất bên phải màn hình. Khách chọn địa chỉ bưu cục 7-Eleven và chốt đơn ngay tại chỗ, không chuyển trang (Zero Reload).
-3. **Đón sóng ngày lương mùng 10 (SAL-KEY-03):** Tự động hẹn giờ tối ngày 10 hàng tháng (ngày kiều bào nhận lương), quét lịch sử đơn cũ trên ERP, soạn sẵn giỏ hàng quen thuộc và gửi tin nhắn LINE/Zalo để khách bấm xác nhận 1-chạm.
-4. **Cứu đơn hết hàng cục bộ (Out-of-Stock Substitute) (SAL-KEY-04):** Khi sản phẩm khách hỏi tạm hết, AI tự động đối soát trường `nhom_hang_thay_the` trên ERP để chào phương án thay thế trong 0.5 giây, bảo vệ trọn vẹn đơn hàng.
-5. **Tìm kiếm theo mô tả tự nhiên / hương vị (Semantic Search) (SAL-KEY-05):** Cho phép khách gõ mô tả đời thường (*"bánh tròn ngọt sầu riêng"*, *"sạc xe 4 bình"*) để tìm ra đúng mã SKU trên ERP mà không cần nhớ tên chuẩn.
+1. **AI Dynamic Bargain ($P_P_floor) (SAL-KEY-01):** Trợ lý mặc cả tự động trong giỏ hàng trượt. AI giằng co 3 hiệp, bớt tối đa 3% - 5% tiền mặt (trích từ hoa hồng sales tiết kiệm được) và khóa giá 10 phút. **Cơ chế phòng vệ cốt lõi:** Mọi mức giá AI đề xuất đều bắt buộc đi qua **Deterministic Policy Engine (code logic cứng ngoài LLM)** kiểm tra điều kiện `P_offered ≥ P_floor` trước khi chấp thuận. Nếu AI bị tấn công Prompt Injection hoặc bị xâm lấn bởi bất kỳ hình thức nào, lớp code cứng này sẽ **tự động chặn đứng** mọi giao dịch dưới giá sàn, đảm bảo doanh nghiệp không bao giờ bị bán lỗ.
+2. **Slide-Over Quick Cart (SAL-KEY-02):** Giỏ hàng trượt 1 trang duy nhất bên phải màn hình. Khách chọn địa chỉ bưu cục tiện lợi và chốt đơn ngay tại chỗ, không chuyển trang (Zero Reload).
+3. **Cứu đơn hết hàng cục bộ (Out-of-Stock Substitute) (SAL-KEY-03):** Khi sản phẩm khách hỏi tạm hết, AI tự động đối soát trường `nhom_hang_thay_the` trên ERP để chào phương án thay thế trong 0.5 giây, bảo vệ trọn vẹn đơn hàng.
+4. **Tìm kiếm theo mô tả tự nhiên / hương vị (Semantic Search) (SAL-KEY-04):** Cho phép khách gõ mô tả đời thường (*"bánh tròn ngọt sầu riêng"*, *"sạc xe 4 bình"*) để tìm ra đúng mã SKU trên ERP mà không cần nhớ tên chuẩn.
 
 #### B. Tính năng Bổ trợ mở rộng:
+* **Đón sóng ngày lương mùng 10:** Tự động hẹn giờ tối ngày 10 hàng tháng (ngày kiều bào nhận lương), quét lịch sử đơn cũ trên ERP, soạn sẵn giỏ hàng quen thuộc và gửi tin nhắn LINE/Zalo để khách bấm xác nhận 1-chạm.
+
 * **Target-Fit Check:** Tư vấn trung thực độ phù hợp của sản phẩm (dung tích, kích cỡ) theo số lượng người dùng thực tế.
 * **Hẹn giờ nhận hàng:** Cho phép khách hàng chọn khung giờ nhận bưu kiện phù hợp với ca làm việc.
 * **Replenishment Engine (SAL-05):** Nhắc mua bù định kỳ nhu yếu phẩm theo chu kỳ tiêu dùng quen thuộc.
@@ -257,23 +258,24 @@ Khách Hàng (Chat)             Agent CS-01            ERP Logistics       Human
 
 #### A. Tính năng Mũi nhọn (KEY):
 1. **Quick Action Chips 0.5s (CS-KEY-01):** Khung chat tự động bung sẵn 3 nút bấm câu hỏi phổ biến theo đúng trang sản phẩm khách đang xem.
-2. **Tra cứu vận đơn 7-Eleven tự động (CS-KEY-02):** Khách hỏi đơn hàng ➔ AI nhận diện số điện thoại, gọi API ERP lấy mã vận đơn và trả về hành trình bưu kiện chuẩn xác.
-3. **Báo động đỏ Crisis Alert & Human Takeover ≤ 1.0s (CS-KEY-03):** Khi khách giận dữ, khiếu nại hoặc đòi gặp người thật ➔ AI ngắt lời, báo Telegram cho quản lý dưới 2 phút, nhân sự bấm tiếp quản trong 1.0 giây.
-4. **Lịch chăm sóc SIM 30 ngày & Xe điện 30-90 ngày (CS-KEY-04):** Tự động đếm ngày từ hóa đơn ERP để nhắc nạp data trước khi khóa SIM, và nhắc bảo dưỡng ắc quy/phanh xe điện mới.
+2. **Báo động đỏ Crisis Alert & Human Takeover ≤ 1.0s (CS-KEY-02):** Khi khách giận dữ, khiếu nại hoặc đòi gặp người thật ➔ AI ngắt lời, báo Telegram cho quản lý dưới 2 phút, nhân sự bấm tiếp quản trong 1.0 giây.
+3. **Lịch chăm sóc SIM 30 ngày & Xe điện 30-90 ngày (CS-KEY-03):** Tự động đếm ngày từ hóa đơn ERP để nhắc nạp data trước khi khóa SIM, và nhắc bảo dưỡng ắc quy/phanh xe điện mới.
 
 #### B. Tính năng Bổ trợ mở rộng:
+* **Tra cứu vận đơn bưu cục tiện lợi tự động:** Khách hỏi đơn hàng ➔ AI nhận diện số điện thoại, gọi API ERP lấy mã vận đơn và trả về hành trình bưu kiện chuẩn xác.
+
 * **Điều phối & Trấn an bưu kiện khi có bão lũ (Typhoon Day):** Lắng nghe Webhook hoãn giao của bưu cục khi có lệnh nghỉ bão để chủ động nhắn tin giải trình cho khách trước khi khách lo lắng.
-* **Hướng dẫn mở hộp 3 bước:** Cung cấp quy trình kiểm tra hàng nhanh chóng khi nhận bưu phẩm tại 7-Eleven.
+* **Hướng dẫn mở hộp 3 bước:** Cung cấp quy trình kiểm tra hàng nhanh chóng khi nhận bưu phẩm tại bưu cục tiện lợi.
 
 ---
 
 ### 4. BỘ KỊCH BẢN HỘI THOẠI MẪU THỰC CHIẾN (SAMPLE CONVERSATION TRANSCRIPTS)
 
-#### Kịch bản 1: Tìm kiếm theo mô tả tự nhiên & Chốt đơn 7-Eleven (SAL-KEY-05)
+#### Kịch bản 1: Tìm kiếm theo mô tả tự nhiên & Chốt đơn bưu cục tiện lợi (SAL-KEY-04)
 * **Khách hàng:** *"Shop ơi có cái bánh gì tròn tròn của miền Tây ngọt ngọt nhân sầu riêng với trứng muối không?"*
-* **AI Sales Copilot:** *"Dạ đúng món quê hương anh đang tìm rồi ạ! Đó là **Bánh Pía Sóc Trăng Tân Huê Viên (Túi 4 cái nhân sầu riêng trứng muối)**. Giá niêm yết là **135 TWD/túi**, date mới về tuần này thơm ngon lắm ạ. Em gửi hình ảnh và thông tin chi tiết bên dưới, anh muốn lấy mấy túi để em gửi về bưu cục 7-Eleven gần xưởng cho anh ạ?"*
-* **Khách hàng:** *"Cho anh 2 túi nhé, gửi về cây 7-Eleven ở đường Trung Sơn, Đào Viên."*
-* **AI Sales Copilot:** *"Dạ em đã tạo đơn hàng nháp cho anh: 2 túi Bánh Pía (270 TWD) + phí ship bưu cục 7-Eleven (60 TWD) = Tổng thanh toán **330 TWD** nhận hàng trả tiền COD. Mã bưu cục 7-Eleven Trung Sơn (Mã: 981242). Anh bấm [Xác Nhận Đơn Hàng] bên dưới để shop đóng gói gửi đi ngay trong ca chiều nay nhé!"*
+* **AI Sales Copilot:** *"Dạ đúng món quê hương anh đang tìm rồi ạ! Đó là **Bánh Pía Sóc Trăng Tân Huê Viên (Túi 4 cái nhân sầu riêng trứng muối)**. Giá niêm yết là **135 TWD/túi**, date mới về tuần này thơm ngon lắm ạ. Em gửi hình ảnh và thông tin chi tiết bên dưới, anh muốn lấy mấy túi để em gửi về bưu cục tiện lợi gần xưởng cho anh ạ?"*
+* **Khách hàng:** *"Cho anh 2 túi nhé, gửi về bưu cục tiện lợi ở đường Trung Sơn, Đào Viên."*
+* **AI Sales Copilot:** *"Dạ em đã tạo đơn hàng nháp cho anh: 2 túi Bánh Pía (270 TWD) + phí ship bưu cục tiện lợi (60 TWD) = Tổng thanh toán **330 TWD** nhận hàng trả tiền COD. Mã bưu cục tiện lợi Trung Sơn (Mã: 981242). Anh bấm [Xác Nhận Đơn Hàng] bên dưới để shop đóng gói gửi đi ngay trong ca chiều nay nhé!"*
 
 ---
 
@@ -282,12 +284,12 @@ Khách Hàng (Chat)             Agent CS-01            ERP Logistics       Human
 * **AI Sales Copilot (Hiệp 1):** *"Dạ giá bên em là giá niêm yết chuẩn nhập khẩu chính ngạch rồi ạ, mua lẻ từng món ở ngoài còn đắt hơn đó anh. Nhưng vì anh ủng hộ shop nhiều món, em xin phép quản lý bớt cho anh **30 TWD** tiền nước nôi coi như làm quen nhé!"*
 * **Khách hàng:** *"Bớt thế ít quá, bớt tròn 800 TWD đi anh mới lấy!"*
 * **AI Sales Copilot (Hiệp 2 - Kiểm tra $P_P_floor):** *(Hệ thống kiểm tra: Giá vốn = 650 TWD, $P_{floor} = 750 TWD$. Mức 800 TWD vẫn $\ge P_P_floor)*  
-  *"Dạ đơn này lãi mỏng lắm rồi anh ơi. Thôi thế này nhé, nếu anh đồng ý xác nhận nhận hàng đúng hẹn tại 7-Eleven trong 2 ngày tới, em bớt kịch sàn thêm 20 TWD nữa là tròn **800 TWD** (giảm tổng cộng 50 TWD). Đây là giá chạm sàn quản lý cho phép em duyệt rồi ạ, em xin giữ mức giá ưu đãi này cho anh trong 10 phút, anh bấm [Chốt Giá 800 TWD] ngay nhé!"*
+  *"Dạ đơn này lãi mỏng lắm rồi anh ơi. Thôi thế này nhé, nếu anh đồng ý xác nhận nhận hàng đúng hẹn tại bưu cục tiện lợi trong 2 ngày tới, em bớt kịch sàn thêm 20 TWD nữa là tròn **800 TWD** (giảm tổng cộng 50 TWD). Đây là giá chạm sàn quản lý cho phép em duyệt rồi ạ, em xin giữ mức giá ưu đãi này cho anh trong 10 phút, anh bấm [Chốt Giá 800 TWD] ngay nhé!"*
 * **Khách hàng:** *"Ok chốt!"* ➔ Hệ thống tự động cập nhật giỏ hàng sang 800 TWD và sinh mã khóa đơn.
 
 ---
 
-#### Kịch bản 3: Cứu Đơn Hết Hàng Cục Bộ Bằng Sản Phẩm Thay Thế (SAL-KEY-04)
+#### Kịch bản 3: Cứu Đơn Hết Hàng Cục Bộ Bằng Sản Phẩm Thay Thế (SAL-KEY-03)
 * **Khách hàng:** *"Cho anh 1 thùng mì Omachi sườn hầm ngũ quả giao về cây FamilyMart gần ga Đào Viên nhé."*
 * **AI Sales Copilot:** *(Truy vấn ERP: Mã SKU-OMA-SUON tồn kho = 0. Kiểm tra `nhom_hang_thay_the`: SKU-CUNGDINH-SUON tồn kho = 45 thùng)*  
   *"Dạ mì Omachi sườn ngũ quả bên em vừa hết sạch lúc trưa nay do nhiều anh em đặt quá ạ. Nhưng trong kho vừa về lô **Mì Cung Đình sườn hầm ngũ vị** (cùng sợi khoai tây dai mướt, nước sốt đậm đà, cùng phân khúc giá **320 TWD/thùng** date mới tinh). Em đổi sang thùng này gửi về FamilyMart cho anh kịp ăn cuối tuần nhé, vị ngon không kém gì Omachi đâu ạ!"*
@@ -295,16 +297,16 @@ Khách Hàng (Chat)             Agent CS-01            ERP Logistics       Human
 
 ---
 
-#### Kịch bản 4: Đón Sóng Ngày Lương Mùng 10 Hàng Tháng (SAL-KEY-03)
+#### Kịch bản 4: Đón Sóng Ngày Lương Mùng 10 Hàng Tháng (Tính năng Bổ trợ)
 * **Thời gian kích hoạt:** 19h00 tối ngày 10/10 (giờ tan ca ngày nhận lương).
 * **AI Sales Copilot (Tin nhắn chủ động qua LINE/Zalo):**  
-  *"Anh Tuấn ơi, hôm nay ngày lương rồi! Em thấy tháng trước anh dùng hết 1 thùng mì Hảo Hảo tôm chua cay, 1 chai nước mắm Nam Ngư và 1 chai dầu ăn Neptune. Em đã soạn sẵn giỏ hàng quen thuộc này trên hệ thống với giá ưu đãi ngày lương. Em gửi về cây 7-Eleven Phúc Hưng gần xưởng như tháng trước cho anh nhé? Anh chỉ cần bấm [Xác Nhận 1-Chạm] là sáng mai bưu kiện sẵn sàng tại quầy ạ!"*
+  *"Anh Tuấn ơi, hôm nay ngày lương rồi! Em thấy tháng trước anh dùng hết 1 thùng mì Hảo Hảo tôm chua cay, 1 chai nước mắm Nam Ngư và 1 chai dầu ăn Neptune. Em đã soạn sẵn giỏ hàng quen thuộc này trên hệ thống với giá ưu đãi ngày lương. Em gửi về bưu cục tiện lợi Phúc Hưng gần xưởng như tháng trước cho anh nhé? Anh chỉ cần bấm [Xác Nhận 1-Chạm] là sáng mai bưu kiện sẵn sàng tại quầy ạ!"*
 * **Khách hàng:** Bấm nút [Xác Nhận 1-Chạm] ➔ Đơn hàng tự động đổ về ERP ở trạng thái Chờ Xuất Kho.
 
 ---
 
-#### Kịch bản 5: Báo Động Đỏ & Chuyển Giao Người Thật Dưới 1.0 Giây (CS-KEY-03)
-* **Khách hàng:** *"Shop làm ăn kiểu gì thế hả? Đặt thùng nước ngọt từ 3 hôm trước bảo nhận ở 7-Eleven mà ra quầy nhân viên bảo không có bưu phẩm nào? Lừa đảo à? Cho gặp người quản lý ngay lập tức!"*
+#### Kịch bản 5: Báo Động Đỏ & Chuyển Giao Người Thật Dưới 1.0 Giây (CS-KEY-02)
+* **Khách hàng:** *"Shop làm ăn kiểu gì thế hả? Đặt thùng nước ngọt từ 3 hôm trước bảo nhận ở bưu cục tiện lợi mà ra quầy nhân viên bảo không có bưu phẩm nào? Lừa đảo à? Cho gặp người quản lý ngay lập tức!"*
 * **AI Agent CS-01:**  
   * *Hành vi hệ thống:* Phát hiện từ khóa tiêu cực nghiêm trọng (*"lừa đảo", "làm ăn kiểu gì", "gặp quản lý"*).  
   * Lập tức chuyển trạng thái Case sang `ESCALATED`, vô hiệu hóa quyền tự động trả lời của AI.  
@@ -385,7 +387,7 @@ Các kỹ năng (Skills) được tách rời hoàn toàn khỏi Agent và tuân
 │ `create-draft-order`     │ SAL-02, 04   │ **AUTH-3**   │ ERP Order API    │ Bắn đơn hàng nháp vào │
 │                          │              │ (Giới hạn)   │ (Idempotency)    │ ERP chờ duyệt xuất kho│
 ├──────────────────────────┼──────────────┼──────────────┼──────────────────┼───────────────────────┤
-│ `track-711-package`      │ CS-01        │ **AUTH-3**   │ 7-Eleven API     │ Tra cứu hành trình bưu│
+│ `track-cvs-package`      │ CS-01        │ **AUTH-3**   │ CVS Logistics API     │ Tra cứu hành trình bưu│
 │                          │              │ (Giới hạn)   │ + ERP Logistics  │ phẩm nhận tại siêu thị│
 ├──────────────────────────┼──────────────┼──────────────┼──────────────────┼───────────────────────┤
 │ `trigger-crisis-alert`   │ CS-01        │ **AUTH-3**   │ Telegram Bot API │ Báo động đỏ cho QL CSKH│
@@ -409,7 +411,7 @@ Các kỹ năng (Skills) được tách rời hoàn toàn khỏi Agent và tuân
 * **AUTH-0 (Observe - Chỉ đọc):** Truy vấn dữ liệu, phân tích hành vi, đối soát tồn kho. Tuyệt đối không sinh phản hồi tương tác ra bên ngoài.
 * **AUTH-1 (Recommend - Đề xuất):** Gợi ý món thay thế, gợi ý combo quà biếu, tính toán điểm tiềm năng của khách hàng.
 * **AUTH-2 (Draft - Soạn nháp):** Soạn sẵn nội dung bài đăng Facebook, tạo giỏ hàng nháp, soạn tin nhắn nhắc lịch nạp SIM.
-* **AUTH-3 (Bounded Execute - Tự thực thi có giới hạn):** Tự động trả lời câu hỏi sản phẩm, tự động tra cứu vận đơn 7-Eleven, tự động giảm giá trong phạm vi $P_{offered} \ge P_P_floor, tự động tạo đơn nháp vào ERP.
+* **AUTH-3 (Bounded Execute - Tự thực thi có giới hạn):** Tự động trả lời câu hỏi sản phẩm, tự động tra cứu vận đơn bưu cục tiện lợi, tự động giảm giá trong phạm vi $P_{offered} \ge P_P_floor, tự động tạo đơn nháp vào ERP.
 * **AUTH-4 (Approval Required - Bắt buộc người phê duyệt):** Xuất bản chiến dịch Marketing hàng loạt, áp dụng mã giảm giá vượt hạn mức, duyệt hoàn tiền hoặc bồi thường khiếu nại.
 * **AUTH-5 (Prohibited - Cấm tuyệt đối):** AI tự ý sửa bảng giá niêm yết trên ERP, bán phá giá âm vốn, gửi tin nhắn cho khách đã hủy đăng ký, phát ngôn cam kết sai luật cư trú Đài Loan.
 
@@ -444,7 +446,7 @@ Tiến độ dự án được quản trị thuần túy theo **Tiêu chí Kỹ 
 │ (Foundation) │ dữ liệu (Governance)   │ Authority Engine AUTH-0..5, Audit Logger, Idempotency.    │
 ├──────────────┼────────────────────────┼───────────────────────────────────────────────────────────┤
 │ **Gate P1**  │ Thử nghiệm CSKH Pilot  │ Vận hành thành công Agent CS-01: Nhận diện intent, tra    │
-│ (Customer)   │ (Tra cứu & Case Mgmt)  │ cứu đơn 7-Eleven ERP thật, Human Takeover dưới 1.0 giây.  │
+│ (Customer)   │ (Tra cứu & Case Mgmt)  │ cứu đơn bưu cục tiện lợi ERP thật, Human Takeover dưới 1.0 giây.  │
 ├──────────────┼────────────────────────┼───────────────────────────────────────────────────────────┤
 │ **Gate P2**  │ Thử nghiệm Sales Pilot │ Cụm Agent SAL-01..05 hoạt động: Bảo vệ giá sàn P_floor,   │
 │ (Sales)      │ (Tư vấn & Bắn đơn ERP) │ cứu đơn hết hàng, tạo đơn hàng nháp vào ERP.              │
@@ -504,7 +506,7 @@ Tiến độ dự án được quản trị thuần túy theo **Tiêu chí Kỹ 
 │      │ Revenue Orchestrator │                        │ chu trình chuẩn 11 bước từ Signal ➔ Learn. │
 ├──────┼──────────────────────┼────────────────────────┼────────────────────────────────────────────┤
 │ **12**│ Phát triển Cụm CSKH  │ AI & Frontend          │ Agent CS-01 tiếp nhận đa kênh, tra cứu đơn │
-│      │ Agent & Takeover     │                        │ 7-Eleven, Takeover Console dưới 1.0 giây.  │
+│      │ Agent & Takeover     │                        │ bưu cục tiện lợi, Takeover Console dưới 1.0 giây.  │
 ├──────┼──────────────────────┼────────────────────────┼────────────────────────────────────────────┤
 │ **13**│ Phát triển Cụm Sales │ AI Engineering         │ Agent SAL-01..05: Mặc cả P_floor, cứu đơn  │
 │      │ Agents & Bắn đơn ERP │                        │ hết hàng, tạo đơn hàng nháp vào ERP.       │
@@ -564,7 +566,7 @@ AI không bao giờ được suy diễn tự do mà bắt buộc phải dựa v�
     playbook_bargain.md   # Kịch bản mặc cả 3 hiệp có kiểm soát giá sàn P_floor
     objection_handling.md # Kịch bản xử lý phản bác khi khách chê giá đắt, ngại phí ship
   /customer-care
-    faq_711_pickup.md     # Bộ câu hỏi thường gặp khi nhận hàng tại quầy bưu cục 7-Eleven
+    faq_cvs_pickup.md     # Bộ câu hỏi thường gặp khi nhận hàng tại quầy bưu cục tiện lợi
     typhoon_protocol.md   # Quy trình xử lý và kịch bản trấn an bưu kiện khi có bão lũ thiên tai
   /policy
     authority_matrix.md   # Bảng phân quyền chi tiết AUTH-0..5
@@ -594,7 +596,7 @@ Hệ thống chỉ được bàn giao nghiệm thu khi vượt qua 100% bộ 9 b
 │ MÃ BÀI KIỂM THỬ      │ NỘI DUNG KỊCH BẢN KIỂM THỬ (GIVEN - WHEN - THEN)                           │
 ├──────────────────────┼────────────────────────────────────────────────────────────────────────────┤
 │ **TC-E2E-001**       │ **GIVEN:** Khách hàng quan tâm sản phẩm bánh pía trên Web.                 │
-│ Chu trình khép kín   │ **WHEN:** AI tư vấn ➔ khách chốt đơn ➔ chọn bưu cục 7-Eleven.              │
+│ Chu trình khép kín   │ **WHEN:** AI tư vấn ➔ khách chốt đơn ➔ chọn bưu cục tiện lợi.              │
 │ E2E Full Loop        │ **THEN:** Hệ thống sinh mã đơn nháp trên ERP, ghi nhận Evidence vào Sổ cái,│
 │                      │ tạo bản ghi Outcome đo lường doanh thu thành công.                         │
 ├──────────────────────┼────────────────────────────────────────────────────────────────────────────┤
@@ -666,7 +668,7 @@ Căn cứ Điều 18 của Đề bài (`AI-REV-SRS-001`), hệ thống cung cấ
 │ Thẩm Quyền AUTH-3..5)│ • Bằng chứng đi kèm (Evidence Artifact)  │ • **[MODIFY]**: Sửa tham số     │
 │                      │ • Đánh giá rủi ro biên lãi ròng (P_floor)│ • **[PAUSE] / [CANCEL]**        │
 ├──────────────────────┼──────────────────────────────────────────┼─────────────────────────────────┤
-│ **SCR-004**          │ • Định danh: SĐT, LINE ID, Bưu cục 7-11  │ • Bộ lọc xem FACT vs HYPOTHESIS │
+│ **SCR-004**          │ • Định danh: SĐT, LINE ID, Bưu cục tiện lợi  │ • Bộ lọc xem FACT vs HYPOTHESIS │
 │ Customer 360 Viewer  │ • Unified Timeline: Xem ➔ Hỏi ➔ Thêm     │ • Ghi chú thủ công của nhân viên│
 │ (Soi Hồ Sơ Khách     │   giỏ ➔ Chốt đơn ➔ Khiếu nại ➔ Mua lại   │ • Điều chỉnh Consent (Opt-in /  │
 │ Hàng Thống Nhất)     │ • Điểm RFM, Hạn mức nợ & Lịch sử SIM/xe  │   Opt-out chính sách dữ liệu)   │
