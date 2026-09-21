@@ -25,7 +25,7 @@
 * **Khác biệt chiến lược:** 
   * So với tự code từ đầu (Spring Boot, Node.js): Odoo tiết kiệm **60–70% thời gian** nhờ có sẵn khung gầm (ORM, Authentication, UI Renderer, Audit Log, Workflow Engine) và hàng chục ngàn module nghiệp vụ tiêu chuẩn.
   * So với SAP/Oracle: Odoo nhẹ hơn, chi phí triển khai chỉ bằng **1/5 đến 1/10**, mã nguồn mở cho phép can thiệp và làm chủ sâu.
-* **Góc nhìn thực tế cần báo cáo Sếp:** Odoo **không phải phép màu**. Rủi ro lớn nhất là **"Lạm dụng Customization"** (viết đè sai quy cách khiến hệ thống chạy chậm và không nâng cấp được phiên bản) hoặc **"Cưỡng ép hệ thống theo quy trình cũ"** thay vì chuẩn hóa quy trình doanh nghiệp theo chuẩn quốc tế.
+* **Góc nhìn thực tế khi đánh giá:** Odoo **không phải phép màu**. Rủi ro lớn nhất là **"Lạm dụng Customization"** (viết đè sai quy cách khiến hệ thống chạy chậm và không nâng cấp được phiên bản) hoặc **"Cưỡng ép hệ thống theo quy trình cũ"** thay vì chuẩn hóa quy trình doanh nghiệp theo chuẩn quốc tế.
 
 ---
 
@@ -312,7 +312,7 @@ Dưới đây là bộ câu hỏi được phân loại theo 4 góc độ: **Chi
 ### Nhóm 1: Câu Hỏi Về Chiến Lược & Chi Phí (Dành cho Ban Giám Đốc)
 
 #### Q1: "Tại sao công ty không tự tuyển người về code một phần mềm riêng bằng Java/NodeJS mà lại phải dùng Odoo?"
-* **Trả lời:** "Thưa Sếp, tự code từ đầu giống như việc mình tự chế tạo lại chiếc xe máy từ khung xe, bánh xe, động cơ. Đội ngũ sẽ mất 6 đến 12 tháng chỉ để làm những thứ cơ bản: phân quyền, bảng biểu, quản lý người dùng, logic trừ kho và hóa đơn. Trong khi đó, Odoo đã hoàn thiện toàn bộ khung gầm này suốt 18 năm qua với chi phí 0 đồng tiền bản quyền mã nguồn. Nếu dùng Odoo, đội kỹ thuật chỉ cần tập trung 100% thời gian vào các logic đặc thù sinh ra tiền của công ty, rút ngắn thời gian đưa vào sử dụng từ cả năm xuống còn 2-3 tháng."
+* **Trả lời:** "Kính thưa Ban Giám Đốc, tự code từ đầu giống như việc mình tự chế tạo lại chiếc xe máy từ khung xe, bánh xe, động cơ. Đội ngũ sẽ mất 6 đến 12 tháng chỉ để làm những thứ cơ bản: phân quyền, bảng biểu, quản lý người dùng, logic trừ kho và hóa đơn. Trong khi đó, Odoo đã hoàn thiện toàn bộ khung gầm này suốt 18 năm qua với chi phí 0 đồng tiền bản quyền mã nguồn. Nếu dùng Odoo, đội kỹ thuật chỉ cần tập trung 100% thời gian vào các logic đặc thù sinh ra tiền của công ty, rút ngắn thời gian đưa vào sử dụng từ cả năm xuống còn 2-3 tháng."
 
 #### Q2: "Odoo bảo là miễn phí, vậy có chi phí ẩn gì không?"
 * **Trả lời:** "Bản Odoo Community miễn phí 100% tiền license phần mềm vĩnh viễn. Tuy nhiên, chi phí thực tế nằm ở 3 khoản: (1) Chi phí hạ tầng máy chủ Server/Cloud (khoảng vài trăm nghìn đến vài triệu/tháng tùy tải); (2) Chi phí nhân sự cài đặt, cấu hình và tùy biến theo nghiệp vụ công ty; (3) Chi phí đào tạo nhân viên sử dụng. So với mua các phần mềm đóng gói hàng chục nghìn USD thì tổng chi phí sở hữu (TCO) của Odoo vẫn tiết kiệm hơn từ 50% đến 70%."
@@ -328,15 +328,15 @@ Dưới đây là bộ câu hỏi được phân loại theo 4 góc độ: **Chi
 
 ---
 
-### Nhóm 2: Câu Hỏi Về Nghiệp Vụ & Vận Hành (Dành cho Sếp Vận hành / Bán hàng / Kế toán)
+### Nhóm 2: Câu Hỏi Về Nghiệp Vụ & Vận Hành (Dành cho Cấp Quản lý Vận hành / Bán hàng / Kế toán)
 
 #### Q6: "Odoo có quản lý được tồn kho theo nhiều kho, nhiều chi nhánh không?"
-* **Trả lời:** "Rất mạnh thưa Sếp. Odoo có tính năng Multi-warehouse (Nhiều kho vật lý) và Multi-location (Nhiều địa điểm kho theo dạng cây phân cấp: Kho chính -> Kệ A -> Ngăn B). Odoo hỗ trợ tự động điều chuyển giữa các kho nội bộ (Internal Transfer) và thiết lập quy tắc tự động bù hàng (Reordering Rules) khi kho chi nhánh xuống dưới định mức tối thiểu."
+* **Trả lời:** "Rất mạnh mẽ. Odoo có tính năng Odoo có tính năng Multi-warehouse (Nhiều kho vật lý) và Multi-location (Nhiều địa điểm kho theo dạng cây phân cấp: Kho chính -> Kệ A -> Ngăn B). Odoo hỗ trợ tự động điều chuyển giữa các kho nội bộ (Internal Transfer) và thiết lập quy tắc tự động bù hàng (Reordering Rules) khi kho chi nhánh xuống dưới định mức tối thiểu."
 
 #### Q7: "Khách vừa đặt trên Website/App thì trong kho Odoo có nhìn thấy ngay để đóng hàng không?"
 * **Trả lời:** "Có. Odoo có thể kết nối thời gian thực qua API. Khi có đơn hàng từ Web/App đẩy về, Odoo lập tức tạo `sale.order` và sinh ngay một `Delivery Order` ở trạng thái 'Chờ xử lý'. Nhân viên kho mở máy lên là thấy danh sách đơn cần nhặt hàng (Pick) và đóng gói (Pack) theo thời gian thực."
 
-#### Q8: "Quy trình của công ty mình là: Sales báo giá -> Sếp duyệt giá -> Mới được xuất kho. Odoo có làm được nút phê duyệt này không?"
+#### Q8: "Quy trình của công ty mình là: Sales báo giá -> Lãnh đạo duyệt giá -> Mới được xuất kho. Odoo có làm được nút phê duyệt này không?"
 * **Trả lời:** "Hoàn toàn làm được. Odoo có sẵn cơ chế State Workflow (Draft -> Waiting Approval -> Approved -> Sale Order). Ta có thể cấu hình: nếu mức chiết khấu vượt quá 10% hoặc giá bán thấp hơn giá sàn quy định, hệ thống sẽ khóa đơn và gửi thông báo yêu cầu tài khoản Giám đốc bấm nút Duyệt thì mới cho phép xác nhận xuất kho."
 
 #### Q9: "Odoo có xuất được hóa đơn điện tử theo chuẩn thuế Việt Nam không?"
@@ -373,10 +373,10 @@ Dưới đây là bộ câu hỏi được phân loại theo 4 góc độ: **Chi
 
 ---
 
-### Nhóm 4: Câu Hỏi Hóc Búa Về Rủi Ro & Thách Thức (Sếp thử thách trình độ)
+### Nhóm 4: Câu Hỏi Chuyên Sâu Về Rủi Ro & Thách Thức Quản Trị
 
 #### Q16: "Tôi nghe nói nâng cấp phiên bản Odoo (Migration) cực kỳ đau đầu và tốn tiền, thực hư thế nào?"
-* **Trả lời:** "Sếp nhận định rất chính xác ạ. Đây là 'nỗi đau' lớn nhất của Odoo. Cứ mỗi năm Odoo ra một phiên bản lớn (v16, v17, v18) và cấu trúc database thường bị thay đổi. Nếu dùng bản Community, ta phải dùng công cụ mã nguồn mở như **OpenUpgrade** để chuyển đổi database và phải tự viết lại các module custom cho tương thích. Vì vậy, chiến lược đúng đắn là: **Chỉ nâng cấp khi thực sự cần tính năng mới** (chu kỳ 3-5 năm/lần), và trong quá trình viết code custom, phải tuân thủ nghiêm ngặt chuẩn của Odoo, không được sửa core để giảm thiểu tối đa rủi ro khi migrate."
+* **Trả lời:** "Nhận định này hoàn toàn chính xác. Đây là 'nỗi đau' lớn nhất của Odoo. Cứ mỗi năm Odoo ra một phiên bản lớn (v16, v17, v18) và cấu trúc database thường bị thay đổi. Nếu dùng bản Community, ta phải dùng công cụ mã nguồn mở như **OpenUpgrade** để chuyển đổi database và phải tự viết lại các module custom cho tương thích. Vì vậy, chiến lược đúng đắn là: **Chỉ nâng cấp khi thực sự cần tính năng mới** (chu kỳ 3-5 năm/lần), và trong quá trình viết code custom, phải tuân thủ nghiêm ngặt chuẩn của Odoo, không được sửa core để giảm thiểu tối đa rủi ro khi migrate."
 
 #### Q17: "Nếu database của công ty lên đến vài chục Gigabyte và hàng chục triệu dòng đơn hàng thì Odoo có bị treo không?"
 * **Trả lời:** "Hệ thống sẽ không bị treo nếu được cấu hình kiến trúc phân tán ngay từ đầu:
@@ -394,7 +394,7 @@ Dưới đây là bộ câu hỏi được phân loại theo 4 góc độ: **Chi
 #### Q19: "Nếu một nhân viên bấm xác nhận đơn hàng cùng lúc với một nhân viên khác đang sửa đơn thì Odoo xử lý xung đột dữ liệu thế nào?"
 * **Trả lời:** "Odoo xử lý thông qua cơ chế **Database Transaction & Pessimistic Locking** của PostgreSQL. Khi một luồng xử lý đơn hàng bắt đầu, Odoo có thể gọi `cr.execute('SELECT ... FOR UPDATE')` để khóa dòng dữ liệu đó lại. Luồng thứ hai đến sau sẽ phải chờ luồng thứ nhất hoàn thành (Commit hoặc Rollback). Nếu có xung đột phiên bản, Odoo sẽ bắn ra exception cảnh báo người dùng tải lại trang để tránh việc dữ liệu bị ghi đè sai lệch."
 
-#### Q20: "Quy trình từ lúc Sếp duyệt làm Odoo đến ngày Go-Live thực tế thì em sẽ làm những bước gì cụ thể?"
+#### Q20: "Quy trình từ lúc Ban Giám Đốc phê duyệt triển khai Odoo đến ngày Go-Live thực tế gồm các bước cụ thể nào?"
 * **Trả lời:** "Em sẽ triển khai theo 6 bước chuẩn:
   1. *Khảo sát & Chuẩn hóa quy trình:* Ngồi với các phòng ban thống nhất luồng đi của dữ liệu.
   2. *Cài đặt hạ tầng chuẩn:* Dựng Odoo trên Docker/Linux, thiết lập backup tự động hàng ngày.
@@ -407,10 +407,10 @@ Dưới đây là bộ câu hỏi được phân loại theo 4 góc độ: **Chi
 
 ## 11. KỊCH BẢN THUYẾT TRÌNH TRỰC TIẾP 10-15 PHÚT
 
-*(Dùng kịch bản này để trình bày tự tin trước Sếp, ngôn từ gãy gọn, tập trung vào hiệu quả kinh doanh)*
+*(Dùng kịch bản này để trình bày trước Hội đồng Thẩm định & Ban Giám Đốc, ngôn từ gãy gọn, tập trung vào hiệu quả kinh doanh)*
 
 ### Slide/Ý 1: Mở Đầu & Đặt Vấn Đề (2 phút)
-> "Chào Sếp, sau 2 ngày nghiên cứu nghiêm túc về Odoo, em đã tổng hợp báo cáo phân tích toàn diện để gửi tới Sếp. Vấn đề lớn nhất của các doanh nghiệp đang gặp phải là tình trạng **'mỗi phòng ban dùng một phần mềm riêng'**, dẫn đến số liệu kho lệch với sales, kế toán phải nhập tay lại chứng từ, và Ban Giám đốc không có báo cáo theo thời gian thực. Odoo sinh ra chính là để giải quyết bài toán này bằng mô hình **All-in-one ERP**."
+> "Kính thưa Ban Giám Đốc, sau quá trình nghiên cứu nghiêm túc về Odoo, đội ngũ đã tổng hợp báo cáo phân tích toàn diện để trình bày trước Ban Giám Đốc. Vấn đề lớn nhất của các doanh nghiệp đang gặp phải là tình trạng **'mỗi phòng ban dùng một phần mềm riêng'**, dẫn đến số liệu kho lệch với sales, kế toán phải nhập tay lại chứng từ, và Ban Giám đốc không có báo cáo theo thời gian thực. Odoo sinh ra chính là để giải quyết bài toán này bằng mô hình **All-in-one ERP**."
 
 ### Slide/Ý 2: Odoo Là Gì & Điểm Khác Biệt (3 phút)
 > "Odoo là nền tảng quản trị doanh nghiệp mã nguồn mở có hơn 12 triệu người dùng toàn cầu. Điểm mạnh nhất của nó là tính **Modular (mô-đun hóa)**. Doanh nghiệp cần gì dùng nấy: khởi đầu chỉ cần Bán hàng và Kho, sau này lớn lên có thể bật thêm Mua hàng, Kế toán, Nhân sự, Sản xuất mà không cần mua phần mềm mới vì tất cả đều dùng chung một cơ sở dữ liệu duy nhất.
@@ -418,7 +418,7 @@ Dưới đây là bộ câu hỏi được phân loại theo 4 góc độ: **Chi
 > Về mặt công nghệ, Odoo dùng **Python và PostgreSQL**. Đây là lựa chọn thông minh vì giúp tốc độ phát triển tính năng mới nhanh hơn tự code từ đầu khoảng **3 đến 4 lần**, trong khi chi phí bản quyền ban đầu là 0 đồng nếu dùng bản Community."
 
 ### Slide/Ý 3: Phân Tích Lợi Ích & Cảnh Báo Rủi Ro Thực Tế (4 phút)
-> "Tuy nhiên, em xin phép báo cáo trung thực với Sếp cả những mặt trái để công ty mình lường trước:
+> "Tuy nhiên, báo cáo cần làm rõ cả những thách thức thực tế để doanh nghiệp chủ động dự phòng rủi ro:
 > 1. **Lợi ích:** Hệ thống chuẩn hóa được quy trình, nhân viên làm việc có kiểm soát, phân quyền chặt chẽ từng trường dữ liệu, dữ liệu kho tự động trừ ngay khi duyệt đơn.
 > 2. **Rủi ro lớn nhất:** Là **'Bệnh muốn sửa code theo thói quen cũ'**. Odoo đã được thiết kế theo quy trình quản trị chuẩn quốc tế. Nếu công ty mình ép Odoo phải sửa code quá nhiều để giống hệt cách làm giấy tờ cũ thì dự án sẽ đội chi phí và rất khó nâng cấp sau này.
 > 3. **Rủi ro thứ hai:** Là nâng cấp phiên bản. Do đó, nguyên tắc kỹ thuật của em là: **Chỉ mở rộng (extend) chứ tuyệt đối không sửa code lõi** để đảm bảo hệ thống luôn ổn định."
@@ -427,9 +427,9 @@ Dưới đây là bộ câu hỏi được phân loại theo 4 góc độ: **Chi
 > "Để không tốn kém chi phí và kiểm chứng được hiệu quả thực tế, em đề xuất công ty mình triển khai theo hướng:
 > * Trong 1-2 tuần tới, em sẽ tự dựng một hệ thống Odoo thử nghiệm (POC) trên máy chủ nội bộ.
 > * Em sẽ nhập thử dữ liệu mẫu của công ty mình và cấu hình luồng Bán hàng - Xuất kho hoàn chỉnh.
-> * Sau đó, em mời Sếp và các Trưởng bộ phận vào thao tác thử trực tiếp trên màn hình. Khi mọi người thấy tiện lợi và chuẩn xác thì công ty mình mới quyết định đưa vào áp dụng chính thức.
+> * Sau đó, kính mời Ban Giám Đốc và các Trưởng bộ phận thao tác thử nghiệm trực tiếp. Khi toàn bộ quy trình vận hành trơn tru và chính xác thì doanh nghiệp mới quyết định đưa vào áp dụng chính thức.
 > 
-> Em xin kết thúc phần trình bày và sẵn sàng trả lời mọi câu hỏi chất vấn của Sếp ạ!"
+> Đội ngũ xin kết thúc phần trình bày và sẵn sàng giải trình mọi câu hỏi của Hội đồng Thẩm định và Ban Giám Đốc."
 
 ---
 *Tài liệu được biên soạn phục vụ báo cáo nội bộ và bảo vệ đề án kỹ thuật.*

@@ -165,8 +165,7 @@ P0: NỀN TẢNG (Tuần 1)     ➔ P1: CSKH 24/7 (Tuần 2-3)   ➔ P2: BÁN H�
 1. **Báo cáo Đặc tả Triển khai Kỹ thuật Master:** [KE_HOACH_TRIEN_KHAI_HE_THONG_AI_AGENT_SRS_001.md](file:///d:/New%20folder/KE_HOACH_TRIEN_KHAI_HE_THONG_AI_AGENT_SRS_001.md) (Quy chuẩn 12 chương, 100% chuẩn SRS cấp Doanh nghiệp).
 2. **Bộ 13 Hồ sơ Thiết kế Kỹ thuật Chi tiết:** Nằm tại thư mục [`implement/`](file:///d:/New%20folder/implement) (từ `01-tech-stack` đến `13-approval-readiness`).
 3. **Bộ 430+ Kịch bản Kiểm thử Nghiệm thu Tự động:** Nằm tại thư mục [`testcases/`](file:///d:/New%20folder/testcases) (gồm 9 kịch bản E2E, ma trận phân quyền AUTH, và kiểm thử bảo mật chống tấn công Jailbreak).
-4. **Bản Đánh giá Thực tế Hệ thống ERP Odoo:** [BAO_CAO_DANH_GIA_ODOO_ERP.md](file:///d:/New%20folder/BAO_CAO_DANH_GIA_ODOO_ERP.md).
-5. **Bộ Slide Thuyết trình Lãnh đạo PDF:** [BAO_CAO_THUYET_TRINH_AI_AGENT_ENTERPRISE.pdf](file:///d:/New%20folder/BAO_CAO_THUYET_TRINH_AI_AGENT_ENTERPRISE.pdf) và Đặc tả Kỹ thuật Blueprint PDF [DAC_TA_KY_THUAT_HE_THONG_AI_AGENT.pdf](file:///d:/New%20folder/DAC_TA_KY_THUAT_HE_THONG_AI_AGENT.pdf).
+4. **Bộ Slide Thuyết trình Báo cáo PDF:** [BAO_CAO_THUYET_TRINH_AI_AGENT_ENTERPRISE.pdf](file:///d:/New%20folder/BAO_CAO_THUYET_TRINH_AI_AGENT_ENTERPRISE.pdf) và Đặc tả Kỹ thuật Blueprint PDF [DAC_TA_KY_THUAT_HE_THONG_AI_AGENT.pdf](file:///d:/New%20folder/DAC_TA_KY_THUAT_HE_THONG_AI_AGENT.pdf).
 
 ---
 
