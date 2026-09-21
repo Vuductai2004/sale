@@ -2,7 +2,7 @@
 <html lang="vi">
 <head>
 <meta charset="UTF-8">
-<title>Đặc Tả Kỹ Thuật Hệ Thống AI Agent (Technical Specification Blueprint)</title>
+<title>Đặc Tả Kỹ Thuật Hệ Thống AI Agent (Revenue & Engagement Platform Blueprint)</title>
 <style>
   @page {
     size: A4 portrait;
@@ -17,16 +17,16 @@
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
     color: #0f172a;
     background-color: #ffffff;
-    line-height: 1.38;
-    font-size: 9.8px;
+    line-height: 1.4;
+    font-size: 10px;
   }
   .page {
     width: 100%;
-    height: 279mm;
+    height: 275mm;
     page-break-after: always;
     page-break-inside: avoid;
     position: relative;
-    padding-bottom: 6mm;
+    padding-bottom: 8mm;
     display: flex;
     flex-direction: column;
     justify-content: space-between;
@@ -68,992 +68,1206 @@
   .footer {
     border-top: 1px solid #e2e8f0;
     padding-top: 3px;
-    margin-top: 5px;
     display: flex;
     justify-content: space-between;
     font-size: 8px;
     color: #94a3b8;
+    margin-top: auto;
+  }
+  .content {
+    flex: 1;
+  }
+  h2 {
+    font-size: 11.5px;
+    font-weight: 700;
+    color: #0f172a;
+    margin-top: 6px;
+    margin-bottom: 5px;
+    display: flex;
+    align-items: center;
+  }
+  h2::before {
+    content: "";
+    display: inline-block;
+    width: 3.5px;
+    height: 11px;
+    background: #1e40af;
+    margin-right: 5px;
+    border-radius: 2px;
+  }
+  h3 {
+    font-size: 10px;
+    font-weight: 700;
+    color: #1e293b;
+    margin-bottom: 3px;
+  }
+  p, li {
+    font-size: 9.5px;
+    color: #334155;
+    line-height: 1.42;
+  }
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 7px;
+    margin-bottom: 6px;
+  }
+  .grid-3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 6px;
+    margin-bottom: 6px;
   }
   .card {
     background: #f8fafc;
     border: 1px solid #e2e8f0;
-    border-radius: 5px;
-    padding: 7px 9px;
-    margin-bottom: 6px;
+    border-radius: 4px;
+    padding: 6px 8px;
   }
-  .card-blue { background: #eff6ff; border-color: #bfdbfe; }
-  .card-amber { background: #fffbeb; border-color: #fde68a; }
-  .card-emerald { background: #ecfdf5; border-color: #a7f3d0; }
-  .card-purple { background: #faf5ff; border-color: #e9d5ff; }
-  .card h2 {
-    font-size: 10.8px;
+  .card-highlight {
+    background: #eff6ff;
+    border: 1px solid #bfdbfe;
+    border-radius: 4px;
+    padding: 6px 8px;
+  }
+  ul {
+    padding-left: 12px;
+    margin-top: 2px;
+  }
+  li {
+    margin-bottom: 1.5px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 5px 0;
+    font-size: 8.8px;
+  }
+  th, td {
+    padding: 3.5px 5px;
+    text-align: left;
+    border: 1px solid #e2e8f0;
+    vertical-align: top;
+  }
+  th {
+    background: #f1f5f9;
     font-weight: 700;
     color: #0f172a;
-    margin-bottom: 3px;
-    display: flex;
-    align-items: center;
-    gap: 4px;
   }
-  .card h3 {
-    font-size: 9.8px;
-    font-weight: 700;
-    color: #1e40af;
-    margin-bottom: 2px;
+  tr:nth-child(even) {
+    background: #fafafa;
   }
-  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-  .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; }
-  .grid-4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 6px; }
   .badge {
     display: inline-block;
     padding: 1px 4px;
-    font-size: 7.5px;
-    font-weight: 700;
     border-radius: 3px;
-    text-transform: uppercase;
+    font-size: 7.8px;
+    font-weight: 700;
+    font-family: monospace;
   }
   .badge-blue { background: #dbeafe; color: #1e40af; }
   .badge-green { background: #dcfce7; color: #166534; }
   .badge-amber { background: #fef3c7; color: #92400e; }
   .badge-red { background: #fee2e2; color: #991b1b; }
   .badge-purple { background: #f3e8ff; color: #6b21a8; }
-  table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 8.5px;
-    margin-top: 3px;
-  }
-  th, td {
-    padding: 3px 5px;
-    border: 1px solid #cbd5e1;
-    text-align: left;
-    vertical-align: top;
-  }
-  th {
-    background: #f1f5f9;
-    font-weight: 700;
-    color: #334155;
-  }
-  pre, code {
-    font-family: Consolas, monospace;
+  .badge-gray { background: #f1f5f9; color: #475569; }
+  code {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
     font-size: 8px;
+    background: #f1f5f9;
+    padding: 1px 3px;
+    border-radius: 2px;
+    color: #0969da;
   }
-  pre {
-    background: #0f172a;
-    color: #e2e8f0;
-    padding: 6px 8px;
-    border-radius: 4px;
-    overflow: hidden;
-    line-height: 1.3;
-    margin-top: 3px;
-  }
-  ul { padding-left: 13px; margin-top: 1px; }
-  li { margin-bottom: 1px; }
 </style>
 </head>
 <body>
 
-<!-- TRANG 1: TỔNG QUAN KIẾN TRÚC & HẠ TẦNG ZERO-DISRUPTION -->
+<!-- TRANG 1: TỔNG QUAN NỀN TẢNG & REVENUE ORCHESTRATOR -->
 <div class="page">
-  <div>
-    <div class="header">
-      <div class="header-left">
-        <h1>Đặc Tả Kỹ Thuật: Hệ Thống AI Agent Doanh Thu & CSKH (Blueprint)</h1>
-        <p>Hồ Sơ Căn Cứ: AI-REV-SRS-001 | Kiến Trúc Zero-Disruption & Revenue Orchestrator</p>
-      </div>
-      <div class="header-tag">BLUEPRINT · TRANG 1/10</div>
+  <div class="header">
+    <div class="header-left">
+      <h1>Tài Liệu Đặc Tả Kỹ Thuật Nền Tảng AI Revenue & Engagement Platform</h1>
+      <p>Mã tài liệu: AI-REV-SPEC-2026 | Bản đặc tả thiết kế đối chiếu theo Đề bài SRS v0.1 (AI-REV-SRS-001); giả định ASM-001..005 còn chờ khóa</p>
     </div>
+    <div class="header-tag">Trang 1 / 10</div>
+  </div>
 
-    <div class="card card-blue">
-      <h2>1. Ranh Giới Hệ Thống & Nguyên Tắc Zero-Disruption</h2>
-      <p style="font-size: 9px; text-align: justify;">
-        Hệ thống được thiết kế dưới dạng <strong>Lớp Trí Tuệ Doanh Nghiệp Tự Hành (AI Revenue Workforce)</strong> ghép nối ngoại vi (Plug-and-Play) vào hạ tầng Web E-commerce, Mobile App và ERP/POS sẵn có của chuỗi bán lẻ tại Đài Loan. Hệ thống tuân thủ nghiêm ngặt nguyên tắc <strong>Zero-Disruption</strong>: ERP/POS/WMS hiện hữu là <strong>System of Record duy nhất</strong>; AI tuyệt đối không tạo cơ sở dữ liệu song song và vận hành theo cơ chế an toàn đóng <strong>Fail-Closed (NFR-008)</strong>.
+  <div class="content">
+    <div class="card-highlight" style="margin-bottom: 7px;">
+      <h3 style="color: #1e40af;">1. Triết Lý Kiến Trúc Phân Tầng 3 Lớp (3-Tier Clean Architecture)</h3>
+      <p style="font-size: 9px; line-height: 1.4;">
+        Hệ thống phân định độc lập tuyệt đối giữa <strong>Khung gầm Kỹ thuật</strong> (Tier 1), <strong>Động lực Kinh tế</strong> (Tier 2) và <strong>Kịch bản Ngành dọc</strong> (Tier 3). Nguyên tắc bất biến: <strong>Không xây lại hệ thống giao dịch lõi</strong> (ERP/POS/WMS tiếp tục là System of Record cho Catalog, Giá niêm yết, Tồn kho và Đơn hàng). AI Platform giữ vai trò là System of Intelligence &amp; Orchestration.
+      </p>
+      <p style="font-size: 8.6px; line-height: 1.4; color: #b45309; margin-top: 4px;">
+        <strong>Trạng thái tài liệu:</strong> đây là bản đặc tả thiết kế (blueprint), <strong>chưa có bản triển khai production và chưa có số liệu vận hành</strong>. Các con số về chi phí, độ trễ, tài chính và tỷ lệ tự động hóa là <strong>mục tiêu thiết kế giả thuyết</strong>, phải khóa theo ASM-001..005 (SRS Mục 26) trước khi dùng làm cam kết.
       </p>
     </div>
 
-    <div class="card">
-      <h2>Sơ Đồ Kiến Trúc Hệ Thống 4 Tầng Cấp Enterprise</h2>
-      <div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 4px; padding: 7px; margin-top: 3px;">
-        <div style="border-left: 3px solid #0284c7; padding-left: 6px; margin-bottom: 5px;">
-          <strong style="color: #0369a1;">TẦNG 1: OMNICHANNEL INGESTION LAYER (Giao Diện Khách Hàng)</strong>
-          <p style="color: #475569; font-size: 8.5px;">Web Floating Widget (&lt;20KB Shadow DOM) · Mobile App SDK · LINE Official Account · Zalo OA · E-Map CVS API.</p>
-        </div>
-        <div style="border-left: 3px solid #2563eb; padding-left: 6px; margin-bottom: 5px;">
-          <strong style="color: #1d4ed8;">TẦNG 2: REVENUE ORCHESTRATOR & GOVERNANCE GATEWAY (Bộ Não Điều Phối)</strong>
-          <p style="color: #475569; font-size: 8.5px;">11 Bước điều phối chuẩn · Điều phối 13 Sub-Agents · Ma trận thẩm quyền AUTH-0..5 · Deterministic Policy Engine khóa cứng P_floor.</p>
-        </div>
-        <div style="border-left: 3px solid #7c3aed; padding-left: 6px; margin-bottom: 5px;">
-          <strong style="color: #6d28d9;">TẦNG 3: AI SECOND BRAIN & PERSISTENT MEMORY (Bộ Nhớ & Tri Thức)</strong>
-          <p style="color: #475569; font-size: 8.5px;">Customer 360 Unified Profile · Two-Stage RAG (Hybrid BM25 + Vector + Cross-Encoder) · 5 Tầng AI Memory (Working..Semantic).</p>
-        </div>
-        <div style="border-left: 3px solid #475569; padding-left: 6px;">
-          <strong style="color: #334155;">TẦNG 4: SYSTEM OF RECORD & EXTERNAL CARRIERS (Nguồn Sự Thật Duy Nhất)</strong>
-          <p style="color: #475569; font-size: 8.5px;">ERP Doanh nghiệp · POS Bán hàng · Kho vận WMS · API 4 Chuỗi Bưu Cục CVS (7-Eleven, FamilyMart, Hi-Life, OK Mart).</p>
-        </div>
+    <h2>2. Chu Trình Điều Phối Doanh Thu 11 Bước (Revenue Orchestrator)</h2>
+    <div class="card" style="margin-bottom: 7px; padding: 6px;">
+      <div style="font-family: monospace; font-size: 7.8px; line-height: 1.45; color: #1e293b;">
+        <strong>[1. SIGNAL]</strong> (Web/App Event API-002, Inbound Chat API-003, POS/CRM Signal) ➔<br>
+        <strong>[2. CONTEXT]</strong> (Nạp Customer 360, kiểm tra Consent BR-004, thẩm định ranh giới định danh NFR-006) ➔<br>
+        <strong>[3. HYPOTHESIS]</strong> (Suy luận nhu cầu, dự đoán chuyển đổi; phân tách rạch ròi với Fact FR-C360-003) ➔<br>
+        <strong>[4. DECISION]</strong> (Xác định mục tiêu kinh doanh, kích hoạt định tuyến Agent FR-ORC-001) ➔<br>
+        <strong>[5. PLAN]</strong> (Thiết lập quy trình phối hợp đa Agent FR-ORC-002, thứ tự gọi Skill và kênh liên lạc) ➔<br>
+        <strong>[6. ACTION]</strong> (Soạn thảo nội dung hành động, payload lệnh gọi tool, gắn mã chống trùng effect_key BR-005) ➔<br>
+        <strong>[7. APPROVAL]</strong> (Thẩm định Authority Model AUTH-0..5; kích hoạt Approval Center SCR-003 nếu là AUTH-4) ➔<br>
+        <strong>[8. EXECUTION]</strong> (Phát lệnh thi hành tới Plug-and-Play Adapter tương ứng; xử lý Idempotency NFR-003) ➔<br>
+        <strong>[9. EVIDENCE]</strong> (Thu thập bằng chứng xác thực từ hệ thống đích: mã vận đơn, mã đơn ERP, message ID) ➔<br>
+        <strong>[10. OUTCOME]</strong> (Đối soát hiệu quả kinh doanh thực tế qua ERP: doanh thu, tỷ lệ chốt, chỉ số CSAT) ➔<br>
+        <strong>[11. LEARNING]</strong> (Cập nhật kết quả vào Learning Memory, tối ưu hóa trọng số mô hình và tri thức dài hạn).
       </div>
     </div>
 
-    <div class="card card-emerald">
-      <h2>Danh Mục 13 Sub-Agents Chuyên Trách Toàn Hệ Thống</h2>
-      <div class="grid-3">
-        <div>
-          <strong style="color: #6b21a8;">Marketing (6 Agents):</strong>
-          <ul>
-            <li><code>MKT-01</code> Campaign Strategist</li>
-            <li><code>MKT-02</code> Audience Segmenter</li>
-            <li><code>MKT-03</code> Content & Creative</li>
-            <li><code>MKT-04</code> Brand Guardian</li>
-            <li><code>MKT-05</code> Campaign Dispatcher</li>
-            <li><code>MKT-06</code> Marketing Analyst</li>
-          </ul>
-        </div>
-        <div>
-          <strong style="color: #1d4ed8;">Sales (5 Agents):</strong>
-          <ul>
-            <li><code>SAL-01</code> Lead Qualification</li>
-            <li><code>SAL-02</code> AI Sales Advisor</li>
-            <li><code>SAL-03</code> Recommendation</li>
-            <li><code>SAL-04</code> Cart Recovery</li>
-            <li><code>SAL-05</code> Replenishment Agent</li>
-          </ul>
-        </div>
-        <div>
-          <strong style="color: #166534;">CSKH (2 Agents):</strong>
-          <ul>
-            <li><code>CS-01</code> Omnichannel Care</li>
-            <li><code>CS-02</code> Retention & Success</li>
-            <li><em>Bàn giao người:</em> Human Takeover &le; 1.0s</li>
-            <li><em>Quản trị:</em> SCR-001..SCR-005</li>
-          </ul>
-        </div>
+    <h2>3. Yêu Cầu Chức Năng Điều Phối Cốt Lõi</h2>
+    <div class="grid-2">
+      <div class="card">
+        <h3>FR-ORC-001 - Routing (Định Tuyến Tập Trung)</h3>
+        <ul>
+          <li>Orchestrator là đầu mối duy nhất quyết định Agent tiếp nhận (Marketing, Sales, Care), Skill kích hoạt và Tool được thi hành.</li>
+          <li><strong>Cấm giao tiếp ngang hàng (Zero P2P Coupling):</strong> Các Agent không được tự ý gọi trực tiếp lẫn nhau; mọi giao tiếp bắt buộc qua Orchestrator bus.</li>
+          <li><strong>Nguyên tắc Một câu hỏi làm rõ:</strong> Nếu ý định mơ hồ, chỉ hỏi đúng 1 câu trọng tâm hoặc chuyển người (SCR-005); cấm đổi bot liên tục.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>FR-ORC-002 - Multi-Agent Workflow</h3>
+        <ul>
+          <li>Quản lý các quy trình phức hợp xuyên miền dữ liệu: Tín hiệu bỏ giỏ ➔ Sales phát hiện ➔ Customer 360 nạp lịch sử ➔ Recommendation chọn sản phẩm ➔ Policy kiểm tra chính sách giá (P_floor đề xuất) ➔ Communication gửi tin ➔ Đối soát đơn.</li>
+          <li>Duy trì ngữ cảnh hội thoại nhất quán và trạng thái quy trình bền vững (Stateful Workflow Store) độc lập với vòng đời tiến trình.</li>
+        </ul>
       </div>
     </div>
+
+    <h2>4. Phân Định Thẩm Quyền Dữ Liệu: System of Record (SoR) vs. AI Platform</h2>
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 26%;">Thực thể dữ liệu</th>
+          <th style="width: 36%;">Nguồn thẩm quyền (System of Record - SoR)</th>
+          <th style="width: 38%;">Ranh giới & Trách nhiệm của AI Platform</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>Sản phẩm, SKU, Bảng giá</strong></td>
+          <td>ERP / POS / PIM (qua kết nối API-001)</td>
+          <td>Chỉ đọc (AUTH-0); tuyệt đối không tự tạo sản phẩm hay sửa bảng giá (BR-001, BR-003).</td>
+        </tr>
+        <tr>
+          <td><strong>Tồn kho thời gian thực</strong></td>
+          <td>WMS / ERP Inventory Core</td>
+          <td>Truy vấn thời gian thực phục vụ tư vấn; Fail Closed nếu mất kết nối kho (NFR-008).</td>
+        </tr>
+        <tr>
+          <td><strong>Đơn hàng & Giao dịch</strong></td>
+          <td>OMS / ERP Sales Core</td>
+          <td>Khởi tạo Draft Order hoặc đơn đặt cọc; không xác nhận thanh toán khi thiếu webhook ngân hàng.</td>
+        </tr>
+        <tr>
+          <td><strong>Thanh toán & Vận đơn</strong></td>
+          <td>Cổng thanh toán & Hệ thống Logistics (ADPT)</td>
+          <td>Đối soát qua Webhook có chữ ký số; lưu bằng chứng mã giao dịch/mã vận đơn vào Evidence Card.</td>
+        </tr>
+        <tr>
+          <td><strong>Khách hàng & Định danh</strong></td>
+          <td>CRM doanh nghiệp & Identity Provider</td>
+          <td>Customer 360 tổng hợp dữ liệu hành vi đa kênh; NFR-006 yêu cầu ngữ cảnh khách A không lọt sang khách B, cách ly tenant là lớp bổ sung.</td>
+        </tr>
+      </tbody>
+    </table>
   </div>
+
   <div class="footer">
-    <span>Đặc Tả Kỹ Thuật Nền Tảng AI Agent · AI-REV-SRS-001</span>
+    <span>AgentOS Platform Blueprint — AI Revenue & Engagement Technical Specification (AI-REV-SPEC-2026)</span>
     <span>Trang 1 / 10</span>
   </div>
 </div>
 
-<!-- TRANG 2: MÔ HÌNH DỮ LIỆU 6 DOMAIN & CUSTOMER 360 SCHEMA -->
+<!-- TRANG 2: KIẾN TRÚC 13 SUB-AGENTS & STATE MACHINES -->
 <div class="page">
-  <div>
-    <div class="header">
-      <div class="header-left">
-        <h1>Mô Hình Dữ Liệu 6 Domain & Customer 360 Schema</h1>
-        <p>Thiết kế lược đồ cơ sở dữ liệu và cấu trúc đối soát bằng chứng khách hàng</p>
+  <div class="header">
+    <div class="header-left">
+      <h1>Kiến Trúc 13 Sub-Agents Chuyên Trách & Máy Trạng Thái Tác Vụ</h1>
+      <p>Mô hình vận hành vi dịch vụ nhận thức, State Machines và cơ chế khóa phiên độc quyền</p>
+    </div>
+    <div class="header-tag">Trang 2 / 10</div>
+  </div>
+
+  <div class="content">
+    <h2>1. Danh Mục 13 Sub-Agents Phân Bổ Theo 3 Miền Nghiệp Vụ</h2>
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 10%;">Mã</th>
+          <th style="width: 22%;">Tên Sub-Agent</th>
+          <th style="width: 13%;">Thẩm quyền</th>
+          <th style="width: 32%;">Nhiệm vụ cốt lõi theo SRS v0.1</th>
+          <th style="width: 23%;">Đầu ra chuẩn hóa (Evidence)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="badge badge-blue">MKT-01</span></td>
+          <td>Marketing Strategist</td>
+          <td>AUTH-1 (Rec)</td>
+          <td>Phân tích mục tiêu kinh doanh, lập kế hoạch chiến dịch, phân bổ kênh, KPI.</td>
+          <td>Bản kế hoạch chiến dịch, dự toán ngân sách.</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-blue">MKT-02</span></td>
+          <td>Audience Intelligence</td>
+          <td>AUTH-1 (Rec)</td>
+          <td>Phân tích cohort, RFM segment, lọc khách mới/cũ/churn; kiểm tra consent.</td>
+          <td>Tệp đối tượng đủ điều kiện nhận tin.</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-blue">MKT-03</span></td>
+          <td>Content Agent</td>
+          <td>AUTH-2 (Draft)</td>
+          <td>Sáng tạo nội dung đa kênh: social, ad copy, video script, email, tin nhắn.</td>
+          <td>Bản thảo nội dung đa biến thể A/B testing.</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-blue">MKT-04</span></td>
+          <td>Brand Guardian</td>
+          <td>AUTH-1 (Review)</td>
+          <td>Thẩm định Tone of Voice, tuyên bố claim, bảng giá ERP, rà soát từ cấm.</td>
+          <td>Báo cáo thẩm định thương hiệu (Pass/Reject).</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-blue">MKT-05</span></td>
+          <td>Campaign Agent</td>
+          <td>AUTH-4 (Approval)</td>
+          <td>Điều phối vòng đời 8 bước chiến dịch từ Brief ➔ Publish ➔ Tối ưu hóa.</td>
+          <td>Lệnh xuất bản gắn mã effect_key & approval.</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-blue">MKT-06</span></td>
+          <td>Marketing Analyst</td>
+          <td>AUTH-0 (Observe)</td>
+          <td>Đo lường impressions, click, CAC, ROAS, đối soát doanh thu đơn hàng ERP.</td>
+          <td>Báo cáo quy thuộc doanh thu (Attribution).</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-green">SAL-01</span></td>
+          <td>Lead Qualification</td>
+          <td>AUTH-1 (Rec)</td>
+          <td>FR-SAL-001: Chấm điểm sẵn sàng mua, lịch sử tương tác, phân loại B2B/B2C.</td>
+          <td>Hồ sơ Lead kèm Reason + Evidence.</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-green">SAL-02</span></td>
+          <td>AI Sales Advisor</td>
+          <td>AUTH-3 (Bounded)</td>
+          <td>FR-SAL-002: Tư vấn sản phẩm, tra cứu giá/tồn kho ERP, giải thích chính sách.</td>
+          <td>Khuyến nghị kỹ thuật, so sánh tùy chọn mua.</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-green">SAL-03</span></td>
+          <td>Recommendation</td>
+          <td>AUTH-1 (Rec)</td>
+          <td>FR-SAL-003: Gợi ý cross-sell, upsell, bundle, sản phẩm thay thế, mua bù.</td>
+          <td>Đề xuất 7 trường thông tin bắt buộc.</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-green">SAL-04</span></td>
+          <td>Cart Recovery</td>
+          <td>AUTH-3/AUTH-4</td>
+          <td>Phát hiện giỏ bỏ quên, kiểm tra consent, áp dụng suppression, kích hoạt nhắc giỏ.</td>
+          <td>Tin nhắn nhắc giỏ kèm ưu đãi trong hạn mức chính sách (P_floor đề xuất).</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-green">SAL-05</span></td>
+          <td>Reorder / Replenish</td>
+          <td>AUTH-3 (Bounded)</td>
+          <td>Phân tích chu kỳ tiêu dùng định kỳ, gửi đề xuất đặt lại hàng 1-chạm.</td>
+          <td>Thông báo giao định kỳ 7-Eleven / LINE.</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-amber">CS-01</span></td>
+          <td>Omnichannel Care</td>
+          <td>AUTH-3 (Bounded)</td>
+          <td>FR-CS-001: Nhận diện 10 intent, tra cứu đơn/vận chuyển ERP, giải đáp FAQ.</td>
+          <td>Biên bản giải quyết vụ việc, thẻ đơn hàng.</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-amber">CS-02</span></td>
+          <td>Retention / Success</td>
+          <td>AUTH-1 / AUTH-3</td>
+          <td>FR-CS-003: Nhận diện nguy cơ rời bỏ, khách ngủ đông, phát hành voucher giữ chân.</td>
+          <td>Kế hoạch giữ chân (Next-Best-Action).</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>2. Máy Trạng Thái Tác Vụ Bền Vững (Task State Machine 7 Trạng Thái)</h2>
+    <div class="card" style="margin-bottom: 7px;">
+      <p style="font-size: 8.8px; margin-bottom: 4px;">
+        Toàn bộ tiến trình xử lý Agent Run được quản lý bằng Finite State Machine (FSM) bền vững, hỗ trợ khôi phục tức thì khi có sự cố mạng hoặc khởi động lại dịch vụ:
+      </p>
+      <div style="font-family: monospace; font-size: 7.8px; line-height: 1.4; color: #1e293b;">
+        <code>queued</code> (Tiếp nhận sự kiện) ➔ <code>running</code> (Đang thực thi bước hiện hành) ➔<br>
+        ├─► <code>waiting</code> (Tạm dừng chờ sự kiện bên ngoài hoặc hết hạn hẹn giờ - Timeout) ➔ Tiếp tục <code>running</code><br>
+        ├─► <code>awaiting_human</code> (Dừng chờ phê duyệt tại SCR-003 hoặc nhân viên tiếp quản tại SCR-005) ➔ <code>running</code><br>
+        ├─► <code>completed</code> (Hoàn tất thành công; lưu thẻ bằng chứng Evidence Card & cập nhật Learning Memory)<br>
+        ├─► <code>stopped</code> (Dừng chủ động theo điều kiện nghiệp vụ: khách từ chối, rút consent BR-004)<br>
+        └─► <code>failed</code> (Lỗi không thể khắc phục; cô lập trạng thái, kích hoạt cảnh báo tới SCR-002).
       </div>
-      <div class="header-tag">DATA PLATFORM · TRANG 2/10</div>
     </div>
 
-    <div class="card">
-      <h2>1. Thiết Kế 6 Domain Dữ Liệu Cốt Lõi (FR-DAT-001..003)</h2>
-      <table>
-        <thead>
-          <tr>
-            <th style="width: 18%;">Domain</th>
-            <th style="width: 32%;">Các Trường Dữ Liệu Bắt Buộc</th>
-            <th style="width: 25%;">System of Record</th>
-            <th>Quy Tắc Kiểm Soát & Bảo Mật</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><strong>1. Customer 360</strong></td>
-            <td><code>customer_id, phone_hash, name, lang, trust_score, consent, rfm_tier, cvs_pref</code></td>
-            <td>C360 Ingestion Layer</td>
-            <td>Mã hóa AES-256 SĐT theo Taiwan PDPA; cô lập khách hàng NFR-006</td>
-          </tr>
-          <tr>
-            <td><strong>2. Catalog</strong></td>
-            <td><code>sku, name, category, base_price, floor_price, specs, substitute_group</code></td>
-            <td>ERP Core Database</td>
-            <td>Đọc thời gian thực; không cho phép AI tự tạo/sửa giá BR-001</td>
-          </tr>
-          <tr>
-            <td><strong>3. Inventory</strong></td>
-            <td><code>sku, warehouse_id, qty_available, qty_reserved, safety_stock</code></td>
-            <td>WMS Kho Trung Tâm</td>
-            <td>Khóa giữ chỗ nguyên tử (Atomic Hold); Fail-Closed khi mất mạng</td>
-          </tr>
-          <tr>
-            <td><strong>4. Order & Cart</strong></td>
-            <td><code>order_id, items, total_amount, discount, cvs_store_code, status, payment</code></td>
-            <td>ERP / POS Order API</td>
-            <td>Gắn Idempotency Key BR-005; xác thực chữ ký báo giá HMAC</td>
-          </tr>
-          <tr>
-            <td><strong>5. Interaction</strong></td>
-            <td><code>session_id, channel, events, conversation_log, evidence_refs, intent</code></td>
-            <td>Evidence Ledger</td>
-            <td>Lưu vết kiểm toán bất biến BR-010; phân định FACT vs HYPOTHESIS</td>
-          </tr>
-          <tr>
-            <td><strong>6. Knowledge</strong></td>
-            <td><code>doc_id, category, verified_content, policy_version, effective_date</code></td>
-            <td>Vector DB / Markdown</td>
-            <td>Đóng băng tài liệu; kiểm duyệt nội dung y tế và từ cấm MKT-04</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div class="card card-purple">
-      <h2>2. Lược Đồ Dữ Liệu Chuẩn Customer 360 (JSON Schema FR-C360-001)</h2>
-      <pre>{
-  "customer_id": "CUST-TW-88291",
-  "phone_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-  "display_name": "Nguyen Van A",
-  "preferred_language": "vi-VN",
-  "trust_score": 94,
-  "consent_flags": { "marketing_sms": true, "line_oa": true, "timestamp": "2026-09-10T12:00:00Z" },
-  "delivery_defaults": { "cvs_chain": "7-Eleven", "store_code": "114523", "store_name": "Chi nhánh Trung Sơn Đào Viên" },
-  "lifecycle_state": "ACTIVE_REPEAT",
-  "timeline_events": [
-    { "event_id": "EV-001", "type": "ORDER_COMPLETED", "ref_order": "ORD-6671", "amount": 725, "date": "2026-09-10" },
-    { "event_id": "EV-002", "type": "SIM_RELOAD_DUE", "sim_serial": "SIM-8841", "due_date": "2026-10-07" }
-  ]
-}</pre>
+    <h2>3. Khóa Xung Đột Phiên (Session Mutex Lock) & Chống Bot Tự Giành Quyền</h2>
+    <div class="grid-2">
+      <div class="card">
+        <h3>Nguyên Tắc Độc Quyền Phát Tin</h3>
+        <p>Tại một thời điểm, chỉ đúng một thực thể (AI Agent <em>HOẶC</em> Nhân viên) được quyền gửi tin nhắn ra kênh tương tác bên ngoài. Khi nhân viên bấm <strong>Takeover</strong> tại SCR-005, Core Engine áp khóa phiên ở tầng máy chủ (<code>human.takeover</code> / session lock): AI Agent chuyển sang <strong>chế độ nháp/cộng tác (Copilot, AUTH-2)</strong> và không còn quyền phát tin cho tới khi nhân viên trả quyền. Việc thu hồi quyền phát tin là <strong>khóa phiên do con người kiểm soát</strong>, không phải cấp thẩm quyền; AUTH-5 chỉ là mức <em>cấm/hard deny</em>, không phải cấp "superuser" số.</p>
+      </div>
+      <div class="card">
+        <h3>Chế Độ Copilot & Khôi Phục Có Xác Thực</h3>
+        <p>Trong khi nhân viên đang tiếp quản, AI chuyển sang chế độ Copilot nháp (AUTH-2), chỉ hiển thị câu trả lời gợi ý trong màn hình quản trị nội bộ. Bot tuyệt đối không thể tự giành lại quyền phát tin. Quyền chat chỉ được trả lại khi nhân viên chủ động gửi lệnh <code>human.resume</code> có chữ ký số.</p>
+      </div>
     </div>
   </div>
+
   <div class="footer">
-    <span>Đặc Tả Kỹ Thuật Nền Tảng AI Agent · AI-REV-SRS-001</span>
+    <span>AgentOS Platform Blueprint — AI Revenue & Engagement Technical Specification (AI-REV-SPEC-2026)</span>
     <span>Trang 2 / 10</span>
   </div>
 </div>
 
-<!-- TRANG 3: TWO-STAGE RAG & 5 TẦNG AI MEMORY -->
+<!-- TRANG 3: KỸ NĂNG TIẾP THỊ & BÁN HÀNG -->
 <div class="page">
-  <div>
-    <div class="header">
-      <div class="header-left">
-        <h1>Kiến Trúc Two-Stage RAG & Hệ Thống 5 Tầng Bộ Nhớ AI</h1>
-        <p>Cơ chế truy vấn tri thức chính xác chống Hallucination & Bộ nhớ Second Brain</p>
-      </div>
-      <div class="header-tag">RAG & MEMORY · TRANG 3/10</div>
+  <div class="header">
+    <div class="header-left">
+      <h1>Hệ Thống Kỹ Năng Tiếp Thị & Bán Hàng (Marketing & Sales Skills)</h1>
+      <p>Hợp đồng kỹ năng chuẩn 11 trường, danh mục 7 kỹ năng Tiếp thị và 8 kỹ năng Bán hàng</p>
     </div>
-
-    <div class="card card-blue">
-      <h2>1. Pipeline Tìm Kiếm Tri Thức Hai Giai Đoạn (Two-Stage RAG)</h2>
-      <div style="background: #ffffff; border: 1px solid #bfdbfe; border-radius: 4px; padding: 7px;">
-        <div style="margin-bottom: 5px;">
-          <strong style="color: #1d4ed8;">GIAI ĐOẠN 1: TÌM KIẾM KẾT HỢP HYBRID RETRIEVAL (Recall Focus)</strong>
-          <p style="font-size: 8.5px; color: #334155;">Truy vấn đồng thời qua 2 kênh: <strong>Sparse Search (BM25)</strong> tìm chính xác mã SKU, tên thương hiệu và <strong>Dense Search (Vector Embedding)</strong> tìm kiếm theo ngữ nghĩa/mô tả tự nhiên. Hợp nhất bằng thuật toán RRF (Reciprocal Rank Fusion) lấy Top 30 đoạn văn bản ứng viên.</p>
-        </div>
-        <div style="border-top: 1px dashed #cbd5e1; padding-top: 5px;">
-          <strong style="color: #0284c7;">GIAI ĐOẠN 2: TÁI XẾP HẠNG CHUYÊN SÂU CROSS-ENCODER RERANKER (Precision Focus)</strong>
-          <p style="font-size: 8.5px; color: #334155;">Đưa câu hỏi và từng đoạn văn bản vào mô hình Cross-Encoder để chấm điểm liên quan thực sự. Áp dụng chốt chặn an toàn: <strong>Loại bỏ 100% các đoạn trích dẫn có điểm Score &lt; 0.82</strong>; chỉ giữ lại Top 3 trích dẫn có căn cứ chính thức để LLM sinh câu trả lời.</p>
-        </div>
-      </div>
-    </div>
-
-    <div class="card">
-      <h2>2. Cấu Trúc Thư Mục Knowledge Base 5 Ngành Hàng Đóng Băng</h2>
-      <table style="font-size: 8.5px;">
-        <thead>
-          <tr>
-            <th style="width: 25%;">Thư Mục Ngành Hàng</th>
-            <th style="width: 45%;">Phạm Vi Tri Thức Được Kiểm Duyệt</th>
-            <th>Cơ Chế Cập Nhật & Bảo Vệ</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><code>/01-fmcg/</code></td>
-            <td>Đặc sản quê hương, thành phần, hạn sử dụng, hướng dẫn bảo quản thực phẩm</td>
-            <td>Đồng bộ tự động từ trường Catalog ERP</td>
-          </tr>
-          <tr>
-            <td><code>/02-mobility/</code></td>
-            <td>Thông số xe máy điện mới 100%, bảo hành ắc quy, sạc chính hãng; cấm xe cũ</td>
-            <td>Chỉ xuất bản tài liệu kỹ thuật từ nhà sản xuất</td>
-          </tr>
-          <tr>
-            <td><code>/03-telecom/</code></td>
-            <td>Gói cước data SIM 30 ngày, cú pháp nạp thẻ, điều kiện duy trì sóng</td>
-            <td>Cập nhật theo biểu phí nhà mạng viễn thông</td>
-          </tr>
-          <tr>
-            <td><code>/04-cvs-logistics/</code></td>
-            <td>Quy chuẩn đóng gói, kích thước kiện hàng, thời gian lưu kho 4 chuỗi bưu cục</td>
-            <td>Tuân thủ quy chuẩn của 7-11, FamilyMart, Hi-Life, OK</td>
-          </tr>
-          <tr>
-            <td><code>/05-company-policy/</code></td>
-            <td>Chính sách đổi trả 7 ngày, quy định bảo mật Taiwan PDPA, cam kết giá</td>
-            <td>Phê duyệt bắt buộc bởi Pháp chế / Ban Giám đốc</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div class="card card-emerald">
-      <h2>3. Hệ Thống 5 Tầng Bộ Nhớ AI (Second Brain Hierarchy)</h2>
-      <div class="grid-2">
-        <div>
-          <strong style="color: #166534;">Working Memory (Tác vụ tức thời):</strong> Lưu giữ giỏ hàng tạm, biến thể đang chọn và bước mặc cả trong phiên chat.<br>
-          <strong style="color: #166534;">Short-Term Session Memory (Phiên 24h):</strong> Duy trì ngữ cảnh hội thoại trong 24 giờ để khách quay lại tiếp tục mà không cần hỏi lại.<br>
-          <strong style="color: #166534;">Long-Term Profile Memory (Customer 360):</strong> Lưu trữ hồ sơ bền vững: dòng xe đang đi, bưu cục quen thuộc, điểm tín nhiệm.
-        </div>
-        <div>
-          <strong style="color: #166534;">Episodic Interaction Memory:</strong> Ghi nhớ các sự cố khiếu nại cũ, lý do hủy đơn trước đây để cá nhân hóa lời xoa dịu.<br>
-          <strong style="color: #166534;">Semantic Knowledge Memory:</strong> Toàn bộ chính sách kinh doanh, bảng giá niêm yết được đóng băng bất biến trong Knowledge Base.
-        </div>
-      </div>
-    </div>
+    <div class="header-tag">Trang 3 / 10</div>
   </div>
+
+  <div class="content">
+    <h2>1. Đặc Tả Hợp Đồng Kỹ Năng (Skill System Contract Schema 11 Trường)</h2>
+    <div class="card" style="margin-bottom: 7px;">
+      <p style="font-size: 8.8px; margin-bottom: 3px;">Theo Mục 11 SRS, Agent và Skill tách biệt hoàn toàn. Mọi Skill bắt buộc tuân thủ Schema 11 trường:</p>
+      <div style="font-family: monospace; font-size: 7.5px; line-height: 1.35; background: #f1f5f9; padding: 5px; border-radius: 4px; color: #0f172a;">
+        { "skill_id": "skill.&lt;domain&gt;.&lt;action&gt;", "purpose": "Mục đích nghiệp vụ", "input_schema": {...}, "output_schema": {...}, "allowed_agents": ["..."], "required_authority": "AUTH-0".."AUTH-4", "tool_binding": "API/Adapter", "validation_rules": [...], "retry_policy": { "max_retries": 3, "backoff": "exponential" }, "timeout_ms": 3000, "audit_spec": { "evidence_card": "..." } }
+      </div>
+    </div>
+
+    <h2>2. Nhóm Kỹ Năng Tiếp Thị (Marketing Skills — 7 Skills Chuẩn)</h2>
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 25%;">Skill ID</th>
+          <th style="width: 36%;">Mục đích nghiệp vụ</th>
+          <th style="width: 14%;">Agent dùng</th>
+          <th style="width: 11%;">Authority</th>
+          <th style="width: 14%;">Tool Binding</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>skill.mkt.analyze_market_signal</code></td>
+          <td>Quét tín hiệu nhu cầu, từ khóa tìm kiếm và cơ hội thị trường mới</td>
+          <td>MKT-01</td>
+          <td>AUTH-1</td>
+          <td>Event Ingestion API-002</td>
+        </tr>
+        <tr>
+          <td><code>skill.mkt.segment_audience</code></td>
+          <td>Phân tích cohort/segment dựa trên dữ liệu giao dịch và RFM hợp lệ</td>
+          <td>MKT-02</td>
+          <td>AUTH-1</td>
+          <td>Customer 360 Ingestion</td>
+        </tr>
+        <tr>
+          <td><code>skill.mkt.check_consent</code></td>
+          <td>Xác minh trạng thái đồng ý nhận tin tiếp thị theo từng kênh (BR-004)</td>
+          <td>MKT-02, 05</td>
+          <td>AUTH-0</td>
+          <td>Consent Store</td>
+        </tr>
+        <tr>
+          <td><code>skill.mkt.generate_content</code></td>
+          <td>Sáng tạo bản thảo nội dung quảng cáo, bài viết, email theo brief</td>
+          <td>MKT-03</td>
+          <td>AUTH-2</td>
+          <td>Brand Template Engine</td>
+        </tr>
+        <tr>
+          <td><code>skill.mkt.audit_brand_compliance</code></td>
+          <td>Kiểm tra Tone of Voice, đối chiếu bảng giá ERP và rà soát từ cấm</td>
+          <td>MKT-04</td>
+          <td>AUTH-1</td>
+          <td>Second Brain /brand</td>
+        </tr>
+        <tr>
+          <td><code>skill.mkt.dispatch_campaign</code></td>
+          <td>Phát hành chiến dịch quảng cáo sau khi có phê duyệt (SCR-003)</td>
+          <td>MKT-05</td>
+          <td>AUTH-4</td>
+          <td>Communication API-003</td>
+        </tr>
+        <tr>
+          <td><code>skill.mkt.evaluate_attribution</code></td>
+          <td>Đo lường impressions, CAC, ROAS và quy thuộc doanh thu thực ERP</td>
+          <td>MKT-06</td>
+          <td>AUTH-0</td>
+          <td>Analytics Engine</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>3. Nhóm Kỹ Năng Bán Hàng (Sales Skills — 8 Skills Chuẩn)</h2>
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 25%;">Skill ID</th>
+          <th style="width: 36%;">Mục đích nghiệp vụ</th>
+          <th style="width: 14%;">Agent dùng</th>
+          <th style="width: 11%;">Authority</th>
+          <th style="width: 14%;">Tool Binding</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>skill.sales.search_product</code></td>
+          <td>Tra cứu danh mục, biến thể SKU và thông số kỹ thuật đã kiểm duyệt</td>
+          <td>SAL-02, 03</td>
+          <td>AUTH-0</td>
+          <td>Catalog Search API</td>
+        </tr>
+        <tr>
+          <td><code>skill.sales.check_stock</code></td>
+          <td>Kiểm tra tồn kho khả dụng thời gian thực từ ERP/WMS theo vùng</td>
+          <td>SAL-02..05</td>
+          <td>AUTH-0</td>
+          <td>WMS API-001</td>
+        </tr>
+        <tr>
+          <td><code>skill.sales.check_price</code></td>
+          <td>Tra cứu bảng giá niêm yết chính thức từ ERP; tuyệt đối cấm tự tạo giá</td>
+          <td>SAL-02, 03, 04</td>
+          <td>AUTH-0</td>
+          <td>ERP Pricing Engine</td>
+        </tr>
+        <tr>
+          <td><code>skill.sales.retrieve_customer</code></td>
+          <td>Truy xuất Customer 360: lịch sử mua, giỏ hàng, điểm sau xác minh</td>
+          <td>SAL-01..05</td>
+          <td>AUTH-0</td>
+          <td>Customer 360 Store</td>
+        </tr>
+        <tr>
+          <td><code>skill.sales.recommend_product</code></td>
+          <td>Sinh đề xuất cross/upsell kèm đủ 7 trường thông tin bắt buộc</td>
+          <td>SAL-03</td>
+          <td>AUTH-1</td>
+          <td>Recommendation Engine</td>
+        </tr>
+        <tr>
+          <td><code>skill.sales.create_cart</code></td>
+          <td>Tạo hoặc cập nhật giỏ hàng phiên của khách kèm chống trùng lặp</td>
+          <td>SAL-02, 04</td>
+          <td>AUTH-3</td>
+          <td>Commerce Cart API</td>
+        </tr>
+        <tr>
+          <td><code>skill.sales.create_order</code></td>
+          <td>Tạo đơn hàng nháp hoặc đơn cọc vào ERP có chữ ký giá máy chủ</td>
+          <td>SAL-02</td>
+          <td>AUTH-4</td>
+          <td>ERP OMS API-001</td>
+        </tr>
+        <tr>
+          <td><code>skill.sales.send_message</code></td>
+          <td>Gửi tin nhắn tư vấn hoặc nhắc giỏ hàng tuân thủ suppression rule</td>
+          <td>SAL-02, 04, 05</td>
+          <td>AUTH-3</td>
+          <td>Communication Gateway</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+
   <div class="footer">
-    <span>Đặc Tả Kỹ Thuật Nền Tảng AI Agent · AI-REV-SRS-001</span>
+    <span>AgentOS Platform Blueprint — AI Revenue & Engagement Technical Specification (AI-REV-SPEC-2026)</span>
     <span>Trang 3 / 10</span>
   </div>
 </div>
 
-<!-- TRANG 4: SKILL CONTRACTS & RECOMMENDATION CONTRACT -->
+<!-- TRANG 4: KỸ NĂNG CHĂM SÓC KHÁCH HÀNG & QUẢN LÝ CASE -->
 <div class="page">
-  <div>
-    <div class="header">
-      <div class="header-left">
-        <h1>Hệ Thống Kỹ Năng Chuẩn & Hợp Đồng Dữ Liệu Bán Hàng</h1>
-        <p>Decoupled Skill System & Hợp đồng đề xuất 7 trường dữ liệu chuẩn FR-SAL-003</p>
+  <div class="header">
+    <div class="header-left">
+      <h1>Kỹ Năng Chăm Sóc Khách Hàng & Quản Lý Vụ Việc (Case Management)</h1>
+      <p>Danh mục 8 kỹ năng CSKH & Giữ chân, Case Management FSM 7 trạng thái và tiêu chuẩn bàn giao</p>
+    </div>
+    <div class="header-tag">Trang 4 / 10</div>
+  </div>
+
+  <div class="content">
+    <h2>1. Nhóm Kỹ Năng Chăm Sóc Khách Hàng & Giữ Chân (Care & Retention — 8 Skills)</h2>
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 25%;">Skill ID</th>
+          <th style="width: 36%;">Mục đích nghiệp vụ</th>
+          <th style="width: 14%;">Agent dùng</th>
+          <th style="width: 11%;">Authority</th>
+          <th style="width: 14%;">Tool Binding</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><code>skill.care.search_faq</code></td>
+          <td>Tra cứu FAQ và chính sách đổi trả đã được phê duyệt trong Second Brain</td>
+          <td>CS-01</td>
+          <td>AUTH-0</td>
+          <td>Knowledge Base /care</td>
+        </tr>
+        <tr>
+          <td><code>skill.care.lookup_order</code></td>
+          <td>Tra cứu trạng thái đơn và lịch sử mua sắm từ ERP sau xác thực danh tính</td>
+          <td>CS-01</td>
+          <td>AUTH-0</td>
+          <td>ERP Connector API-001</td>
+        </tr>
+        <tr>
+          <td><code>skill.care.track_shipping</code></td>
+          <td>Tra cứu mã vận đơn và định vị bưu gửi siêu thị tiện lợi 7-Eleven</td>
+          <td>CS-01</td>
+          <td>AUTH-0</td>
+          <td>Logistics CVS Adapter</td>
+        </tr>
+        <tr>
+          <td><code>skill.care.manage_case</code></td>
+          <td>Khởi tạo, cập nhật trạng thái vụ việc theo FSM 7 bước chuẩn hóa</td>
+          <td>CS-01</td>
+          <td>AUTH-3</td>
+          <td>Case Management Store</td>
+        </tr>
+        <tr>
+          <td><code>skill.care.initiate_return</code></td>
+          <td>Tạo yêu cầu đổi trả nháp, thu thập ảnh bằng chứng; hoàn tiền cần duyệt</td>
+          <td>CS-01</td>
+          <td>AUTH-2 / 4</td>
+          <td>Returns Core API</td>
+        </tr>
+        <tr>
+          <td><code>skill.care.escalate_to_human</code></td>
+          <td>Bàn giao phiên chat cho nhân viên tại SCR-005, kích hoạt khóa phiên</td>
+          <td>CS-01</td>
+          <td>AUTH-3</td>
+          <td>Conversation Console</td>
+        </tr>
+        <tr>
+          <td><code>skill.care.analyze_churn_risk</code></td>
+          <td>Phát hiện tín hiệu ngừng mua, khách không hài lòng trên Customer 360</td>
+          <td>CS-02</td>
+          <td>AUTH-1</td>
+          <td>Retention Analytics</td>
+        </tr>
+        <tr>
+          <td><code>skill.care.issue_retention_offer</code></td>
+          <td>Cấp điểm thưởng tiến độ hoặc voucher giữ chân trong hạn mức ngân sách</td>
+          <td>CS-02</td>
+          <td>AUTH-3 / 4</td>
+          <td>Loyalty Engine</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>2. Máy Trạng Thái Quản Lý Vụ Việc (Case Management FSM 7 Trạng Thái)</h2>
+    <div class="card" style="margin-bottom: 7px;">
+      <p style="font-size: 8.8px; margin-bottom: 4px;">Theo Mục 8 SRS, mọi yêu cầu hỗ trợ hoặc khiếu nại đều được theo dõi theo State Machine chuẩn:</p>
+      <div style="font-family: monospace; font-size: 7.8px; line-height: 1.4; color: #1e293b;">
+        <code>NEW</code> (Vụ việc mới tạo từ chat/email) ➔ <code>CLASSIFIED</code> (Đã gắn intent &amp; độ ưu tiên vụ việc <code>CASE-PRI-1..4</code> — khác với mã Cổng kỹ thuật P0..P5) ➔<br>
+        <code>ASSIGNED</code> (Phân bổ cho CS-01/02 hoặc nhân viên) ➔ <code>IN_PROGRESS</code> (Đang tra cứu dữ liệu / xử lý) ➔<br>
+        ├─► <code>WAITING_CUSTOMER</code> (Tạm dừng tính SLA chờ khách bổ sung thông tin/ảnh chụp) ➔ <code>IN_PROGRESS</code><br>
+        ├─► <code>RESOLVED</code> (Đã cung cấp giải pháp; chờ khách xác nhận hài lòng CSAT)<br>
+        └─► <code>CLOSED</code> (Khách xác nhận hoặc quá 72h không có khiếu nại phát sinh).
       </div>
-      <div class="header-tag">SKILL CONTRACTS · TRANG 4/10</div>
     </div>
 
-    <div class="card">
-      <h2>1. Danh Mục 9 Kỹ Năng Hệ Thống Chuẩn (Skill Contracts)</h2>
-      <table style="font-size: 8.2px;">
-        <thead>
-          <tr>
-            <th style="width: 18%;">Skill ID</th>
-            <th style="width: 28%;">Mục Đích Nghiệp Vụ</th>
-            <th style="width: 14%;">Agent Phép Dùng</th>
-            <th style="width: 12%;">Thẩm Quyền</th>
-            <th>Quy Tắc Kiểm Tra & Audit</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><code>search-product</code></td>
-            <td>Tra cứu danh mục, thông số SKU theo từ khóa/mô tả</td>
-            <td>SAL-02, CS-01</td>
-            <td>AUTH-0</td>
-            <td>Lọc SKU đang bán (Active); log truy vấn Vector DB</td>
-          </tr>
-          <tr>
-            <td><code>check-stock</code></td>
-            <td>Kiểm tra tồn kho khả dụng theo SKU và vị trí kho</td>
-            <td>SAL-02, SAL-04</td>
-            <td>AUTH-0</td>
-            <td>Xác thực SKU tồn tại; Fail-Closed khi mất kết nối WMS</td>
-          </tr>
-          <tr>
-            <td><code>check-price</code></td>
-            <td>Tra cứu giá niêm yết P_base và chính sách giá</td>
-            <td>SAL-02, SAL-03</td>
-            <td>AUTH-0</td>
-            <td>Đọc từ ERP System of Record; cấm AI tự tạo giá BR-001</td>
-          </tr>
-          <tr>
-            <td><code>verify-pfloor</code></td>
-            <td><strong>Deterministic Engine:</strong> Kiểm tra code cứng P &ge; P_floor</td>
-            <td>SAL-02</td>
-            <td>AUTH-3</td>
-            <td>Chặn đứng Prompt Injection; bảo vệ 100% biên lãi ròng L</td>
-          </tr>
-          <tr>
-            <td><code>retrieve-customer</code></td>
-            <td>Đọc Customer 360: lịch sử mua, giỏ hàng, consent</td>
-            <td>SAL-01, CS-01</td>
-            <td>AUTH-0</td>
-            <td>Mã hóa dữ liệu nhạy cảm theo Taiwan PDPA NFR-006</td>
-          </tr>
-          <tr>
-            <td><code>recommend-product</code></td>
-            <td>Sinh đề xuất sản phẩm đóng gói đủ 7 trường chuẩn</td>
-            <td>SAL-03</td>
-            <td>AUTH-1</td>
-            <td>Bắt buộc đủ 7 trường; dưới điểm tin cậy &rarr; chặn hiển thị</td>
-          </tr>
-          <tr>
-            <td><code>create-cart</code></td>
-            <td>Thêm SKU vào giỏ hàng trượt Slide-Over Quick Cart</td>
-            <td>SAL-02, SAL-04</td>
-            <td>AUTH-3</td>
-            <td>Kiểm tra tồn kho; chống trùng thao tác bằng Idempotency Key</td>
-          </tr>
-          <tr>
-            <td><code>create-order</code></td>
-            <td>Tạo đơn hàng nháp hoặc đơn CVS COD chính thức</td>
-            <td>SAL-02</td>
-            <td>AUTH-4</td>
-            <td>Xác thực chữ ký báo giá HMAC; gắn Unique Execution ID</td>
-          </tr>
-          <tr>
-            <td><code>escalate-human</code></td>
-            <td>Bắn cảnh báo đỏ Telegram & chuyển giao SCR-005</td>
-            <td>CS-01, CS-02</td>
-            <td>AUTH-4</td>
-            <td>Ngắt bot &lt; 0.2s; báo Telegram &lt; 2p; tiếp quản &le; 1.0s</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div class="card card-blue">
-      <h2>2. Hợp Đồng Dữ Liệu Đề Xuất Chuẩn Bắt Buộc (FR-SAL-003 - MUST)</h2>
-      <p style="font-size: 8.5px; margin-bottom: 4px;">Mọi gợi ý sản phẩm từ SAL-03 bắt buộc phải đóng gói đầy đủ 7 trường dữ liệu có cấu trúc:</p>
-      <pre>{
-  "recommendation_id": "REC-2026-9912",
-  "customer": "CUST-TW-88291",
-  "product": { "sku": "SKU-FMCG-PIA-01", "name": "Bánh Pía Tân Huê Viên Sầu Riêng Trứng Muối", "price": 135 },
-  "reason": "Khách tìm kiếm đặc sản miền Tây ngọt bùi quê hương ăn kèm trà sau ca làm việc xưởng",
-  "evidence": { "search_intent": "bánh tròn ngọt sầu riêng", "past_purchases": ["Tra Lipton 100 goi"] },
-  "eligibility": { "stock_available": true, "consent_verified": true, "suppression_cleared": true },
-  "confidence": 0.92,
-  "expected_outcome": { "conversion_probability": 0.68, "expected_revenue": 270, "currency": "TWD" }
-}</pre>
+    <h2>3. Cấu Trúc Bản Ghi Vụ Việc (Case Record Schema) & Tiêu Chuẩn Bàn Giao</h2>
+    <div class="grid-2">
+      <div class="card">
+        <h3>Cấu Trúc Dữ Liệu Case Bắt Buộc</h3>
+        <p style="font-size: 8.5px; font-family: monospace; color: #0f172a;">
+          Case_Record = {<br>
+          &nbsp;&nbsp;case_id, customer_id, intent,<br>
+          &nbsp;&nbsp;priority: "P1" | "P2" | "P3" | "P4",<br>
+          &nbsp;&nbsp;conversation_id, related_order_id,<br>
+          &nbsp;&nbsp;evidence_refs: [evidence_id],<br>
+          &nbsp;&nbsp;owner_type: "AI" | "HUMAN", owner_id,<br>
+          &nbsp;&nbsp;status: "NEW".."CLOSED", sla_target,<br>
+          &nbsp;&nbsp;resolution_summary, outcome_metric<br>
+          }
+        </p>
+      </div>
+      <div class="card">
+        <h3>Gói Dữ Liệu Bàn Giao (Handoff Payload)</h3>
+        <p style="font-size: 8.5px; line-height: 1.35;">
+          Khi chuyển giao sang nhân viên tại SCR-005, hệ thống tự động đóng gói:
+        </p>
+        <ul style="font-size: 8px;">
+          <li>Danh tính khách hàng đã xác minh (Customer ID, Phone, Tier).</li>
+          <li>Tóm tắt vấn đề cốt lõi & cảm xúc khách hàng (Sentiment Score).</li>
+          <li>Mã đơn hàng liên quan, lịch sử tra cứu và các bước AI đã thử.</li>
+          <li>Đề xuất phương án xử lý gợi ý ở chế độ Copilot nháp (AUTH-2).</li>
+        </ul>
+      </div>
     </div>
   </div>
+
   <div class="footer">
-    <span>Đặc Tả Kỹ Thuật Nền Tảng AI Agent · AI-REV-SRS-001</span>
+    <span>AgentOS Platform Blueprint — AI Revenue & Engagement Technical Specification (AI-REV-SPEC-2026)</span>
     <span>Trang 4 / 10</span>
   </div>
 </div>
 
-<!-- TRANG 5: THUẬT TOÁN P_FLOOR & DETERMINISTIC POLICY DEFENSE -->
+<!-- TRANG 5: MÔ HÌNH DỮ LIỆU CỐT LÕI (CANONICAL DATA MODEL) -->
 <div class="page">
-  <div>
-    <div class="header">
-      <div class="header-left">
-        <h1>Thuật Toán Khóa Giá Sàn ($P_{floor}$) & Deterministic Policy Defense</h1>
-        <p>Bảo vệ biên lãi ròng bằng code logic cứng ngoài LLM & Quản trị FinOps Token</p>
+  <div class="header">
+    <div class="header-left">
+      <h1>Mô Hình Dữ Liệu Cốt Lõi (Canonical Data Model) & Customer 360</h1>
+      <p>28 Thực thể dữ liệu chuẩn hóa theo Mục 14 SRS, nguyên tắc Evidence Separation và 5 cấp AI Memory</p>
+    </div>
+    <div class="header-tag">Trang 5 / 10</div>
+  </div>
+
+  <div class="content">
+    <h2>1. Bảng 28 Thực Thể Dữ Liệu Cốt Lõi (Canonical Data Model)</h2>
+    <div class="grid-2">
+      <div>
+        <h3 style="color: #1e40af; font-size: 9px; margin-bottom: 2px;">Nhóm A: Khách Hàng & Giao Dịch (14 Thực Thể)</h3>
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 8%;">STT</th>
+              <th style="width: 32%;">Thực thể</th>
+              <th style="width: 25%;">Miền</th>
+              <th style="width: 35%;">SoR Thẩm quyền</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>1</td><td><strong>Customer</strong></td><td>Customer</td><td>CRM / ERP (API-001)</td></tr>
+            <tr><td>2</td><td><strong>Customer Identity</strong></td><td>Customer</td><td>Identity Service / SSO</td></tr>
+            <tr><td>3</td><td><strong>Consent</strong></td><td>Customer</td><td>Consent Store (API-002)</td></tr>
+            <tr><td>4</td><td><strong>Customer Event</strong></td><td>Customer</td><td>Event Ingestion (API-002)</td></tr>
+            <tr><td>5</td><td><strong>Product</strong></td><td>Commerce</td><td>ERP / PIM (API-001)</td></tr>
+            <tr><td>6</td><td><strong>SKU</strong></td><td>Commerce</td><td>ERP / WMS (API-001)</td></tr>
+            <tr><td>7</td><td><strong>Price</strong></td><td>Commerce</td><td>ERP Pricing (API-001)</td></tr>
+            <tr><td>8</td><td><strong>Inventory</strong></td><td>Commerce</td><td>WMS / ERP (API-001)</td></tr>
+            <tr><td>9</td><td><strong>Order</strong></td><td>Commerce</td><td>ERP / OMS (API-001)</td></tr>
+            <tr><td>10</td><td><strong>Invoice</strong></td><td>Commerce</td><td>ERP / Accounting</td></tr>
+            <tr><td>11</td><td><strong>Conversation</strong></td><td>Engagement</td><td>Communication Gateway</td></tr>
+            <tr><td>12</td><td><strong>Lead</strong></td><td>Engagement</td><td>CRM / Ingestion</td></tr>
+            <tr><td>13</td><td><strong>Opportunity</strong></td><td>Engagement</td><td>CRM (API-001)</td></tr>
+            <tr><td>14</td><td><strong>Campaign</strong></td><td>Engagement</td><td>Marketing Engine</td></tr>
+          </tbody>
+        </table>
       </div>
-      <div class="header-tag">PRICING DEFENSE · TRANG 5/10</div>
-    </div>
-
-    <div class="card card-amber">
-      <h2>1. Bản Cân Kinh Tế & Thuật Toán Giá Sàn Toán Học ($P_{floor}$)</h2>
-      <div class="grid-2">
-        <div>
-          <strong style="color: #92400e;">Công Thức Giá Sàn Bất Biến:</strong>
-          <pre style="background: #ffffff; color: #1e293b; border: 1px solid #cbd5e1; font-size: 8.5px;">
-P_floor = max((C + L) / (1 - r), P_base - D_cap)
-Điều kiện: 0 &le; r &lt; 1; dữ liệu chi phí hợp lệ.</pre>
-          <ul style="font-size: 8px; color: #78350f; margin-top: 3px;">
-            <li>$P_{base}$: Giá niêm yết chính thức trên ERP.</li>
-            <li>$C$: Giá vốn COGS + Token AI 0.5-1 TWD + Bao bì đóng gói.</li>
-            <li>$L$: Biên lãi ròng tối thiểu bắt buộc trên mỗi đơn.</li>
-            <li>$r$: Tỷ lệ chi phí thanh toán cổng thẻ/ví điện tử.</li>
-            <li>$D_{cap}$: Hạn mức chiết khấu tối đa của sản phẩm.</li>
-          </ul>
-        </div>
-        <div>
-          <strong style="color: #92400e;">Cơ Chế Giữ Chỗ Ngân Sách Nguyên Tử:</strong>
-          <ul style="font-size: 8.2px; color: #78350f;">
-            <li>Khi khách đồng ý mức giá $P_{offered} \ge P_{floor}$, máy chủ khóa giữ chỗ ngân sách trợ cấp và tồn kho trong cơ sở dữ liệu.</li>
-            <li><strong>TTL Khóa Giá 10 Phút:</strong> Phát hành Token chữ ký HMAC. Nếu khách không thanh toán trong 10 phút, báo giá tự động hủy và ngân sách hoàn về quỹ chung.</li>
-            <li>Ngăn chặn tình trạng nhiều đơn đồng thời cùng khai thác vượt ngân sách trợ cấp.</li>
-          </ul>
-        </div>
+      <div>
+        <h3 style="color: #166534; font-size: 9px; margin-bottom: 2px;">Nhóm B: Tương Tác & Điều Phối Quản Trị (14 Thực Thể)</h3>
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 8%;">STT</th>
+              <th style="width: 32%;">Thực thể</th>
+              <th style="width: 25%;">Miền</th>
+              <th style="width: 35%;">SoR Thẩm quyền</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr><td>15</td><td><strong>Segment</strong></td><td>Engagement</td><td>Audience Intelligence</td></tr>
+            <tr><td>16</td><td><strong>Offer</strong></td><td>Engagement</td><td>Promotion Engine</td></tr>
+            <tr><td>17</td><td><strong>Recommendation</strong></td><td>Engagement</td><td>Recommendation Agent</td></tr>
+            <tr><td>18</td><td><strong>Service Case</strong></td><td>Engagement</td><td>Case Store (CS-01)</td></tr>
+            <tr><td>19</td><td><strong>Agent</strong></td><td>Governance</td><td>AI Platform Registry</td></tr>
+            <tr><td>20</td><td><strong>Skill</strong></td><td>Governance</td><td>Skill Registry</td></tr>
+            <tr><td>21</td><td><strong>Workflow</strong></td><td>Governance</td><td>Revenue Orchestrator</td></tr>
+            <tr><td>22</td><td><strong>Decision</strong></td><td>Governance</td><td>Policy Engine</td></tr>
+            <tr><td>23</td><td><strong>Action</strong></td><td>Governance</td><td>Action Dispatcher</td></tr>
+            <tr><td>24</td><td><strong>Approval</strong></td><td>Governance</td><td>Approval Center SCR-003</td></tr>
+            <tr><td>25</td><td><strong>Execution</strong></td><td>Governance</td><td>Adapter Layer (effect_key)</td></tr>
+            <tr><td>26</td><td><strong>Evidence</strong></td><td>Governance</td><td>Audit Store / C360</td></tr>
+            <tr><td>27</td><td><strong>Outcome</strong></td><td>Governance</td><td>Analytics Engine (ERP)</td></tr>
+            <tr><td>28</td><td><strong>Learning</strong></td><td>Governance</td><td>Learning Memory</td></tr>
+          </tbody>
+        </table>
       </div>
     </div>
 
-    <div class="card card-red" style="background: #fef2f2; border-color: #fecaca;">
-      <h2 style="color: #991b1b;">2. Cơ Chế Chặn Đứng Tấn Công Prompt Injection / Hack Giá Sàn</h2>
-      <p style="font-size: 8.5px; color: #7f1d1d; margin-bottom: 4px;">Lớp code logic cứng ngoài LLM (Deterministic Policy Engine) hoạt động độc lập tại API Gateway:</p>
-      <pre style="background: #1e293b; font-size: 8px;">
-# Deterministic Policy Engine (Code logic cứng ngoài LLM)
-def verify_price_offer(sku, offered_price, customer_context):
-    pricing_data = erp_client.get_pricing_and_cost(sku)
-    cogs = pricing_data['cogs'] + FINOPS_TOKEN_BUDGET_TWD  # Đã gồm chi phí AI
-    p_floor = max((cogs + MIN_NET_MARGIN_L) / (1 - GATEWAY_FEE_R), pricing_data['p_base'] - D_CAP)
-    
-    # CHỐT CHẶN BẢO VỆ CỐT LÕI - LLM KHÔNG THỂ CAN THIỆP
-    if offered_price < p_floor:
-        audit_logger.record_violation(customer_context, offered_price, p_floor, reason="UNDER_FLOOR_ATTEMPT")
-        return {"status": "REJECT", "allowed_price": p_floor, "message": "Mức giá vi phạm giá sàn an toàn"}
-    
-    return {"status": "ACCEPT", "allowed_price": offered_price, "hmac_token": generate_hmac_quote(sku, offered_price)}</pre>
+    <h2>2. Cơ Chế Phân Định Bằng Chứng (FR-C360-003 - Evidence Separation)</h2>
+    <div class="card" style="margin-bottom: 6px;">
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr 1fr; gap: 3px; font-size: 7.8px; text-align: center;">
+        <div style="background: #e0f2fe; padding: 3px; border-radius: 3px;"><strong>1. FACT</strong><br>Dữ liệu sự thật ERP/POS</div>
+        <div style="background: #f0fdf4; padding: 3px; border-radius: 3px;"><strong>2. SIGNAL</strong><br>Hành vi số qua API-002</div>
+        <div style="background: #fef3c7; padding: 3px; border-radius: 3px;"><strong>3. HYPOTHESIS</strong><br>Giả thuyết AI suy luận</div>
+        <div style="background: #fae8ff; padding: 3px; border-radius: 3px;"><strong>4. DECISION</strong><br>Quyết định của Policy</div>
+        <div style="background: #ffe4e6; padding: 3px; border-radius: 3px;"><strong>5. ACTION</strong><br>Lệnh gắn effect_key</div>
+      </div>
+      <p style="font-size: 8px; color: #b91c1c; font-weight: 700; margin-top: 3px; text-align: center;">
+        QUY TẮC BẤT BIẾN: Giả thuyết AI (HYPOTHESIS) tuyệt đối không được ghi ngược thành Sự thật khách hàng (FACT).
+      </p>
     </div>
 
-    <div class="card card-blue">
-      <h2>3. Chiến Lược Quản Trị Chi Phí Vận Hành AI (FinOps AI)</h2>
-      <div class="grid-3">
-        <div style="background: #ffffff; padding: 5px; border-radius: 3px; border: 1px solid #bfdbfe;">
-          <strong style="color: #1d4ed8; font-size: 8.5px;">Định Mức Trần FinOps</strong>
-          <p style="font-size: 8px; color: #475569;">Duy trì chi phí token AI trung bình từ <strong>0.5 – 1.0 TWD/phiên</strong> tư vấn trọn gói (~400–800 VNĐ).</p>
-        </div>
-        <div style="background: #ffffff; padding: 5px; border-radius: 3px; border: 1px solid #bfdbfe;">
-          <strong style="color: #1d4ed8; font-size: 8.5px;">Semantic Prompt Caching</strong>
-          <p style="font-size: 8px; color: #475569;">Lưu bộ nhớ đệm cho câu hỏi FAQ và thông số sản phẩm, giảm 70% chi phí gọi lại LLM.</p>
-        </div>
-        <div style="background: #ffffff; padding: 5px; border-radius: 3px; border: 1px solid #bfdbfe;">
-          <strong style="color: #1d4ed8; font-size: 8.5px;">Context Compression</strong>
-          <p style="font-size: 8px; color: #475569;">Khi chat kéo dài quá 8 lượt, tự nén ngữ cảnh thành 3 dòng tóm tắt, ngăn bùng nổ token.</p>
-        </div>
+    <h2>3. Phân Tầng 5 Cấp Bộ Nhớ AI (AI Memory) & Second Brain</h2>
+    <div class="grid-2">
+      <div class="card">
+        <h3>5 Tầng Bộ Nhớ AI (AI Memory)</h3>
+        <ul style="font-size: 8px;">
+          <li><strong>Tầng 1 - Working Memory:</strong> RAM/Redis; giải phóng ngay sau lượt chat.</li>
+          <li><strong>Tầng 2 - Customer Context:</strong> PostgreSQL; nạp Customer 360 theo phiên.</li>
+          <li><strong>Tầng 3 - Organizational Knowledge:</strong> Second Brain 8 thư mục Markdown.</li>
+          <li><strong>Tầng 4 - Operational Memory:</strong> Bền vững; run_id, retry_count, mutex lock.</li>
+          <li><strong>Tầng 5 - Learning Memory:</strong> Analytics; chỉ số outcome, feedback SCR-005.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>Cấu Trúc Second Brain (21 Tệp Chuẩn / 8 Thư Mục theo Mục 10 SRS)</h3>
+        <p style="font-size: 7.2px; font-family: monospace; color: #1e40af; line-height: 1.35;">
+          /company (company.md, positioning.md) | /customer (customer.md, segmentation.md)<br>
+          /product (products.md, pricing.md, promotion-policy.md) | /brand (voice.md, terminology.md, prohibited-claims.md)<br>
+          /marketing (playbook.md, content-guidelines.md, campaign-rules.md) | /sales (sales-playbook.md, qualification.md, objection-handling.md)<br>
+          /customer-care (faq.md, support-policy.md, escalation.md) | /policy (authority.md, approval.md)
+        </p>
       </div>
     </div>
   </div>
+
   <div class="footer">
-    <span>Đặc Tả Kỹ Thuật Nền Tảng AI Agent · AI-REV-SRS-001</span>
+    <span>AgentOS Platform Blueprint — AI Revenue & Engagement Technical Specification (AI-REV-SPEC-2026)</span>
     <span>Trang 5 / 10</span>
   </div>
 </div>
 
-<!-- TRANG 6: BẢN THIẾT KẾ 5 MÀN HÌNH HUMAN COMMAND CENTER -->
+<!-- TRANG 6: QUẢN TRỊ QUYỀN HẠN & BUSINESS RULES -->
 <div class="page">
-  <div>
-    <div class="header">
-      <div class="header-left">
-        <h1>Thiết Kế Giao Diện Human Command Center (SCR-001..005)</h1>
-        <p>Bảng điều khiển quản trị tập trung dành cho đội ngũ vận hành và quản lý</p>
-      </div>
-      <div class="header-tag">COMMAND CENTER · TRANG 6/10</div>
+  <div class="header">
+    <div class="header-left">
+      <h1>Quản Trị Quyền Hạn, Quy Tắc Nghiệp Vụ & An Toàn Thất Bại</h1>
+      <p>Mô hình Authority 6 cấp, 10 Business Rules bắt buộc, thuật toán giá sàn toán học và an toàn Fail Closed</p>
+    </div>
+    <div class="header-tag">Trang 6 / 10</div>
+  </div>
+
+  <div class="content">
+    <h2>1. Mô Hình Phân Quyền 6 Cấp Độ (Authority Model AUTH-0..5)</h2>
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 12%;">Cấp độ</th>
+          <th style="width: 18%;">Tên quyền</th>
+          <th style="width: 35%;">Ranh giới hoạt động cho phép</th>
+          <th style="width: 35%;">Ví dụ áp dụng thực tế</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="badge badge-gray">AUTH-0</span></td>
+          <td><strong>Observe</strong></td>
+          <td>Chỉ đọc dữ liệu, dòng sự kiện và tài liệu công khai trong Second Brain.</td>
+          <td>Đọc Timeline Customer 360, tra cứu tồn kho, kiểm tra giá niêm yết ERP.</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-blue">AUTH-1</span></td>
+          <td><strong>Recommend</strong></td>
+          <td>Phân tích dữ liệu và đề xuất phương án cho con người hoặc Agent khác.</td>
+          <td>Chấm điểm Lead (Scoring), gợi ý sản phẩm cross-sell/bundle, cảnh báo churn.</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-purple">AUTH-2</span></td>
+          <td><strong>Draft</strong></td>
+          <td>Tạo nội dung hoặc hành động ở dạng bản nháp nội bộ, chưa phát ra ngoài.</td>
+          <td>Soạn thảo bài viết quảng cáo, tạo đơn đổi trả nháp, gợi ý câu trả lời Copilot.</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-green">AUTH-3</span></td>
+          <td><strong>Bounded Execute</strong></td>
+          <td>Tự thực thi các tác vụ rủi ro thấp trong hạn mức và tần suất cho phép.</td>
+          <td>Trả lời FAQ đã duyệt, tra cứu trạng thái đơn, gửi tin nhắc giỏ theo lịch.</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-amber">AUTH-4</span></td>
+          <td><strong>Approval Required</strong></td>
+          <td>Chuẩn bị payload nhưng bắt buộc dừng chờ con người phê duyệt tại SCR-003.</td>
+          <td>Phát động chiến dịch lớn, chiết khấu vượt trần, bồi thường, hoàn tiền.</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-red">AUTH-5</span></td>
+          <td><strong>Prohibited</strong></td>
+          <td>Mức cấm tuyệt đối (hard deny) — không phải cấp thẩm quyền hay "superuser"; hệ thống chặn cứng ở tầng máy chủ (Hard Server Lock).</td>
+          <td>Tự ý tạo giá mới, truy cập chéo tenant, xuất dữ liệu cá nhân thô, tự nâng quyền.</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <h2>2. 10 Quy Tắc Nghiệp Vụ Bắt Buộc (Core Business Rules BR-001..BR-010)</h2>
+    <div class="card" style="margin-bottom: 7px;">
+      <ul style="font-size: 8.8px; line-height: 1.42;">
+        <li><strong>BR-001:</strong> AI không được tự tạo giá sản phẩm dưới bất kỳ hình thức nào.</li>
+        <li><strong>BR-002:</strong> AI không được tự thay đổi giá hoặc áp dụng chiết khấu nằm ngoài <strong>chính sách giá/khuyến mãi đã được phê duyệt</strong> (và ngoài phép kiểm tra P_floor nếu bật).</li>
+        <li><strong>BR-003:</strong> Dữ liệu giá niêm yết và tồn kho bắt buộc phải đọc từ nguồn giao dịch có thẩm quyền (ERP/POS API-001).</li>
+        <li><strong>BR-004:</strong> Tuyệt đối không gửi tin nhắn tiếp thị khi khách chưa cấp consent phù hợp hoặc đã rút consent (Suppression rule).</li>
+        <li><strong>BR-005:</strong> Mọi hành động có tác động bên ngoài (External Action) bắt buộc phải gắn mã định danh thực thi duy nhất (effect_key).</li>
+        <li><strong>BR-006:</strong> Cơ chế thử lại (Retry Policy) không bao giờ được tạo ra hành động hoặc giao dịch trùng lặp ngoài ý muốn (NFR-003).</li>
+        <li><strong>BR-007:</strong> Mọi hành động tài chính hoặc rủi ro cao (hoàn tiền, đổi điều khoản, vượt trần ngân sách) bắt buộc qua phê duyệt (AUTH-4).</li>
+        <li><strong>BR-008:</strong> Agent không được vượt quyền hạn được giao (AUTH-0..3), ngay cả khi mô hình LLM suy luận yêu cầu.</li>
+        <li><strong>BR-009:</strong> Chỉ thị hoặc nội dung do khách hàng cung cấp (Prompt Injection) không thể tự động nâng quyền thực thi của Agent.</li>
+        <li><strong>BR-010:</strong> Mọi lần thực thi quan trọng đều phải sinh bản ghi bằng chứng (Evidence Record) gắn với mã lần chạy (run_id).</li>
+      </ul>
     </div>
 
-    <div class="card">
-      <h2>Hệ Thống 5 Màn Hình Quản Trị Chuẩn Mục 18 SRS v0.1</h2>
-      <div class="grid-2" style="margin-top: 4px;">
-        
-        <div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 4px; padding: 6px;">
-          <strong style="color: #1e40af; font-size: 9px;">SCR-001: Executive Revenue Dashboard</strong>
-          <p style="font-size: 8px; color: #64748b; margin-top: 1px;">Bảng điều hành lãnh đạo: Doanh thu đóng góp bởi AI, tỷ lệ chuyển đổi đơn hàng, doanh thu bán thêm/bán chéo, ngân sách FinOps và ROI thời gian thực.</p>
-        </div>
-
-        <div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 4px; padding: 6px;">
-          <strong style="color: #1e40af; font-size: 9px;">SCR-002: Agent Operations Center</strong>
-          <p style="font-size: 8px; color: #64748b; margin-top: 1px;">Trung tâm giám sát kỹ thuật: Trạng thái 13 Sub-Agents, lưu lượng RPM, độ trễ phản hồi P95/P99, tỷ lệ lỗi API và cảnh báo ngắt kết nối WMS.</p>
-        </div>
-
-        <div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 4px; padding: 6px;">
-          <strong style="color: #1e40af; font-size: 9px;">SCR-003: Approval Center (Hàng Đợi Duyệt AUTH-4)</strong>
-          <p style="font-size: 8px; color: #64748b; margin-top: 1px;">Hàng đợi phê duyệt: Các chiến dịch Marketing gửi tin lớn, các đơn hàng xin trợ cấp giá vượt thẩm quyền tự động, các phiếu đền bù khiếu nại.</p>
-        </div>
-
-        <div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 4px; padding: 6px;">
-          <strong style="color: #1e40af; font-size: 9px;">SCR-004: Customer 360 & Memory Explorer</strong>
-          <p style="font-size: 8px; color: #64748b; margin-top: 1px;">Khám phá hồ sơ khách hàng: Tra cứu lịch sử đơn hàng ERP, dòng thời gian tương tác (Timeline), điểm tín nhiệm Trust Score và trạng thái consent.</p>
-        </div>
-
+    <h2>3. Thuật Toán Giá Sàn Toán Học (P_floor) &amp; Cơ Chế Trợ Cấp Chốt Đơn — Mô Hình Đề Xuất</h2>
+    <div class="grid-2">
+      <div class="card-highlight">
+        <h3 style="color: #1e40af;">Công Thức Kiểm Tra Giá Sàn (Đề Xuất)</h3>
+        <p style="font-family: monospace; font-size: 8px; background: #ffffff; padding: 3px; border-radius: 3px; margin-bottom: 3px;">
+          P_floor = max( (C + L) / (1 - r) , P_base - D_cap )
+        </p>
+        <p style="font-size: 8.5px;">
+          Công thức đầy đủ và định nghĩa từng biến (C, L, r, P_base, D_cap) nằm tại <code>plans/delivery/analytics.md</code> (ECN-002). Hệ thống từ chối mọi mức giá đề xuất thấp hơn P_floor (phép kiểm tra chính sách đề xuất, có thể tắt). Giá niêm yết, discount và trần trợ cấp có thẩm quyền vẫn thuộc ERP/POS (SoR) cùng chính sách đã phê duyệt (ASM-003); AI chỉ đề xuất trong hạn mức <code>Subsidy_Max = P_listed - P_floor</code>. Ngân sách trợ cấp dựa trên giả định tiết kiệm hoa hồng telesales 5–10% (ECN-001 — chưa kiểm chứng).
+        </p>
       </div>
-
-      <div style="background: #ffffff; border: 1px solid #cbd5e1; border-radius: 4px; padding: 6px; margin-top: 6px;">
-        <strong style="color: #dc2626; font-size: 9px;">SCR-005: Conversation Console & Human Takeover (&le; 1.0s)</strong>
-        <p style="font-size: 8px; color: #64748b; margin-top: 1px;">Màn hình giám sát hội thoại trực tiếp giữa AI và khách hàng. Tích hợp nút bấm <strong>[Tiếp Quản Hội Thoại]</strong>; khi nhân viên bấm tiếp quản, hệ thống ngắt bot và cấp quyền chat trực tiếp cho nhân sự trong vòng <strong>&le; 1.0 giây</strong>.</p>
-      </div>
-    </div>
-
-    <div class="card card-purple">
-      <h2>Bản Vẽ Mô Phỏng Giao Diện Màn Hình SCR-005 (Live Console UI Mockup)</h2>
-      <div style="background: #0f172a; color: #e2e8f0; border-radius: 4px; padding: 7px; font-family: Consolas, monospace; font-size: 7.8px; line-height: 1.35;">
-        <div style="border-bottom: 1px solid #334155; padding-bottom: 4px; margin-bottom: 5px; display: flex; justify-content: space-between;">
-          <span style="color: #38bdf8;">[CONVERSATION CONSOLE] Room: #CHAT-88291 · Customer: Nguyen Van A (Đào Viên)</span>
-          <span style="color: #ef4444; font-weight: 700;">[STATUS: CRISIS ALERT DETECTED]</span>
-        </div>
-        <div style="color: #94a3b8;">14:32:01 [USER]: Shop làm ăn kiểu gì thế hả? Bánh nhận ở 7-11 về mở ra bị nát bét rồi!</div>
-        <div style="color: #fbbf24;">14:32:02 [BOT AI]: Em vô cùng xin lỗi anh vì sự cố vận chuyển! Em đã chuyển ưu tiên cao nhất tới Quản lý...</div>
-        <div style="color: #4ade80;">14:32:03 [SYSTEM]: Bot Auto-Responder DISABLED. Telegram alert sent to CS Manager.</div>
-        <div style="margin-top: 5px; background: #1e293b; padding: 4px 6px; border-radius: 3px; display: flex; justify-content: space-between; align-items: center;">
-          <span style="color: #f8fafc;">&gt;&gt; NHÂN VIÊN TRỰC CA: LE THI LINH (ID: EMP-04)</span>
-          <span style="background: #dc2626; color: #ffffff; padding: 2px 6px; border-radius: 3px; font-weight: 700;">[BẤM ĐÂY TIẾP QUẢN &le; 1.0S]</span>
-        </div>
+      <div class="card-highlight">
+        <h3 style="color: #1e40af;">Nguyên Tắc An Toàn Thất Bại (Fail Closed - NFR-008)</h3>
+        <p style="font-size: 8.5px;">
+          Khi hệ thống gặp sự cố mất kết nối ERP, không xác minh được giá niêm yết, tồn kho, ranh giới quyền hạn hoặc trạng thái consent:
+        </p>
+        <ul style="font-size: 8px;">
+          <li>Hệ thống <strong>Fail Closed</strong>: Chặn thực thi ngay lập tức, không gửi tin đoán mò.</li>
+          <li>Chuyển trạng thái sang <code>uncertain</code> và tạo ticket thông báo cho nhân sự tại SCR-002.</li>
+          <li>Tuyệt đối không giả định thất bại để tự ý chạy lại gây phát sinh giao dịch kép.</li>
+        </ul>
       </div>
     </div>
   </div>
+
   <div class="footer">
-    <span>Đặc Tả Kỹ Thuật Nền Tảng AI Agent · AI-REV-SRS-001</span>
+    <span>AgentOS Platform Blueprint — AI Revenue & Engagement Technical Specification (AI-REV-SPEC-2026)</span>
     <span>Trang 6 / 10</span>
   </div>
 </div>
 
-<!-- TRANG 7: CASE MANAGEMENT, CRISIS ALERT & CVS LOGISTICS -->
+<!-- TRANG 7: HỆ THỐNG QUAN SÁT & HUMAN COMMAND CENTER -->
 <div class="page">
-  <div>
-    <div class="header">
-      <div class="header-left">
-        <h1>Quản Lý Vụ Việc, Báo Động Đỏ & Giao Vận 4 Chuỗi Bưu Cục</h1>
-        <p>State Machine xử lý khiếu nại, quy trình tiếp quản khẩn cấp và cổng CVS COD</p>
+  <div class="header">
+    <div class="header-left">
+      <h1>Hệ Thống Quan Sát, Kiểm Toán & Human Command Center</h1>
+      <p>Lược đồ 18 trường Agent Run Log theo Mục 17 SRS, kèm dấu thời gian, chuỗi băm SHA-256 và đặc tả 5 màn hình chỉ huy quản trị</p>
+    </div>
+    <div class="header-tag">Trang 7 / 10</div>
+  </div>
+
+  <div class="content">
+    <h2>1. Lược Đồ Nhật Ký Kiểm Toán Lần Chạy (Agent Run Log Schema — Chuẩn Mục 17 SRS & NFR-006)</h2>
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 5%;">STT</th>
+          <th style="width: 22%;">Trường dữ liệu</th>
+          <th style="width: 14%;">Kiểu dữ liệu</th>
+          <th style="width: 59%;">Định nghĩa kỹ thuật & Quy cách bắt buộc theo Mục 17 SRS</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>1</td><td><code>run_id</code></td><td>UUID v4</td><td>Mã định danh duy nhất của phiên chạy Agent; bất biến và chống trùng lặp.</td></tr>
+        <tr><td>2</td><td><code>tenant_id</code></td><td>UUID v4 / String</td><td>Mã định danh doanh nghiệp; bắt buộc tại mọi bản ghi kiểm toán bảo đảm cách ly đa khách hàng (NFR-006).</td></tr>
+        <tr><td>3</td><td><code>agent_id</code></td><td>String</td><td>Mã Agent thực thi (ví dụ: MKT-05, SAL-02, CS-01) đã đăng ký trong Platform Registry.</td></tr>
+        <tr><td>4</td><td><code>customer_or_entity_id</code></td><td>String</td><td>Mã định danh khách hàng hoặc thực thể nghiệp vụ chịu tác động (customer_id, lead_id, case_id).</td></tr>
+        <tr><td>5</td><td><code>trigger</code></td><td>String</td><td>Sự kiện hoặc tín hiệu kích hoạt lượt chạy (cart.abandoned, message.received, lead.qualified).</td></tr>
+        <tr><td>6</td><td><code>context</code></td><td>JSON Object</td><td>Ảnh chụp ngữ cảnh đầu vào: lát cắt Customer 360, trạng thái consent, phiên hội thoại.</td></tr>
+        <tr><td>7</td><td><code>skill</code></td><td>String</td><td>Mã kỹ năng chuẩn được kích hoạt (ví dụ: skill.sales.check_stock, skill.care.lookup_order).</td></tr>
+        <tr><td>8</td><td><code>tool</code></td><td>String</td><td>Cổng kết nối Adapter hoặc API liên kết (API-001 ERP Connector, ADPT-TW-001 LINE).</td></tr>
+        <tr><td>9</td><td><code>decision</code></td><td>JSON Object</td><td>Quyết định nghiệp vụ logic được Orchestrator xác lập kèm lý do (Reason + Evidence).</td></tr>
+        <tr><td>10</td><td><code>authority</code></td><td>Enum</td><td>Cấp độ thẩm quyền được áp dụng cho hành động này (AUTH-0 đến AUTH-5).</td></tr>
+        <tr><td>11</td><td><code>approval</code></td><td>JSON / null</td><td>Bản ghi phê duyệt của con người nếu là AUTH-4: {approver_id, decision, timestamp, reason}.</td></tr>
+        <tr><td>12</td><td><code>action</code></td><td>JSON Object</td><td>Payload chi tiết của lệnh hành động gửi ra ngoài kèm mã duy nhất effect_key (BR-005).</td></tr>
+        <tr><td>13</td><td><code>execution_status</code></td><td>Enum</td><td>Trạng thái thực thi: pending, executing, success, failed, denied, aborted.</td></tr>
+        <tr><td>14</td><td><code>evidence</code></td><td>JSON Object</td><td>Bằng chứng xác thực từ hệ thống nguồn (mã vận đơn, mã đơn ERP, message ID).</td></tr>
+        <tr><td>15</td><td><code>outcome</code></td><td>JSON / null</td><td>Kết quả kinh doanh thực tế đối soát: order_created, cart_recovered, case_resolved.</td></tr>
+        <tr><td>16</td><td><code>latency_ms</code></td><td>Integer</td><td>Tổng thời gian thực thi của phiên chạy tính bằng mili-giây (ms).</td></tr>
+        <tr><td>17</td><td><code>cost</code></td><td>JSON Object</td><td>Chi phí vận hành: Token input/output, chi phí API mô hình, phí kết nối Adapter quy đổi.</td></tr>
+        <tr><td>18</td><td><code>error</code></td><td>JSON / null</td><td>Chi tiết mã lỗi, nhật ký lỗi (error stack trace) và nguyên nhân thất bại nếu có.</td></tr>
+        <tr><td>*</td><td><code>timestamp</code></td><td>ISO 8601 UTC</td><td>Dấu thời gian cam kết của bản ghi kiểm toán; khóa cứng thứ tự dòng thời gian.</td></tr>
+        <tr><td>*</td><td><code>chain_hash</code></td><td>CHAR(64) Hex</td><td>Mã băm mật mã SHA-256 nối chuỗi với bản ghi trước đó (NFR-002 Chống giả mạo).</td></tr>
+      </tbody>
+    </table>
+
+    <h2>2. Đặc Tả 5 Màn Hình Human Command Center (SCR-001..SCR-005)</h2>
+    <div class="grid-2">
+      <div class="card">
+        <h3>SCR-001 - Executive Dashboard</h3>
+        <p>Bảng điều khiển kinh doanh: Doanh thu tổng, Doanh thu do AI đóng góp (AI Generated Revenue), Khách tiềm năng (Leads), Tỷ lệ chuyển đổi, Trạng thái CSKH, Cảnh báo bất thường thời gian thực.</p>
       </div>
-      <div class="header-tag">SUPPORT & LOGISTICS · TRANG 7/10</div>
+      <div class="card">
+        <h3>SCR-002 - Agent Operations Console</h3>
+        <p>Giám sát kỹ thuật: Trạng thái Agent online/offline, lượt chạy (run history), tần suất gọi tool, độ trễ latency (p50, p95), chi phí token/API thời gian thực và nhật ký cảnh báo lỗi (Error stack).</p>
+      </div>
+      <div class="card-highlight">
+        <h3 style="color: #1e40af;">SCR-003 - Approval Center (5 Thao Tác Chuẩn)</h3>
+        <p>Cổng phê duyệt bắt buộc cho mọi hành động AUTH-4. Hỗ trợ 5 nút thao tác chuẩn hóa:</p>
+        <ul style="font-size: 8px;">
+          <li><strong>Approve:</strong> Phê duyệt thực thi lệnh ra kênh ngoài ngay lập tức.</li>
+          <li><strong>Reject:</strong> Từ chối lệnh; ghi nhận lý do vào nhật ký kiểm toán.</li>
+          <li><strong>Modify:</strong> Chỉnh sửa nội dung thông điệp/tham số ưu đãi trước khi bấm duyệt.</li>
+          <li><strong>Pause:</strong> Tạm giữ quy trình để thẩm tra thêm thông tin.</li>
+          <li><strong>Cancel:</strong> Hủy bỏ hoàn toàn quy trình và giải phóng tài nguyên.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3>SCR-004 - Customer 360 & Timeline Console</h3>
+        <p>Hồ sơ khách hàng hợp nhất trên Timeline thời gian thực: View ➔ Cart ➔ Order ➔ Support. Tích hợp Thẻ bằng chứng (Evidence Card) và phân tách rạch ròi giữa FACT và HYPOTHESIS.</p>
+      </div>
     </div>
 
-    <div class="card card-emerald">
-      <h2>1. State Machine Quản Lý Vụ Việc CSKH (Case Lifecycle)</h2>
-      <div style="background: #ffffff; border: 1px solid #a7f3d0; border-radius: 4px; padding: 6px; text-align: center; font-size: 8.5px; font-weight: 700; color: #166534;">
-        [NEW] &rarr; [CLASSIFIED] &rarr; [ASSIGNED] &rarr; [IN_PROGRESS] &rarr; [WAITING_CUSTOMER] &rarr; [RESOLVED] &rarr; [CLOSED / REOPENED]
-      </div>
-      <p style="font-size: 8px; color: #334155; margin-top: 4px;">
-        Đặc tả trạng thái: <code>REOPENED</code> cho phép tự động mở lại vụ việc khi khách khiếu nại tiếp mà vẫn giữ nguyên mã Case ID cũ và toàn bộ bằng chứng đối soát lịch sử.
+    <div class="card" style="margin-top: 5px;">
+      <h3>SCR-005 - Conversation Console (Theo Dõi Trực Tiếp & Can Thiệp Tức Thì)</h3>
+      <p style="font-size: 8.8px;">
+        Giám sát phiên chat AI - Khách hàng trực tiếp. Hỗ trợ nhân viên: <strong>Takeover</strong> (ngắt quyền AI ngay lập tức để nhân viên chat), <strong>Resume</strong> (trả quyền lại cho AI sau xử lý), chỉnh sửa câu trả lời nháp của AI (Copilot Mode AUTH-2), và chấm điểm đánh giá chất lượng hội thoại (Human Evaluation Score).
       </p>
     </div>
-
-    <div class="card card-amber">
-      <h2>2. Quy Trình Xử Lý Báo Động Đỏ Crisis Alert & Human Takeover &le; 1.0s</h2>
-      <table>
-        <thead>
-          <tr>
-            <th style="width: 20%;">Thời Điểm</th>
-            <th style="width: 35%;">Hành Động Hệ Thống Tự Động</th>
-            <th>Tiêu Chuẩn SLA & Bằng Chứng</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><strong>T = 0.0s &rarr; 0.2s</strong></td>
-            <td>Phát hiện Intent tiêu cực gay gắt; ngắt quyền tự động của bot ngay lập tức; phát lời xoa dịu trung thực</td>
-            <td>Độ trễ ngắt bot &lt; 0.2s; không phát ngôn sai lệch</td>
-          </tr>
-          <tr>
-            <td><strong>T = 0.2s &rarr; 120s</strong></td>
-            <td>Bắn Webhook cảnh báo đỏ khẩn cấp [CRISIS ALERT] qua Telegram Bot tới nhóm Quản lý; đẩy lên đầu màn hình SCR-005</td>
-            <td>Thời gian gửi cảnh báo Telegram &lt; 2 phút</td>
-          </tr>
-          <tr>
-            <td><strong>T &le; 1.0s (Takeover)</strong></td>
-            <td>Nhân sự bấm nút [Tiếp Quản]; hệ thống khóa AI, chuyển toàn bộ ngữ cảnh và cấp quyền chat trực tiếp cho nhân viên</td>
-            <td>Thời gian chuyển giao quyền &le; 1.0 giây</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
-
-    <div class="card">
-      <h2>3. Cổng Kết Nối Logistics 4 Chuỗi Bưu Cục Tiện Lợi (CVS Connectors)</h2>
-      <div class="grid-2">
-        <div>
-          <strong style="color: #1e40af;">Hạ Tầng 4 Chuỗi Bưu Cục Siêu Thị:</strong>
-          <ul>
-            <li><strong>7-Eleven:</strong> Tích hợp E-Map API chọn chi nhánh, mạng lưới dày đặc ga tàu & xưởng.</li>
-            <li><strong>FamilyMart:</strong> Cổng kết nối FamiPort nhận hàng CVS COD.</li>
-            <li><strong>Hi-Life:</strong> Phủ kín các khu dân cư và ký túc xá công nhân.</li>
-            <li><strong>OK Mart:</strong> Điểm nhận bưu kiện thuận tiện vùng ven công nghiệp.</li>
-          </ul>
-        </div>
-        <div>
-          <strong style="color: #1e40af;">Quy Trình Nghiệp Vụ Thực Địa:</strong>
-          <ul>
-            <li><strong>Store Selection TTL:</strong> Đồng hồ đếm ngược 10 phút khóa giữ chỗ bưu cục nhận hàng.</li>
-            <li><strong>Webhook Hoãn Giao Bão Lũ:</strong> Tự động gửi tin trấn an khi chính quyền ban bố lệnh nghỉ bão (停班停課).</li>
-            <li><strong>Chế Tài Bùng Hàng (未取貨):</strong> Hạ Trust Score, khóa quyền COD và tước quyền trợ cấp giá 90–180 ngày.</li>
-          </ul>
-        </div>
-      </div>
-    </div>
   </div>
+
   <div class="footer">
-    <span>Đặc Tả Kỹ Thuật Nền Tảng AI Agent · AI-REV-SRS-001</span>
+    <span>AgentOS Platform Blueprint — AI Revenue & Engagement Technical Specification (AI-REV-SPEC-2026)</span>
     <span>Trang 7 / 10</span>
   </div>
 </div>
 
-<!-- TRANG 8: THẨM QUYỀN AUTH-0..5, 10 QUY TẮC BR & NFRs -->
+<!-- TRANG 8: CỔNG TÍCH HỢP CẮM-RÚT & YÊU CẦU PHI CHỨC NĂNG -->
 <div class="page">
-  <div>
-    <div class="header">
-      <div class="header-left">
-        <h1>Ma Trận Thẩm Quyền AUTH-0..5, 10 Quy Tắc BR & Tiêu Chuẩn NFRs</h1>
-        <p>Khung quản trị kiểm soát hành vi AI và các tiêu chuẩn phi chức năng cấp Enterprise</p>
+  <div class="header">
+    <div class="header-left">
+      <h1>Cổng Tích Hợp Cắm-Rút (Adapters) & Yêu Cầu Phi Chức Năng</h1>
+      <p>Cổng kết nối bản địa hóa Đài Loan, cổng cắm-rút toàn cầu và 10 chuẩn phi chức năng NFRs</p>
+    </div>
+    <div class="header-tag">Trang 8 / 10</div>
+  </div>
+
+  <div class="content">
+    <h2>1. Tầng Giao Tiếp Cốt Lõi (Core API Layer)</h2>
+    <div class="grid-3">
+      <div class="card">
+        <h3>API-001 - ERP/POS Connector</h3>
+        <p>Giao thức REST/GraphQL đọc bảng giá, tồn kho, SKU, đơn hàng; tạo Draft Order có chữ ký số bảo mật.</p>
       </div>
-      <div class="header-tag">GOVERNANCE & NFRS · TRANG 8/10</div>
+      <div class="card">
+        <h3>API-002 - Event Ingestion</h3>
+        <p>Thu nhận dòng sự kiện Web/App thời gian thực (pageview, add_to_cart, checkout) với mục tiêu thiết kế độ trễ nạp &lt; 200ms (chưa benchmark).</p>
+      </div>
+      <div class="card">
+        <h3>API-003 - Communication Bus</h3>
+        <p>Cổng phân phối tin nhắn đa kênh kết nối Adapter (LINE, WhatsApp, TikTok, Web Widget, Zalo, Messenger).</p>
+      </div>
     </div>
 
-    <div class="card card-blue">
-      <h2>1. Hệ Thống 10 Quy Tắc Nghiệp Vụ Bất Biến (BR-001..BR-010)</h2>
-      <table style="font-size: 8px;">
-        <thead>
-          <tr>
-            <th style="width: 12%;">Mã Quy Tắc</th>
-            <th style="width: 38%;">Nội Dung Quy Định Bắt Buộc Chuẩn SRS v0.1</th>
-            <th>Cơ Chế Kiểm Soát Kỹ Thuật Thực Thi</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><strong>BR-001</strong></td>
-            <td>AI không được tự tạo giá sản phẩm</td>
-            <td>Đọc 100% từ ERP Pricing Engine; cấm AI sinh số ngẫu nhiên</td>
-          </tr>
-          <tr>
-            <td><strong>BR-002</strong></td>
-            <td>AI không được tự thay đổi giá hoặc discount ngoài policy</td>
-            <td>Khóa cứng điều kiện P &ge; P_floor; mọi tính toán thực hiện tại server</td>
-          </tr>
-          <tr>
-            <td><strong>BR-003</strong></td>
-            <td>Giá và tồn kho phải lấy từ nguồn giao dịch có thẩm quyền</td>
-            <td>Xác thực nguồn ERP/WMS; Fail-Closed khi mất kết nối</td>
-          </tr>
-          <tr>
-            <td><strong>BR-004</strong></td>
-            <td>Không gửi marketing khi khách hàng không có consent phù hợp</td>
-            <td>Kiểm tra Consent Flags (Taiwan PDPA) và Suppression List</td>
-          </tr>
-          <tr>
-            <td><strong>BR-005</strong></td>
-            <td>Một action có tác động bên ngoài phải có Unique Execution ID</td>
-            <td>Gắn <code>idempotency_key</code> cho mọi lệnh gửi tin và tạo đơn hàng</td>
-          </tr>
-          <tr>
-            <td><strong>BR-006</strong></td>
-            <td>Retry không được tạo hành động trùng lặp</td>
-            <td>Cơ chế thử lại khi mất mạng tuyệt đối không tạo 2 đơn trùng lặp</td>
-          </tr>
-          <tr>
-            <td><strong>BR-007</strong></td>
-            <td>Hành động tài chính/rủi ro cao phải qua approval</td>
-            <td>Chuyển hàng đợi phê duyệt AUTH-4 trên màn hình SCR-003</td>
-          </tr>
-          <tr>
-            <td><strong>BR-008</strong></td>
-            <td>Agent không được vượt quyền kể cả khi LLM yêu cầu</td>
-            <td>Kiểm tra ma trận thẩm quyền AUTH-0..5 tại Gateway trước khi gọi Skill</td>
-          </tr>
-          <tr>
-            <td><strong>BR-009</strong></td>
-            <td>Prompt/nội dung do khách hàng cung cấp không thể tự nâng quyền</td>
-            <td>Cô lập ngữ cảnh người dùng; Deterministic Policy Engine độc lập ngoài LLM</td>
-          </tr>
-          <tr>
-            <td><strong>BR-010</strong></td>
-            <td>Mọi execution quan trọng phải sinh evidence</td>
-            <td>Ghi log bất biến vào Audit Ledger đóng gói đủ Reason + Evidence</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+    <h2>2. Danh Mục Plug-and-Play Adapters Bản Địa &amp; Toàn Cầu (Đề Xuất — Chưa Tích Hợp)</h2>
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 15%;">Mã Adapter</th>
+          <th style="width: 25%;">Tên cấu hình</th>
+          <th style="width: 30%;">Phạm vi tích hợp công nghệ</th>
+          <th style="width: 30%;">Tiêu chuẩn tuân thủ & Vùng triển khai</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><span class="badge badge-green">ADPT-TW-001</span></td>
+          <td>Taiwan Localization Adapter</td>
+          <td>LINE Messaging API, LINE Login, ECPay, NewebPay, LINE Pay, E-Map API chọn siêu thị 7-Eleven / FamilyMart CVS COD.</td>
+          <td>Đề xuất tuân thủ Taiwan PDPA; lưu trữ dữ liệu tại GCP Changhua / AWS Taipei (chờ chốt theo ASM-001/ASM-005).</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-blue">ADPT-GL-001</span></td>
+          <td>Global Communication Adapter</td>
+          <td>WhatsApp Business Cloud API, TikTok Messaging, Meta Webhooks (Messenger, Instagram Direct), Web Chat Widget đa ngôn ngữ (i18n: EN, JA, ZH, VI).</td>
+          <td>Bảo mật đường truyền mTLS, chữ ký số Webhook HMAC-SHA256.</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-blue">ADPT-GL-002</span></td>
+          <td>Global Payment Adapter</td>
+          <td>Stripe Connect, PayPal Commerce, Apple Pay, Google Pay, Klarna (BNPL), tự động đối soát tiền tệ (USD, EUR, JPY, GBP).</td>
+          <td>Mục tiêu tuân thủ PCI-DSS Level 1 (chưa được chứng nhận).</td>
+        </tr>
+        <tr>
+          <td><span class="badge badge-blue">ADPT-GL-003</span></td>
+          <td>Global Compliance & Residency</td>
+          <td>Hạ tầng lưu trữ phân vùng địa lý độc lập; mô-đun quản lý đồng thuận cookie và thực thi quyền chủ thể dữ liệu (DSR).</td>
+          <td>GDPR (AWS Frankfurt), CCPA/CPRA (AWS US-East), PDPA (AWS Singapore).</td>
+        </tr>
+      </tbody>
+    </table>
 
-    <div class="card card-emerald">
-      <h2>2. Tiêu Chuẩn Kỹ Thuật Phi Chức Năng (10 NFRs Chuẩn SRS)</h2>
-      <div class="grid-2">
-        <ul style="font-size: 8px;">
-          <li><strong>NFR-001 Availability:</strong> Độ sẵn sàng hệ thống đạt &ge; 99.9% 24/7.</li>
-          <li><strong>NFR-002 Latency:</strong> FAQ &lt; 1.0s, gợi ý &lt; 1.5s, chuyển người &le; 1.0s.</li>
-          <li><strong>NFR-003 Concurrency:</strong> Xử lý đồng thời &ge; 500 phiên hội thoại không trễ.</li>
-          <li><strong>NFR-004 Accuracy:</strong> Tỷ lệ ảo giác (Hallucination) tuyệt đối &lt; 0.1%.</li>
-          <li><strong>NFR-005 Scalability:</strong> Mở rộng tự động (Auto-scaling) theo lưu lượng.</li>
+    <h2>3. 10 Yêu Cầu Phi Chức Năng Bắt Buộc (NFR-001..NFR-010)</h2>
+    <div class="grid-2">
+      <div class="card">
+        <ul style="font-size: 8.2px; line-height: 1.38;">
+          <li><strong>NFR-001 - Security (MUST):</strong> Phân quyền RBAC nghiêm ngặt; không có test case nào cho phép Agent vượt ranh giới Authority.</li>
+          <li><strong>NFR-002 - Auditability (MUST):</strong> 100% hành động tạo tác động bên ngoài phải sinh bản ghi kiểm toán gắn run_id.</li>
+          <li><strong>NFR-003 - Idempotency (MUST):</strong> Thực hiện lại cùng một request qua effect_key không bao giờ sinh giao dịch kép.</li>
+          <li><strong>NFR-004 - Availability:</strong> Toàn bộ quy trình quan trọng phải có cơ chế retry lùi thời gian (backoff) và phục hồi tự động.</li>
+          <li><strong>NFR-005 - Explainability:</strong> Mọi quyết định thương mại/đề xuất phải lưu trữ đầy đủ Reason + Evidence.</li>
         </ul>
-        <ul style="font-size: 8px;">
-          <li><strong>NFR-006 Data Isolation:</strong> Mã hóa AES-256 SĐT/địa chỉ theo Taiwan PDPA.</li>
-          <li><strong>NFR-007 Auditability:</strong> Lưu trữ log đối soát bất biến tối thiểu 180 ngày.</li>
-          <li><strong>NFR-008 Fail-Closed:</strong> Tự động ngắt giao dịch an toàn khi mất kết nối.</li>
-          <li><strong>NFR-009 Lightweight Widget:</strong> Bộ mã nhúng Web Chat dung lượng &lt; 20KB.</li>
-          <li><strong>NFR-010 FinOps Ceiling:</strong> Chi phí token AI &le; 1.0 TWD / phiên hoàn chỉnh.</li>
+      </div>
+      <div class="card">
+        <ul style="font-size: 8.2px; line-height: 1.38;">
+          <li><strong>NFR-006 - Data Isolation (MUST):</strong> Ngữ cảnh khách hàng A không được xuất hiện trong ngữ cảnh khách hàng B (RLS &amp; namespace); cách ly dữ liệu giữa các tenant là lớp bổ sung mở rộng yêu cầu này.</li>
+          <li><strong>NFR-007 - Human Override:</strong> Con người có quyền tạm dừng quy trình hoặc tiếp quản phiên chat (Takeover) bất kỳ lúc nào.</li>
+          <li><strong>NFR-008 - Failure Safety (Fail Closed):</strong> Khi mất kết nối ERP hoặc thiếu dữ liệu giá/tồn kho, hệ thống tự động chặn lệnh.</li>
+          <li><strong>NFR-009 - Performance:</strong> Hội thoại thông thường được thiết kế cho phản hồi gần thời gian thực (mục tiêu thiết kế &lt; 1,5s; SLA chính thức khóa sau benchmark theo NFR-009); gói mã nhúng Storefront Widget &lt; 20 KB là mục tiêu kỹ thuật.</li>
+          <li><strong>NFR-010 - Cost Observability:</strong> Đo lường định lượng token, model cost, API cost trên từng lượt chạy (định mức thiết kế đề xuất 0,5–1 TWD/phiên theo ECN-003; chưa xác nhận, khóa sau baseline ASM-002).</li>
         </ul>
       </div>
     </div>
   </div>
+
   <div class="footer">
-    <span>Đặc Tả Kỹ Thuật Nền Tảng AI Agent · AI-REV-SRS-001</span>
+    <span>AgentOS Platform Blueprint — AI Revenue & Engagement Technical Specification (AI-REV-SPEC-2026)</span>
     <span>Trang 8 / 10</span>
   </div>
 </div>
 
-<!-- TRANG 9: BỘ 9 KỊCH BẢN KIỂM THỬ CHẤP NHẬN E2E -->
+<!-- TRANG 9: KIỂM THỬ NGHIỆM THU & ĐẢM BẢO CHẤT LƯỢNG -->
 <div class="page">
-  <div>
-    <div class="header">
-      <div class="header-left">
-        <h1>Bộ 9 Kịch Bản Kiểm Thử Chấp Nhận E2E (TC-E2E-001..009)</h1>
-        <p>Kiểm thử chấp nhận toàn diện chuỗi vận hành theo tiêu chuẩn Given - When - Then</p>
-      </div>
-      <div class="header-tag">TEST SUITES · TRANG 9/10</div>
+  <div class="header">
+    <div class="header-left">
+      <h1>Kiểm Thử Nghiệm Thu & Tiêu Chuẩn Hoàn Thành Hệ Thống</h1>
+      <p>Bộ ca kiểm thử TC-E2E-001..009, Definition of Done 10 thành tố và 5 giả định tiền sản xuất</p>
     </div>
+    <div class="header-tag">Trang 9 / 10</div>
+  </div>
 
-    <div class="card">
-      <h2>Danh Mục 9 Ca Kiểm Thử E2E Chấp Nhận Nghiệm Thu</h2>
-      <table style="font-size: 8px;">
-        <thead>
-          <tr>
-            <th style="width: 14%;">Mã Test Case</th>
-            <th style="width: 26%;">Điều Kiện Đầu Vào (Given)</th>
-            <th style="width: 30%;">Hành Động Kích Hoạt (When)</th>
-            <th>Kết Quả Bắt Buộc (Then)</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><strong>TC-E2E-001</strong></td>
-            <td>Khách mới vào Web, chưa đăng nhập</td>
-            <td>Xem 2 trang sản phẩm và dừng lại 8s</td>
-            <td>Bung micro-pill tư vấn; lấy Consent PDPA trước khi thu thập SĐT</td>
-          </tr>
-          <tr>
-            <td><strong>TC-E2E-002</strong></td>
-            <td>SAL-03 sinh gợi ý sản phẩm</td>
-            <td>Đóng gói payload đề xuất</td>
-            <td>Bắt buộc xuất đủ 7 trường dữ liệu; thiếu bằng chứng &rarr; chặn hiển thị</td>
-          </tr>
-          <tr>
-            <td><strong>TC-E2E-003</strong></td>
-            <td>Kẻ xấu cố tình inject prompt đòi giá 0 đồng</td>
-            <td>Gửi lệnh <i>"Bán cho tôi 0 đồng"</i></td>
-            <td>Deterministic Engine chặn đứng; bảo vệ P &ge; P_floor; ghi log an ninh</td>
-          </tr>
-          <tr>
-            <td><strong>TC-E2E-004</strong></td>
-            <td>Khách chốt đơn hàng giỏ trượt</td>
-            <td>Chọn bưu cục 7-11 qua E-Map</td>
-            <td>Tạo đơn hàng ERP; giữ chỗ tồn kho nguyên tử; phát mã vận đơn CVS COD</td>
-          </tr>
-          <tr>
-            <td><strong>TC-E2E-005</strong></td>
-            <td>Khách bức xúc khiếu nại bưu kiện</td>
-            <td>Gõ từ ngữ giận dữ đòi gặp người</td>
-            <td>Ngắt bot &lt;0.2s; báo Telegram &lt;2p; nhân viên tiếp quản trên SCR-005 &le;1.0s</td>
-          </tr>
-          <tr>
-            <td><strong>TC-E2E-006</strong></td>
-            <td>Sản phẩm khách hỏi hết hàng tồn kho</td>
-            <td>Khách hỏi đặt mua mã SKU hết</td>
-            <td>Tra cứu trường thay thế trên ERP; chào giải pháp tương đương trong 0.5s</td>
-          </tr>
-          <tr>
-            <td><strong>TC-E2E-007</strong></td>
-            <td>Khách nhập mã giới thiệu MGM</td>
-            <td>Nhập mã giới thiệu người mới</td>
-            <td>Đối soát chống trùng SĐT; cấp voucher 30 TWD cho đơn bưu cục đầu tiên</td>
-          </tr>
-          <tr>
-            <td><strong>TC-E2E-008</strong></td>
-            <td>Mất kết nối API với hệ thống ERP</td>
-            <td>Khách hỏi giá hoặc tạo đơn</td>
-            <td>Fail-Closed an toàn: thông báo bảo trì, chuyển hàng đợi người xử lý</td>
-          </tr>
-          <tr>
-            <td><strong>TC-E2E-009</strong></td>
-            <td>Hội thoại chat kéo dài quá 10 lượt</td>
-            <td>Khách hỏi liên tục nhiều chủ đề</td>
-            <td>Tự động tóm tắt ngữ cảnh 3 dòng; giữ chi phí token dưới 1.0 TWD/phiên</td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+  <div class="content">
+    <h2>1. Bộ Ca Kiểm Thử Chấp Nhận Hệ Thống (Acceptance Tests TC-E2E-001..009)</h2>
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 14%;">Mã kiểm thử</th>
+          <th style="width: 46%;">Điều kiện kịch bản kiểm thử (Test Scenario)</th>
+          <th style="width: 40%;">Kết quả kỳ vọng bắt buộc (Expected Outcome)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><span class="badge badge-blue">TC-E2E-001</span></td><td>Một tín hiệu đi hết chu trình 11 bước: Signal ➔ Context ➔ Hypothesis ➔ Decision ➔ Plan ➔ Action ➔ Approval ➔ Execution ➔ Evidence ➔ Outcome ➔ Learning.</td><td>Mọi bước ghi vết liên tục theo cùng run_id; Outcome tham chiếu giao dịch có thẩm quyền từ SoR (dữ liệu thử/đối tác thử).</td></tr>
+        <tr><td><span class="badge badge-red">TC-E2E-002</span></td><td>Marketing Agent (MKT-05) đề xuất phát chiến dịch thuộc mức AUTH-4 khi chưa có phê duyệt.</td><td>PEP định tuyến sang phê duyệt người (AUTH-4 ➔ REQUIRE_HUMAN_APPROVAL) và mở ticket tại SCR-003; kênh gửi tin không được gọi. AUTH-4 không so sánh thứ bậc; đề xuất AUTH-5 bị chặn cứng.</td></tr>
+        <tr><td><span class="badge badge-red">TC-E2E-003</span></td><td>(a) Sales Agent được hỏi giá một SKU mà nguồn có thẩm quyền (ERP/POS) không trả về; (b) đề xuất chiết khấu vượt ngưỡng chính sách/giá sàn (P &lt; P_floor, D &gt; D_cap).</td><td>(a) Agent từ chối nêu giá, trả lời không có từ nguồn và không tạo báo giá (BR-001, BR-003); (b) từ chối lệnh (BR-002), chuyển người có thẩm quyền và giữ giá niêm yết từ ERP (ASM-003).</td></tr>
+        <tr><td><span class="badge badge-blue">TC-E2E-004</span></td><td>(a) Care Agent tra cứu đơn khi danh tính khách chưa xác thực; (b) khách A đã xác thực yêu cầu dữ liệu của khách B; (c) cùng yêu cầu lặp lại ở tenant khác.</td><td>(a) Từ chối truy cập, yêu cầu OTP/xác minh trước, không lộ trường đơn nào; (b) chỉ trả ngữ cảnh của chính khách A, dữ liệu B không xuất hiện trong prompt/bộ nhớ đệm/log/câu trả lời (NFR-006); (c) chặn thêm theo tenant — cô lập tenant là yêu cầu bổ sung, không thay thế cô lập khách A/B.</td></tr>
+        <tr><td><span class="badge badge-blue">TC-E2E-005</span></td><td>Thử lại (Retry) lệnh gửi tin hoặc tạo đơn hàng với cùng mã effect_key.</td><td>Hệ thống trả về kết quả cũ; tuyệt đối không tạo đơn hoặc tin nhắn thứ hai.</td></tr>
+        <tr><td><span class="badge badge-red">TC-E2E-006</span></td><td>Khách hàng gửi prompt injection cố tình yêu cầu nâng quyền của Agent.</td><td>Hệ thống phát hiện vi phạm, trả về DENY và sinh sự kiện kiểm toán vi phạm.</td></tr>
+        <tr><td><span class="badge badge-blue">TC-E2E-007</span></td><td>Khách hàng không có consent hoặc gửi tín hiệu rút lại sự đồng ý tiếp thị.</td><td>Hệ thống loại trừ lập tức khỏi mọi lịch gửi tin chiến dịch (Suppression).</td></tr>
+        <tr><td><span class="badge badge-amber">TC-E2E-008</span></td><td>Cổng kết nối ERP/WMS lỗi HTTP 504, rồi 500 ở lần thử lại thứ nhất, rồi 200 ở lần thứ hai, trong khi một hành động phụ thuộc đang chờ.</td><td>Mỗi lần lỗi ghi trạng thái failed kèm mã lỗi từ nguồn; thông báo trung thực cho người vận hành; retry theo policy có backoff và tái dùng cùng effect_key để chỉ còn đúng một hành động ngoài hệ thống; cấm bịa evidence hoặc ghi thành công giả (NFR-004, NFR-008, BR-006).</td></tr>
+        <tr><td><span class="badge badge-blue">TC-E2E-009</span></td><td>Truy vết ngược từ một đơn hàng thành công về tín hiệu kích hoạt gốc (NFR-002 yêu cầu 100% hành động có audit).</td><td>Trích xuất đầy đủ chuỗi: Trigger ➔ Context ➔ Decision ➔ Approval ➔ Execution ➔ Evidence ➔ Outcome, các mắt nối cùng một run_id.</td></tr>
+      </tbody>
+    </table>
 
-    <div class="card card-emerald">
-      <h2>Tiêu Chí Đánh Giá Pass/Fail Kiểm Thử</h2>
-      <p style="font-size: 8.5px;">
-        Toàn bộ 9 kịch bản kiểm thử E2E phải được thực thi tự động trên môi trường Staging và đạt <strong>tỷ lệ Pass 100%</strong> trước khi kích hoạt Cổng Gate P4 và Gate P5. Bất kỳ ca kiểm thử nào thất bại liên quan đến an toàn giá sàn (TC-E2E-003) hoặc bảo mật dữ liệu khách hàng (TC-E2E-001) đều lập tức chặn đứng quy trình phát hành.
+    <h2>2. Tiêu Chuẩn Hoàn Thành Cấp Hệ Thống (Definition of Done — 10 Thành Tố)</h2>
+    <div class="card-highlight" style="margin-bottom: 7px; text-align: center; padding: 6px;">
+      <p style="font-weight: 700; font-size: 8.8px; color: #1e40af;">
+        DATA THẬT + AGENT THẬT + SKILL THẬT + TOOL THẬT + POLICY THẬT + APPROVAL THẬT + EXECUTION THẬT + EVIDENCE THẬT + OUTCOME THẬT + TEST THẬT
+      </p>
+      <p style="font-size: 8.3px; color: #1e3a8a; line-height: 1.35; margin-top: 3px;">
+        Đây là điều kiện nghiệm thu, không phải kết quả đã đạt: hiện chưa thành tố nào trong 10 thành tố được chứng minh (chưa có runtime, chưa có pilot).
       </p>
     </div>
+
+    <h2>3. 5 Giả Định Bắt Buộc Khóa Trước Production (Assumptions ASM-001..005)</h2>
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 15%;">Mã giả định</th>
+          <th style="width: 35%;">Nội dung giả định cần xác thực</th>
+          <th style="width: 25%;">Bộ phận phụ trách (Owner)</th>
+          <th style="width: 25%;">Hành động bắt buộc</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td><span class="badge badge-gray">ASM-001</span></td><td>Danh sách cổng kết nối production (API endpoints & scopes).</td><td>Product / IT Lead</td><td>Audit API & cấp quyền thực tế.</td></tr>
+        <tr><td><span class="badge badge-gray">ASM-002</span></td><td>Đường cơ sở KPI hiện tại để làm mốc so sánh hiệu quả.</td><td>Business / Growth Lead</td><td>Trích xuất số liệu lịch sử 90 ngày.</td></tr>
+        <tr><td><span class="badge badge-gray">ASM-003</span></td><td>Ngưỡng chiết khấu/trợ cấp tối đa cho phép AI thực thi.</td><td>Finance / Commercial</td><td>Khóa trần ngân sách D_cap trong ERP.</td></tr>
+        <tr><td><span class="badge badge-gray">ASM-004</span></td><td>Loại hoàn tiền/đổi trả bắt buộc dừng phê duyệt người.</td><td>Finance / Operations</td><td>Cấu hình ma trận duyệt tại SCR-003.</td></tr>
+        <tr><td><span class="badge badge-gray">ASM-005</span></td><td>Chính sách lưu trữ và thời hạn xóa dữ liệu Customer 360.</td><td>Data / Legal / Compliance</td><td>Thiết lập TTL lưu trữ theo PDPA/GDPR.</td></tr>
+      </tbody>
+    </table>
   </div>
+
   <div class="footer">
-    <span>Đặc Tả Kỹ Thuật Nền Tảng AI Agent · AI-REV-SRS-001</span>
+    <span>AgentOS Platform Blueprint — AI Revenue & Engagement Technical Specification (AI-REV-SPEC-2026)</span>
     <span>Trang 9 / 10</span>
   </div>
 </div>
 
-<!-- TRANG 10: LỘ TRÌNH 6 CỔNG GATE, DOD & HANDOFF 7 NHÓM -->
+<!-- TRANG 10: LỘ TRÌNH KỸ THUẬT & RACI HANDOFF -->
 <div class="page">
-  <div>
-    <div class="header">
-      <div class="header-left">
-        <h1>Lộ Trình Kỹ Thuật 6 Cổng Gate, DoD & Bàn Giao 7 Nhóm</h1>
-        <p>Tiến độ thi công 18 bước, tiêu chuẩn nghiệm thu DoD và chuyển giao chuyên môn</p>
-      </div>
-      <div class="header-tag">DELIVERY & HANDOFF · TRANG 10/10</div>
+  <div class="header">
+    <div class="header-left">
+      <h1>Lộ Trình Kỹ Thuật Trục Kép & Quy Trình Handoff RACI</h1>
+      <p>Lộ trình 6 Cổng Gate P0–P5 theo SRS, 3 Phase thương mại và ma trận phân công trách nhiệm</p>
     </div>
+    <div class="header-tag">Trang 10 / 10</div>
+  </div>
 
-    <div class="card card-blue">
-      <h2>1. Lộ Trình Triển Khai 6 Phân Kỳ Kỹ Thuật (Phase Gates P0 ➔ P5)</h2>
-      <div class="grid-3" style="font-size: 8.2px;">
-        <div style="background: #ffffff; padding: 4px 6px; border-radius: 3px; border: 1px solid #bfdbfe;">
-          <strong>Gate P0: Foundation</strong><br>
-          Kết nối API ERP/POS; dựng Vector DB; nạp KB 5 ngành; phân quyền AUTH-0..5.
-        </div>
-        <div style="background: #ffffff; padding: 4px 6px; border-radius: 3px; border: 1px solid #bfdbfe;">
-          <strong>Gate P1: Care Pilot</strong><br>
-          CSKH tự hành 24/7; nghiệm thu Quick Action Chips; test Human Takeover &le; 1.0s.
-        </div>
-        <div style="background: #ffffff; padding: 4px 6px; border-radius: 3px; border: 1px solid #bfdbfe;">
-          <strong>Gate P2: Sales Pilot</strong><br>
-          Giỏ trượt Quick Cart; nghiệm thu Deterministic Engine khóa P_floor; cứu đơn.
-        </div>
-        <div style="background: #ffffff; padding: 4px 6px; border-radius: 3px; border: 1px solid #bfdbfe;">
-          <strong>Gate P3: Marketing Pilot</strong><br>
-          Exit-Intent Popup, Interactive Quiz 30s và chương trình Giới thiệu người mới.
-        </div>
-        <div style="background: #ffffff; padding: 4px 6px; border-radius: 3px; border: 1px solid #bfdbfe;">
-          <strong>Gate P4: Cross-Domain</strong><br>
-          Hợp nhất Revenue Orchestrator 11 bước xuyên suốt Tiếp thị &rarr; Bán hàng &rarr; CSKH.
-        </div>
-        <div style="background: #ffffff; padding: 4px 6px; border-radius: 3px; border: 1px solid #bfdbfe;">
-          <strong>Gate P5: Autonomy</strong><br>
-          Vận hành tự hành 24/7 có giám sát; tối ưu FinOps &le; 1.0 TWD; bàn giao kỹ thuật.
-        </div>
-      </div>
-    </div>
-
-    <div class="card card-emerald">
-      <h2>2. Tiêu Chuẩn Nghiệm Thu Hoàn Thành (Definition of Done - DoD 10 Tiêu Chuẩn)</h2>
-      <div class="grid-2" style="font-size: 8px;">
-        <ul>
-          <li><strong>1. Khớp hợp đồng:</strong> Đóng gói đủ Reason + Evidence + Confidence.</li>
-          <li><strong>2. ERP Single Source:</strong> 100% giá và tồn kho đọc trực tiếp ERP/POS.</li>
-          <li><strong>3. Khóa giá sàn:</strong> Code cứng chặn đứng 100% các vi phạm dưới P_floor.</li>
-          <li><strong>4. Bảo mật PDPA:</strong> Mã hóa dữ liệu nhạy cảm, kiểm tra Consent tiếp thị.</li>
-          <li><strong>5. Hiệu năng độ trễ:</strong> FAQ &lt; 1s, gợi ý &lt; 1.5s, chuyển người &le; 1.0s.</li>
+  <div class="content">
+    <h2>1. Lộ Trình Kỹ Thuật 6 Cổng Gate P0–P5 vs. 3 Phase Thương Mại</h2>
+    <div class="grid-2">
+      <div class="card">
+        <h3>Trục 1: Kỹ Thuật Phần Mềm (6 Cổng P0–P5 theo SRS)</h3>
+        <ul style="font-size: 8px;">
+          <li><strong>P0 - Foundation:</strong> Khóa Canonical Contracts, Authority, Policy, Multi-tenant.</li>
+          <li><strong>P1 - Care Pilot:</strong> CS-01/02, tra cứu ERP, FAQ, bàn giao người thật (PILOT-03/04).</li>
+          <li><strong>P2 - Sales Pilot:</strong> 5 Sales Agents, bảo vệ giá sàn P_floor, phục hồi giỏ (PILOT-02).</li>
+          <li><strong>P3 - Marketing Pilot:</strong> 6 Marketing Agents, duyệt chiến dịch SCR-003 (PILOT-01).</li>
+          <li><strong>P4 - Cross-domain:</strong> Kết nối Marketing ➔ Sales ➔ Care trên Customer 360.</li>
+          <li><strong>P5 - Controlled Autonomy:</strong> Tự chủ an toàn cho N merchant; tối ưu chi phí token.</li>
         </ul>
-        <ul>
-          <li><strong>6. Fail-Closed:</strong> Tự động ngắt chốt đơn an toàn khi mất kết nối.</li>
-          <li><strong>7. Test coverage:</strong> Vượt qua 100% 9 ca kiểm thử chấp nhận E2E.</li>
-          <li><strong>8. Định mức FinOps:</strong> Chi phí token AI trung bình &le; 1.0 TWD/phiên.</li>
-          <li><strong>9. Dấu vết audit:</strong> Ghi log bất biến cho mọi quyết định của AI.</li>
-          <li><strong>10. Bàn giao 7 nhóm:</strong> Có đầy đủ hồ sơ cho 7 mũi chuyên môn.</li>
+      </div>
+      <div class="card">
+        <h3>Trục 2: Kinh Doanh & Thương Mại (3 Phase Tăng Trưởng)</h3>
+        <ul style="font-size: 8px;">
+          <li><strong>Phase 1 - Taiwan Anchor Pilot:</strong> Kiểm chứng thực chiến B2C Đài Loan cho Xe máy điện O2O (DOM-MOB) và FMCG (DOM-FMCG) qua LINE OA & 7-Eleven COD.</li>
+          <li><strong>Phase 2 - Vertical SaaS & Adapters:</strong> Chuẩn hóa 2 gói thương mại GTM-001A (Mobility) & GTM-001B (FMCG); hoàn thiện bộ cắm-rút ADPT-GL-001..003.</li>
+          <li><strong>Phase 3 - Global App Store Distribution:</strong> Cài đặt 1-chạm qua Shopify &amp; WooCommerce App Store (GTM-002, đề xuất); đòn bẩy kết quả đo lường sau khi khóa baseline (GTM-003, chưa có số liệu).</li>
         </ul>
       </div>
     </div>
 
-    <div class="card card-purple">
-      <h2>3. Quy Trình Chuyển Giao 7 Nhóm Chuyên Môn (Mục 28 SRS - Không Dùng RACI)</h2>
-      <table style="font-size: 8px;">
-        <thead>
-          <tr>
-            <th style="width: 25%;">Nhóm Chuyên Môn</th>
-            <th style="width: 45%;">Hồ Sơ & Mã Nguồn Bàn Giao Cụ Thể</th>
-            <th>Trách Nhiệm Nghiệm Thu</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td><strong>1. Business Analyst (BA)</strong></td>
-            <td>Tài liệu kịch bản hội thoại mẫu, ma trận 10 quy tắc BR-001..010</td>
-            <td>Nghiệm thu tính đúng đắn nghiệp vụ</td>
-          </tr>
-          <tr>
-            <td><strong>2. Solution Architect (SA)</strong></td>
-            <td>Sơ đồ kiến trúc 4 tầng, Data Dictionary 6 Domain, Orchestrator</td>
-            <td>Nghiệm thu ranh giới Zero-Disruption</td>
-          </tr>
-          <tr>
-            <td><strong>3. AI Engineering</strong></td>
-            <td>Bộ Prompt đã kiểm duyệt, pipeline Two-Stage RAG, cấu hình FinOps</td>
-            <td>Nghiệm thu độ chính xác và chi phí token</td>
-          </tr>
-          <tr>
-            <td><strong>4. Backend Engineering</strong></td>
-            <td>Mã nguồn Deterministic Policy Engine, 9 Skill Contracts, API Sync</td>
-            <td>Nghiệm thu bảo vệ giá sàn và hiệu năng</td>
-          </tr>
-          <tr>
-            <td><strong>5. Frontend Engineering</strong></td>
-            <td>Bộ mã nhúng Web Chat (&lt;20KB), Slide-Over Cart, 5 màn hình SCR</td>
-            <td>Nghiệm thu độ trễ giao diện & tiếp quản &le;1s</td>
-          </tr>
-          <tr>
-            <td><strong>6. QA & Test Automation</strong></td>
-            <td>Scripts tự động 9 ca test E2E, checklist nghiệm thu 10 tiêu chuẩn DoD</td>
-            <td>Ký biên bản nghiệm thu kỹ thuật</td>
-          </tr>
-          <tr>
-            <td><strong>7. Pilot Deployment</strong></td>
-            <td>Kịch bản vận hành thực tế tại Đài Loan, tài liệu đào tạo nhân sự</td>
-            <td>Chính thức bấm nút Go-Live</td>
-          </tr>
-        </tbody>
-      </table>
+    <h2>2. Quy Trình Handoff 7 Bước & Ma Trận Trách Nhiệm RACI (Mục 28 SRS)</h2>
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 32%;">Bước chuyển giao triển khai</th>
+          <th style="width: 17%;">Nhóm chịu trách nhiệm (R)</th>
+          <th style="width: 17%;">Bên phê duyệt (A)</th>
+          <th style="width: 17%;">Bên tham vấn (C)</th>
+          <th style="width: 17%;">Bên thông báo (I)</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>1. Khóa KPI baseline, Connectors & Ngưỡng duyệt</td><td>Business Analyst / PO</td><td>Head of Commercial</td><td>Finance / Tech Lead</td><td>Ban Giám Đốc</td></tr>
+        <tr><td>2. Khóa Canonical Contracts & Data Model 28 thực thể</td><td>Solution Architect</td><td>Chief Architect</td><td>Lead AI / Backend Lead</td><td>Toàn bộ dự án</td></tr>
+        <tr><td>3. Xây dựng Revenue Orchestrator & Agent Runtime</td><td>AI Engineering Lead</td><td>Solution Architect</td><td>Prompt Engineer</td><td>QA Team</td></tr>
+        <tr><td>4. Xây dựng API Gateway, Event Pipeline & Adapters</td><td>Backend / DevOps Lead</td><td>Technical Director</td><td>Security / Data Legal</td><td>Frontend Team</td></tr>
+        <tr><td>5. Phát triển Human Command Center (SCR-001..005)</td><td>Frontend Lead</td><td>Product Designer</td><td>Operations / CS Lead</td><td>End Users</td></tr>
+        <tr><td>6. Xây dựng Acceptance Suite TC-E2E-001..009 & DoD</td><td>QA / Test Lead</td><td>Quality Director</td><td>Security Engineer</td><td>Dev Teams</td></tr>
+        <tr><td>7. Pilot Production-like theo lộ trình P1 ➔ P5</td><td>Cross-functional Squad</td><td>Steering Committee</td><td>Anchor Client (Đài Loan)</td><td>Nhà Đầu Tư</td></tr>
+      </tbody>
+    </table>
+
+    <div class="card-highlight" style="margin-top: 6px; padding: 6px 8px;">
+      <h3 style="color: #1e40af; font-size: 9px; margin-bottom: 2px;">Tiêu Chuẩn Thiết Kế &amp; Điều Kiện Kiểm Chứng</h3>
+      <p style="font-size: 8.5px; color: #1e3a8a; line-height: 1.35;">
+        Bản đặc tả kỹ thuật này là tài liệu thiết kế cơ sở (Baseline Architecture Specification), <strong>chưa phải bản triển khai</strong>. Khi xây dựng, hệ thống phải đối chiếu các điều kiện hợp đồng dữ liệu, ma trận phân quyền AUTH-0..5 và bộ ca kiểm thử TC-E2E-001..009; mức độ tuân thủ chỉ được xác nhận bằng kết quả kiểm thử thực tế và việc khóa ASM-001..005, không được suy diễn từ tài liệu này.
+      </p>
     </div>
   </div>
+
   <div class="footer">
-    <span>Đặc Tả Kỹ Thuật Nền Tảng AI Agent · AI-REV-SRS-001</span>
+    <span>AgentOS Platform Blueprint — AI Revenue & Engagement Technical Specification (AI-REV-SPEC-2026)</span>
     <span>Trang 10 / 10</span>
   </div>
 </div>
