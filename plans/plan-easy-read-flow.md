@@ -1,11 +1,11 @@
-# AgentOS — Bản Kế Hoạch Hợp Nhất Đọc Trong 5 Phút
-## KẾT HỢP GÓC NHÌN THỰC CHIẾN (PHONG) & ĐẶC TẢ KỸ THUẬT CHUẨN SRS-001 (TÀI)
+# AgentOS — Bản Kế Hoạch Triển Khai Đọc Trong 5 Phút
+## HỆ THỐNG 3 TRỢ LÝ AI CẮM-RÚT (PLUG & PLAY) CHO WEBSITE DOANH NGHIỆP CÓ SẴN
 
 Bắt đầu bằng câu hỏi: **Doanh nghiệp nào sẽ thử nghiệm, trên website nào, để giải quyết một vấn đề mua hàng cụ thể?**
 
 [Mục lục](README.md) · [Thuật ngữ](glossary.md) · [Bản đầu và lộ trình](delivery/mvp-and-roadmap.md) · [Đặc tả kỹ thuật SRS](../presentation/tech_spec.html)
 
-Đây là bản kế hoạch hành động thực tế, kết hợp hài hòa giữa **tính khả thi triển khai từng bước nhỏ** và **khung kiểm soát rủi ro kỹ thuật cấp doanh nghiệp**.
+Đây là bản kế hoạch hành động thực tế, kết hợp hài hòa giữa **tính khả thi triển khai từng bước nhỏ** và **khung kiểm soát rủi ro kỹ thuật cấp doanh nghiệp (AI-REV-SRS-001)**.
 
 ---
 
@@ -46,7 +46,7 @@ Hiểu vấn đề khách đang hoặc sắp gặp [OBJ-001 Tiếp thị]
 
 ## 3. Khác biệt đáng thử & Khung bảo vệ kinh tế
 
-| Ý tưởng thực chiến (Phong) | Giá trị mong muốn | Cách làm nhỏ trước & Chốt chặn kỹ thuật (Tài) |
+| Ý tưởng kinh doanh thực chiến | Giá trị mong muốn | Giải pháp triển khai & Chốt chặn kỹ thuật |
 |---|---|---|
 | **Tiếp cận trước khi nhu cầu đạt đỉnh** | Xuất hiện đúng lúc, giảm phụ thuộc đốt tiền quảng cáo | Nhân viên duyệt danh sách đối tác giới thiệu và bản đồ nhu cầu; chỉ gửi link khi khách chủ động bấm xem. |
 | **Giải thích thông số bằng tiếng đời thường** | Giúp khách hiểu ngay, không bị ngợp thông tin | Viết sẵn nội dung chuẩn vào kho tri thức (`/product/products.md`), cấm AI tự chém gió sai sự thật. |
