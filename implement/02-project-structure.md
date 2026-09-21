@@ -1,0 +1,472 @@
+# Project Structure & Monorepo Architecture
+
+> **BLUEPRINT STATUS — Gate P0 target design, not an inventory of existing files.**
+> This document specifies the **target monorepo layout** for the Gate P0 (Foundation) deliverable in SRS
+> AI-REV-SRS-001 §24. No directory, package, manifest (`package.json`, `pnpm-workspace.yaml`, `turbo.json`),
+> TypeScript config, seed script, or knowledge file listed below currently exists in this documentation-only
+> repository. Every tree entry and configuration snippet is a **blueprint to be created later**, and no
+> package manager, bundler, or build pipeline is installed or runnable here. Numeric latency, throughput,
+> bundle-size, and retention figures are **provisional design targets pending ASM-002 (KPI baseline) and the
+> NFR-009 benchmark**, not committed values.
+
+## 1. Monorepo Directory Layout (pnpm Workspaces + Turborepo) — target blueprint
+
+The target architecture is an enterprise monorepo managed with **pnpm workspaces** and **Turborepo** (the
+platform "applies" the structure described below). The design enforces strict separation of concerns across
+target runnable applications (`apps/`) and reusable, shared internal libraries (`packages/`).
+
+```text
+agent-solution/
+├── .github/
+│   └── workflows/
+│       ├── ci.yml                    # Automated lint, typecheck, unit & integration tests
+│       └── release.yml               # Semantic versioning and Docker image builds
+├── apps/
+│   ├── api/                          # High-throughput Core API Gateway (Node.js/Fastify)
+│   │   ├── src/
+│   │   │   ├── middleware/           # Tenant context injection, HMAC, auth, rate limiting
+│   │   │   ├── routes/               # REST, SSE streaming, and webhook endpoints
+│   │   │   │   ├── v1/
+│   │   │   │   │   ├── chat.ts       # Real-time customer chat SSE stream
+│   │   │   │   │   ├── events.ts     # Customer event ingestion (API-002)
+│   │   │   │   │   ├── campaigns.ts  # Marketing campaign management
+│   │   │   │   │   └── webhooks.ts   # API-003 webhook ingestion (Facebook, TikTok, Zalo, Email, SMS, Web/App Chat; LINE/WhatsApp as extensions)
+│   │   │   │   └── index.ts
+│   │   │   ├── server.ts             # Fastify server initialization & graceful shutdown
+│   │   │   └── index.ts
+│   │   ├── package.json
+│   │   └── tsconfig.json
+│   ├── worker/                       # Temporal / BullMQ Durable Workflow Worker
+│   │   ├── src/
+│   │   │   ├── workflows/            # Multi-step stateful workflows (Cart recovery, Escalations)
+│   │   │   ├── activities/           # Concrete asynchronous skill executions
+│   │   │   ├── queues/               # BullMQ queue processors and retry monitors
+│   │   │   └── worker.ts             # Worker process runner
+│   │   ├── package.json
+│   │   └── tsconfig.json
+│   └── command-center/               # Administrative Dashboard (Next.js 14 App Router)
+│       ├── src/
+│       │   ├── app/                  # App Router screens (SCR-001 through SCR-005)
+│       │   │   ├── (auth)/           # Authentication & tenant login
+│       │   │   ├── (dashboard)/
+│       │   │   │   ├── analytics/    # SCR-001 Executive & SCR-002 Operational dashboards
+│       │   │   │   ├── approvals/    # SCR-003 Human-in-the-loop Approval Queue (AUTH-4)
+│       │   │   │   ├── takeover/     # SCR-005 Real-time Operator Chat Takeover
+│       │   │   │   └── settings/     # Second Brain knowledge & tenant configuration
+│       │   │   ├── layout.tsx
+│       │   │   └── page.tsx
+│       │   ├── components/           # shadcn/ui and custom high-density UI primitives
+│       │   └── lib/                  # SWR/React Query hooks and WebSocket clients
+│       ├── package.json
+│       ├── tailwind.config.ts
+│       └── tsconfig.json
+├── packages/
+│   ├── core-engine/                  # Central Orchestrator, Supervisor & State Machine
+│   │   ├── src/
+│   │   │   ├── orchestrator/         # 11-step E2E Lifecycle coordinator
+│   │   │   ├── supervisor/           # Multi-agent intent classification & routing (FR-ORC-001)
+│   │   │   ├── policy/               # Authority Model (AUTH-0..5) & Policy Engine (BR-001..010)
+│   │   │   ├── memory/               # 5-Tier Memory Hierarchy manager
+│   │   │   ├── agents/               # 13 Specialized Agent definitions (Marketing, Sales, Care)
+│   │   │   └── contracts/            # Canonical domain types and interfaces
+│   │   ├── package.json
+│   │   └── tsconfig.json
+│   ├── skills/                       # Executable atomic capabilities (11-field contract)
+│   │   ├── src/
+│   │   │   ├── customer/             # retrieve-customer, verify-identity, update-consent
+│   │   │   ├── commerce/             # check-inventory, calculate-floor-price, create-draft-order
+│   │   │   ├── knowledge/            # search-second-brain, retrieve-evidence-card
+│   │   │   ├── communication/        # send-omnichannel-message, schedule-callback
+│   │   │   └── registry.ts           # Dynamic skill registry and JSON Schema validator
+│   │   ├── package.json
+│   │   └── tsconfig.json
+│   ├── database/                     # Relational ORM schema, RLS policies, migrations
+│   │   ├── src/
+│   │   │   ├── client.ts             # Connection pool with automatic tenant RLS session hooks
+│   │   │   ├── schema/               # Drizzle/Prisma schema for 28 canonical entities
+│   │   │   ├── repositories/         # Type-safe repository methods with mandatory tenant_id
+│   │   │   └── rls.ts                # RLS context binder: SELECT set_config('app.current_tenant_id', ...)
+│   │   ├── migrations/               # Raw SQL migration files
+│   │   ├── seeds/                    # Seed scripts for base system registries
+│   │   │   ├── 01_agents.seed.ts     # Preloads 13 specialized agents (MKT-01..06, SAL-01..05, CS-01..02)
+│   │   │   ├── 02_skills.seed.ts     # Preloads 23 canonical skills with 11-field contracts
+│   │   │   └── 03_tenants.seed.ts    # Default tenant policies, margin floors, and approval thresholds
+│   │   ├── package.json
+│   │   └── tsconfig.json
+│   ├── second-brain/                 # Ground-truth knowledge base: 8 folders / 21 canonical Markdown files (exact SRS §10 set)
+│   │   ├── company/
+│   │   │   ├── company.md            # Enterprise overview, vision, operating model
+│   │   │   └── positioning.md        # Brand positioning & target market segments
+│   │   ├── customer/
+│   │   │   ├── customer.md           # ICP, personas, customer lifecycle stages
+│   │   │   └── segmentation.md       # Cohort rules & RFM qualification criteria
+│   │   ├── product/
+│   │   │   ├── products.md           # Master product catalog, technical specs, boundaries
+│   │   │   ├── pricing.md            # Official price lists, cost structures, P_floor rules
+│   │   │   └── promotion-policy.md   # Promotion rules, voucher terms & caps
+│   │   ├── brand/
+│   │   │   ├── voice.md              # Tone of voice across channels (LINE/WhatsApp/Web)
+│   │   │   ├── terminology.md        # Canonical terminology & glossary
+│   │   │   └── prohibited-claims.md  # Disallowed statements & unauthorized promises
+│   │   ├── marketing/
+│   │   │   ├── playbook.md           # Omnichannel marketing playbooks & journeys
+│   │   │   ├── content-guidelines.md # Message standards & compliance guidelines
+│   │   │   └── campaign-rules.md     # Frequency capping & budget constraints
+│   │   ├── sales/
+│   │   │   ├── sales-playbook.md     # Sales methodology, closing tactics & objections
+│   │   │   ├── qualification.md      # BANT criteria & lead triage questions
+│   │   │   └── objection-handling.md # Price and competitor objection scripts
+│   │   ├── customer-care/
+│   │   │   ├── faq.md                # Verified customer Q&A knowledge base
+│   │   │   ├── support-policy.md     # Return, warranty & refund policies
+│   │   │   └── escalation.md         # 7-state escalation & human transfer matrix
+│   │   └── policy/
+│   │       ├── authority.md          # Agent Authority Model (AUTH-0..5) rules
+│   │       └── approval.md           # High-risk human approval triggers (SCR-003)
+│   ├── adapters/                     # External channel & enterprise connectors
+│   │   ├── src/
+│   │   │   ├── base/                 # BaseAdapter interface with mTLS, HMAC, circuit breaker
+│   │   │   ├── taiwan/               # ADPT-TW-001: LINE OA, ECPay, CVS COD (7-11 / FamilyMart)
+│   │   │   ├── global-messaging/     # ADPT-GL-001: WhatsApp Business Cloud API, Webhooks
+│   │   │   ├── global-payment/       # ADPT-GL-002: Stripe, PayPal, Klarna
+│   │   │   ├── compliance/           # ADPT-GL-003: GDPR/CCPA Consent & Data Subject Rights
+│   │   │   └── erp/                  # API-001 ERP Connector & API-002 Event Ingestor
+│   │   ├── package.json
+│   │   └── tsconfig.json
+│   ├── storefront-widget/            # Embeddable Web Component (< 20 KB bundle)
+│   │   ├── src/
+│   │   │   ├── component.ts          # CustomElement extending HTMLElement with Shadow DOM
+│   │   │   ├── stream.ts             # SSE streaming parser for live chat
+│   │   │   └── styles.css            # Scoped styles (Zero CSS leakage into host page)
+│   │   ├── vite.config.ts            # Micro-bundle compilation (IIFE target)
+│   │   ├── package.json
+│   │   └── tsconfig.json
+│   ├── typescript-config/            # Shared tsconfig definitions (base, react, node)
+│   │   ├── base.json
+│   │   ├── react.json
+│   │   └── package.json
+│   └── eslint-config/                # Shared ESLint + Prettier rules
+│       ├── index.js
+│       └── package.json
+├── docker/                           # Container deployment manifests
+│   ├── Dockerfile.api
+│   ├── Dockerfile.worker
+│   └── Dockerfile.command-center
+├── docker-compose.yml                # Local backing services
+├── package.json                      # Monorepo root configuration
+├── pnpm-workspace.yaml               # Workspace definitions
+├── turbo.json                        # Turborepo pipeline cache configuration
+└── tsconfig.json                     # Root TypeScript configuration
+```
+
+---
+
+## 2. Package Boundaries & Dependency Graph
+
+To prevent circular dependencies and enforce strict architectural layering, dependencies may only flow inward from outer applications to core domain libraries.
+
+```mermaid
+graph TD
+  apps_api["apps/api (API Gateway)"] --> pkg_core["packages/core-engine"]
+  apps_api --> pkg_adapters["packages/adapters"]
+  apps_api --> pkg_database["packages/database"]
+
+  apps_worker["apps/worker (Temporal/BullMQ)"] --> pkg_core
+  apps_worker --> pkg_skills["packages/skills"]
+  apps_worker --> pkg_database
+  apps_worker --> pkg_adapters
+
+  apps_command_center["apps/command-center (Next.js)"] --> pkg_database
+  apps_command_center --> pkg_core
+
+  pkg_skills --> pkg_database
+  pkg_skills --> pkg_adapters
+  pkg_skills --> pkg_core
+
+  pkg_core --> pkg_database
+  pkg_core --> pkg_second_brain["packages/second-brain"]
+  pkg_adapters --> pkg_core
+```
+
+### Module Responsibilities
+
+1. **`@agentos/core-engine`**:
+   - Holds zero knowledge of specific HTTP frameworks (Fastify, Express) or UI libraries.
+   - Contains pure business logic: Intent parsing, State Machine transitions, Authority checks (AUTH-0..5), and Mathematical Price Floor ($P_{floor}$) verification.
+   - Dependent only on `@agentos/database` and `@agentos/second-brain` contracts.
+
+2. **`@agentos/skills`**:
+   - Implements atomic units of work adhering to the 11-field Skill System Contract.
+   - Reusable across both synchronous API flows (`apps/api`) and asynchronous durable workers (`apps/worker`).
+
+3. **`@agentos/second-brain`**:
+   - Stores the authoritative **21 canonical Markdown files across 8 enterprise folders**, exactly the set enumerated in SRS AI-REV-SRS-001 §10: `/company` 2, `/customer` 2, `/product` 3, `/brand` 3, `/marketing` 3, `/sales` 3, `/customer-care` 3, `/policy` 2. This is the single canonical count; earlier drafts of this document quoted a lower figure and are superseded.
+   - Any customer-specific or Taiwan/vertical addendum document is kept as a **separate, clearly labelled extension** and is never counted in the canonical 21.
+   - Provides document loader utilities, metadata frontmatter parsers, and verification schemas ensuring only `status: approved` documents are ingested into Qdrant.
+
+4. **`@agentos/adapters`**:
+   - Encapsulates network communication with third-party vendors (LINE, WhatsApp, ECPay, Stripe, ERP).
+   - Enforces HMAC validation on incoming webhooks and mTLS / exponential retry on outgoing dispatches.
+
+5. **`@agentos/database`**:
+   - The single source of truth for PostgreSQL schema, migrations, connection pools, and Row-Level Security (RLS) policies.
+   - Houses `seeds/` scripts initializing the 13 canonical agents, 23 platform skills, and tenant policies.
+
+6. **`@agentos/storefront-widget`**:
+   - Zero runtime dependencies (`dependencies: {}`).
+   - Self-contained IIFE build outputting a single script (< 20 KB) registered as a standard Custom Element (`<agentos-chat-widget>`).
+
+7. **Runtime scope (Node core vs. optional Python service)**:
+   - Every application and package in this layout is a **Node.js (TypeScript 5.x)** artifact. There is no Python
+     service in the target structure.
+   - If a Python (FastAPI) auxiliary worker is ever approved for Python-only ML/NLP libraries (see
+     `01-tech-stack-and-environment.md` §5, gated by ASM-001), it is added as an **optional extra `apps/api-py`
+     entry** and does not become a second core runtime. Until that approval exists, this layout is authoritative
+     and the Python snippets in the other specifications remain illustrative.
+   - Neither the Node layout nor any Python alternative is implemented in this repository today.
+
+---
+
+## 2.1. Queue Architecture Separation: BullMQ vs. Temporal.io
+
+The platform implements a dual-queue architecture, cleanly dividing responsibilities between low-latency operational queues and durable business orchestrations:
+
+```text
++-----------------------------------------------------------------------------------------+
+|                                 DUAL-QUEUE ARCHITECTURE                                 |
++-----------------------------------------------------------------------------------------+
+|                                                                                         |
+|  [ INCOMING TRAFFIC ] ──────► [ BullMQ (Redis-Backed) ]                                 |
+|                                ├── Sub-10ms latency execution                           |
+|                                ├── Ephemeral operational tasks                          |
+|                                ├── Webhook HMAC validation & deduplication             |
+|                                ├── Real-time chat message outbound dispatch             |
+|                                └── Second Brain Qdrant indexing jobs                    |
+|                                                                                         |
+|  [ BUSINESS WORKFLOWS ] ────► [ Temporal.io (PostgreSQL Engine) ]                       |
+|                                ├── Long-running stateful workflows (hours/days)         |
+|                                ├── Deterministic checkpointing & execution history      |
+|                                ├── Abandoned cart multi-stage recovery (15m, 2h, 24h)   |
+|                                ├── Campaign batch dispatch (> 5,000 users with rate cap)|
+|                                └── Human-in-the-Loop approvals (SCR-003, 72h pause gate)|
++-----------------------------------------------------------------------------------------+
+```
+
+| Dimension | BullMQ (Operational Task Queue) | Temporal.io (Durable Workflow Engine) |
+|---|---|---|
+| **Underlying Engine** | Redis 7.2 In-Memory Cluster | PostgreSQL 16 Stateful Event Store |
+| **Execution Latency** | Sub-10 milliseconds | 50ms – 150ms per step transition |
+| **Process Lifespan** | Ephemeral: 100ms – 5 seconds | Long-running: Minutes, hours, or days |
+| **State Persistence** | In-memory with Redis AOF persistence | Permanent write-ahead event history |
+| **Primary Use Cases** | 1. Webhook processing & rate limiting<br>2. Real-time outbound messaging<br>3. Async Customer Event Ingestion (API-002)<br>4. Qdrant vector chunk upserts | 1. Omnichannel abandoned cart recovery (15m, 2h, 24h delays)<br>2. Marketing campaign batch dispatch (AUTH-4)<br>3. Human approval pauses at SCR-003 (up to 72h)<br>4. Complex multi-agent order fulfillment sagas |
+| **Failure Handling** | Redis retry with exponential backoff; dead-letter queue (DLQ) | Deterministic event replay from the exact last verified step; zero lost state |
+
+> **Provisional figures.** Latency, throughput, and timing values in this table and diagram (e.g.
+> "Sub-10 milliseconds", "50ms – 150ms per step", the 15m/2h/24h cart-recovery delays, "> 5,000 users",
+> "72h pause gate") are provisional design targets to be re-baselined against the NFR-009 benchmark and the
+> ASM-002 KPI baseline. They are configuration starting points, not measured SLAs.
+
+---
+
+## 3. Package Configurations (target blueprint — not present files)
+
+### Root `package.json`
+
+```json
+{
+  "name": "agent-solution-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "engines": {
+    "node": ">=20.10.0",
+    "pnpm": ">=9.0.0"
+  },
+  "packageManager": "pnpm@9.1.0",
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev --parallel",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "clean": "turbo run clean && rm -rf node_modules"
+  },
+  "devDependencies": {
+    "@agentos/eslint-config": "workspace:*",
+    "@agentos/typescript-config": "workspace:*",
+    "prettier": "^3.2.5",
+    "turbo": "^1.13.3",
+    "typescript": "^5.4.5"
+  }
+}
+```
+
+### `pnpm-workspace.yaml`
+
+```yaml
+packages:
+  - "apps/*"
+  - "packages/*"
+```
+
+### `turbo.json`
+
+```json
+{
+  "$schema": "https://turbo.build/schema.json",
+  "pipeline": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": [".next/**", "!.next/cache/**", "dist/**"]
+    },
+    "typecheck": {
+      "dependsOn": ["^build"],
+      "outputs": []
+    },
+    "lint": {
+      "outputs": []
+    },
+    "test": {
+      "dependsOn": ["^build"],
+      "outputs": ["coverage/**"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "clean": {
+      "cache": false
+    }
+  }
+}
+```
+
+### Core Engine `packages/core-engine/package.json`
+
+```json
+{
+  "name": "@agentos/core-engine",
+  "version": "1.0.0",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc --project tsconfig.build.json",
+    "dev": "tsc --project tsconfig.build.json --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@agentos/database": "workspace:*",
+    "ioredis": "^5.4.1",
+    "zod": "^3.23.8",
+    "@opentelemetry/api": "^1.8.0"
+  },
+  "devDependencies": {
+    "@agentos/typescript-config": "workspace:*",
+    "typescript": "^5.4.5",
+    "vitest": "^1.6.0"
+  }
+}
+```
+
+---
+
+## 4. Coding Conventions & Architectural Standards
+
+### 1. Functional Programming & Immutability First
+- **No Class God-Objects**: Core logic (routing, policy checking, price floor verification) must be implemented as pure, deterministic functions without internal mutable state.
+- **Data In, Data Out**: Orchestration state is represented as immutable data structures. Functions accept state and return an updated state or a validated decision object.
+
+```typescript
+/**
+ * Evaluates whether an automated discount violates the mathematical price floor.
+ * Pure function: No side effects, no database calls, no mutable arguments.
+ *
+ * @param basePrice - Officially listed catalog price from API-001 (SoR)
+ * @param costOfGoods - Unit landed inventory cost (C)
+ * @param platformCommissionRate - Platform commission or target margin percentage (r)
+ * @param proposedDiscount - Requested discount amount
+ * @param logisticsCost - Fulfilment / delivery cost (L, default 0)
+ * @param basketCapPoints - Point reward / subsidy cap (D_cap, default 0)
+ * @returns Object indicating validity, allowed floor price, and computed discount
+ */
+export function evaluatePriceFloorConstraint(
+  basePrice: number,
+  costOfGoods: number,
+  platformCommissionRate: number,
+  proposedDiscount: number,
+  logisticsCost: number = 0,
+  basketCapPoints: number = 0
+): { isValid: boolean; allowedPrice: number; appliedDiscount: number; violationReason?: string } {
+  if (platformCommissionRate < 0 || platformCommissionRate >= 1) {
+    return {
+      isValid: false,
+      allowedPrice: basePrice,
+      appliedDiscount: 0,
+      violationReason: `Invalid platform commission rate ${platformCommissionRate}; must be in range [0, 1).`,
+    };
+  }
+  // P_floor = Math.ceil((C + L + D_cap) / (1 - r)) — policy check only; catalog price remains API-001 SoR
+  const priceFloor = Math.ceil((costOfGoods + logisticsCost + basketCapPoints) / (1 - platformCommissionRate));
+  const proposedFinalPrice = basePrice - proposedDiscount;
+  if (proposedFinalPrice < priceFloor) {
+    const maximumAllowedDiscount = Math.max(0, basePrice - priceFloor);
+    return {
+      isValid: false,
+      allowedPrice: priceFloor,
+      appliedDiscount: maximumAllowedDiscount,
+      violationReason: `Proposed price ${proposedFinalPrice} is below strict economic floor ${priceFloor}`,
+    };
+  }
+
+  return {
+    isValid: true,
+    allowedPrice: proposedFinalPrice,
+    appliedDiscount: proposedDiscount,
+  };
+}
+```
+
+### 2. Anti-God-Files Policy (< 300 Lines of Code)
+- A single source code file must not exceed 300 lines of code.
+- If a file approaches 250 lines, it must be proactively refactored by extracting cohesive helpers, separate schema definitions, or domain sub-handlers into modular sibling files.
+- Each file must adhere strictly to the Single Responsibility Principle (SRP).
+
+### 3. Descriptive Naming & Mandatory JSDoc
+- Naming must explicitly reflect business domain intent rather than generic technical actions. Avoid names like `handleData()`, `doProcess()`, or `tempHelper()`.
+- Use domain-precise names: `verifyCustomerConsentStatus()`, `dispatchTaiwanCvsShippingOrder()`, `evaluateAuthorityThreshold()`.
+- All exported interfaces, functions, and types must include complete JSDoc annotations describing parameters, return values, exceptions, and associated SRS requirements.
+
+### 4. Strict TypeScript Settings (`packages/typescript-config/base.json`)
+
+```json
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "strictFunctionTypes": true,
+    "strictBindCallApply": true,
+    "strictPropertyInitialization": true,
+    "noImplicitThis": true,
+    "alwaysStrict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "exactOptionalPropertyTypes": true,
+    "noImplicitReturns": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
+    "noImplicitOverride": true,
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true
+  }
+}
+```
