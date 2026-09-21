@@ -102,4 +102,4 @@ $$\textbf{Data thật} + \textbf{Agent thật} + \textbf{Skill thật} + \textbf
 * **Thước đo cốt lõi:** Không chỉ đo số lượt nhắn tin, mà đo trực tiếp: **Khách có chọn đúng sản phẩm không? Tỷ lệ chuyển đổi đơn có tăng không? Chi phí vận hành có giảm không? Và biên lãi ròng thực thu có được bảo vệ 100% không?**
 
 ---
-*Hồ sơ kỹ thuật chi tiết: Xem thêm tại [Kế hoạch triển khai tổng thể](../KE_HOACH_TRIEN_KHAI_HE_THONG_AI_AGENT_SRS_001.md) và [Báo cáo gửi Sếp](../BAO_CAO_TONG_QUAN_CHO_SEP_AI_BRIEF.md).*
+*Hồ sơ kỹ thuật chi tiết: Xem thêm tại [Kế hoạch triển khai tổng thể](../KE_HOACH_TRIEN_KHAI_HE_THONG_AI_AGENT_SRS_001.md) và [Báo Cáo Tổng Quan Đề Án](../BAO_CAO_TONG_QUAN_DE_AN_AI_AGENT.md).*

@@ -13,7 +13,7 @@
 7. [So Sánh Toàn Diện: Community vs Enterprise & Odoo vs Tự Viết / SAP](#7-so-sánh-toàn-diện-community-vs-enterprise--odoo-vs-tự-viết--sap)
 8. [Phân Tích SWOT & Những Rủi Ro Thực Tế ("Góc Khuất" Cần Lưu Ý)](#8-phân-tích-swot--những-rủi-ro-thực-tế-góc-khuất-cần-lưu-ý)
 9. [Đề Xuất Lộ Trình Triển Khai Thực Tế (Action Plan)](#9-đề-xuất-lộ-trình-triển-khai-thực-tế-action-plan)
-10. [Bộ 25 Câu Hỏi Phản Biện Sếp Có Thể Hỏi & Câu Trả Lời Mẫu](#10-bộ-25-câu-hỏi-phản-biện-sếp-có-thể-hỏi--câu-trả-lời-mẫu)
+10. [Bộ 25 Câu Hỏi Phản Biện Của Hội Đồng Thẩm Định & Câu Trả Lời Mẫu](#10-bộ-25-câu-hỏi-phản-biện-của-hội-đồng-thẩm-định--câu-trả-lời-mẫu)
 11. [Kịch Bản Thuyết Trình Trực Tiếp 10-15 Phút](#11-kịch-bản-thuyết-trình-trực-tiếp-10-15-phút)
 
 ---
@@ -305,11 +305,11 @@ Giai đoạn 4: Đào Tạo, Chạy Thử (UAT) & Vận Hành [Tháng thứ 3]
 
 ---
 
-## 10. BỘ 25 CÂU HỎI PHẢN BIỆN SẾP CÓ THỂ HỎI & CÂU TRẢ LỜI MẪU
+## 10. BỘ 25 CÂU HỎI PHẢN BIỆN CỦA HỘI ĐỒNG THẨM ĐỊNH & CÂU TRẢ LỜI MẪU
 
 Dưới đây là bộ câu hỏi được phân loại theo 4 góc độ: **Chiến lược/Chi phí**, **Nghiệp vụ**, **Kỹ thuật/Công nghệ**, và **Quản trị/Rủi ro**.
 
-### Nhóm 1: Câu Hỏi Về Chiến Lược & Chi Phí (Dành cho Sếp Tổng / Giám đốc)
+### Nhóm 1: Câu Hỏi Về Chiến Lược & Chi Phí (Dành cho Ban Giám Đốc)
 
 #### Q1: "Tại sao công ty không tự tuyển người về code một phần mềm riêng bằng Java/NodeJS mà lại phải dùng Odoo?"
 * **Trả lời:** "Thưa Sếp, tự code từ đầu giống như việc mình tự chế tạo lại chiếc xe máy từ khung xe, bánh xe, động cơ. Đội ngũ sẽ mất 6 đến 12 tháng chỉ để làm những thứ cơ bản: phân quyền, bảng biểu, quản lý người dùng, logic trừ kho và hóa đơn. Trong khi đó, Odoo đã hoàn thiện toàn bộ khung gầm này suốt 18 năm qua với chi phí 0 đồng tiền bản quyền mã nguồn. Nếu dùng Odoo, đội kỹ thuật chỉ cần tập trung 100% thời gian vào các logic đặc thù sinh ra tiền của công ty, rút ngắn thời gian đưa vào sử dụng từ cả năm xuống còn 2-3 tháng."
