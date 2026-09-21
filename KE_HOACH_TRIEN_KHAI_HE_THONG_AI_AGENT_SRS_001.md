@@ -745,5 +745,27 @@ Căn cứ Điều 28 của Đề bài (`AI-REV-SRS-001`), việc chuyển giao g
 
 ---
 
+### 4. Danh Mục 13 Hồ Sơ Thiết Kế Kỹ Thuật Chi Tiết (`implement/01` đến `implement/13`)
+
+Toàn bộ logic kỹ thuật phục vụ triển khai và nghiệm thu thực địa được đặc tả chi tiết trong bộ 13 hồ sơ thiết kế tiêu chuẩn tại thư mục [`implement/`](file:///d:/New%20folder/implement):
+
+| Mã số | Tên tài liệu thiết kế kỹ thuật | Trọng tâm giải quyết |
+| :---: | :---|---|
+| **01** | [`01-tech-stack-and-environment.md`](file:///d:/New%20folder/implement/01-tech-stack-and-environment.md) | Kiến trúc công nghệ Docker, Node.js, Python, PostgreSQL, Redis, Qdrant. |
+| **02** | [`02-project-structure.md`](file:///d:/New%20folder/implement/02-project-structure.md) | Cấu trúc Monorepo Turborepo, phân ranh giới package và ứng dụng. |
+| **03** | [`03-database-and-memory-schema.md`](file:///d:/New%20folder/implement/03-database-and-memory-schema.md) | Lược đồ CSDL PostgreSQL DDL cho 28 thực thể, phân quyền RLS, bộ nhớ Redis 3 lớp. |
+| **04** | [`04-core-engine-and-orchestrator.md`](file:///d:/New%20folder/implement/04-core-engine-and-orchestrator.md) | Vòng lặp điều phối E2E 11 bước, Intent Routing và quy trình Temporal bền bỉ. |
+| **05** | [`05-skill-system-specifications.md`](file:///d:/New%20folder/implement/05-skill-system-specifications.md) | Skill Framework, hợp đồng 11 trường dữ liệu, dynamic JSON schema. |
+| **06** | [`06-api-and-connectors-spec.md`](file:///d:/New%20folder/implement/06-api-and-connectors-spec.md) | Hợp đồng API-001 (ERP), API-002 (Sự kiện), API-003 (Kênh chat Facebook, Zalo, LINE, Web). |
+| **07** | [`07-human-command-center-ui.md`](file:///d:/New%20folder/implement/07-human-command-center-ui.md) | Bộ 5 màn hình Command Center (SCR-001..005) & Web Widget Chat (<20KB). |
+| **08** | [`08-security-governance-nfr.md`](file:///d:/New%20folder/implement/08-security-governance-nfr.md) | Điểm thực thi chính sách (PEP), ma trận AUTH-0..5, 10 luật kinh doanh BR-001..010. |
+| **09** | [`09-sprint-roadmap-and-pilots.md`](file:///d:/New%20folder/implement/09-sprint-roadmap-and-pilots.md) | Lộ trình kỹ thuật 6 Cổng (P0-P5) và bộ 9 kịch bản kiểm thử E2E (TC-E2E-001..009). |
+| **10** | [`10-data-sovereignty-and-source-of-truth.md`](file:///d:/New%20folder/implement/10-data-sovereignty-and-source-of-truth.md) | Chủ quyền dữ liệu: ERP/POS là nguồn sự thật duy nhất (SoR), AI không bao giờ ghi đè SoR. |
+| **11** | [`11-pricing-policy-engine.md`](file:///d:/New%20folder/implement/11-pricing-policy-engine.md) | Quản trị chính sách giá sàn $P_{floor}$: Giá do kinh doanh duyệt, AI chỉ đề xuất, không tự giảm giá. |
+| **12** | [`12-identity-consent-lifecycle.md`](file:///d:/New%20folder/implement/12-identity-consent-lifecycle.md) | Vòng đời định danh khách hàng và chính sách bảo mật chấp thuận (Consent Management). |
+| **13** | [`13-approval-readiness-and-governance-gates.md`](file:///d:/New%20folder/implement/13-approval-readiness-and-governance-gates.md) | Cổng quản trị phê duyệt người thật (`AUTH-4 Human-in-the-Loop`), quy trình khẩn cấp và Audit Log. |
+
+---
+
 ### KẾT LUẬN & CAM KẾT TRIỂN KHAI
 Bản Báo cáo Đề án Kỹ thuật và Kế hoạch Triển khai Toàn diện này là hồ sơ quy chuẩn duy nhất kết hợp hoàn hảo giữa **Nghiệp vụ thực tế của Chuỗi Bán lẻ Đa kênh tại Đài Loan** và **Khung Đặc tả Kiến trúc Minh bạch Cấp Enterprise (`AI-REV-SRS-001`)**, loại bỏ hoàn toàn các cấu phần hình thức thừa thãi, sẵn sàng làm căn cứ kỹ thuật và pháp lý phục vụ thi công thực địa.
