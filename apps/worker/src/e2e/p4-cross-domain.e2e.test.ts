@@ -419,11 +419,11 @@ describe('P4 cross-domain worker e2e', () => {
     expect(connectorDispatch).toHaveBeenCalledTimes(1);
   });
 
-  it('TC-E2E-009 preserves backward Outcome→Evidence→Execution→Approval→Decision→Context→Trigger trace identity', async () => {
+  it('TC-E2E-009 traces a completed run from Outcome back to the triggering signal', async () => {
     const evidence: Array<{ run_id: string; correlation_id: string }> = [];
     const tasks = new Map<string, DurableTaskRecord>();
     const runId = 'run-trace';
-    const signal = signalFor('marketing', 'campaign.requested', 'MARKETING_CAMPAIGN', runId, { skill_id: 'skill.mkt.dispatch_campaign', segment_id: 'segment-p4', campaign_id: 'campaign-p4', channel: 'EMAIL', approved_content_id: 'content-p4' });
+    const signal = signalFor('marketing', 'campaign.requested', 'MARKETING_CAMPAIGN', runId, { skill_id: 'skill.mkt.analyze_market_signal' });
     tasks.set(runId, { ...taskFor(runId, signal), lease_owner: WORKER_ID, lease_expires_at: new Date(Date.now() + 60_000).toISOString() });
     const workflowEngine = {
       createTask: vi.fn(async () => undefined),
@@ -482,9 +482,10 @@ describe('P4 cross-domain worker e2e', () => {
       registry,
     });
     const stages = orchestrator?.visitedStages ?? [];
-    expect(stages).toEqual(expect.arrayContaining(['SIGNAL', 'CONTEXT', 'DECISION', 'APPROVAL']));
-    expect(tasks.get(runId)?.state).toBe('awaiting_human');
-    expect(evidence.every((row) => row.run_id === runId && row.correlation_id === CORRELATION_ID) || evidence.length === 0).toBe(true);
-    expect(new Set([runId, signal.correlation_id])).toEqual(new Set([runId, CORRELATION_ID]));
+    const expected = ['SIGNAL', 'CONTEXT', 'HYPOTHESIS', 'DECISION', 'PLAN', 'ACTION', 'APPROVAL', 'EXECUTION', 'EVIDENCE', 'OUTCOME', 'LEARNING'];
+    expect(stages).toEqual(expected);
+    expect(tasks.get(runId)?.state).toBe('completed');
+    expect(evidence.length).toBeGreaterThan(0);
+    expect(evidence.every((row) => row.run_id === runId && row.correlation_id === signal.correlation_id)).toBe(true);
   });
 });
