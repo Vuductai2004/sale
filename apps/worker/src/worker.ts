@@ -1,12 +1,24 @@
 import { randomUUID } from 'node:crypto';
 import { packageName as adaptersPackageName } from '@agentos/adapters';
-import { packageName as coreEnginePackageName, RevenueOrchestrator } from '@agentos/core-engine';
+import {
+  AutonomyService,
+  packageName as coreEnginePackageName,
+  RevenueOrchestrator,
+  type AutonomyAdmissionPort,
+  type AutonomyAuditEvent,
+  type AutonomyPolicyRecord,
+  type AutonomyStore,
+} from '@agentos/core-engine';
 import {
   packageName as databasePackageName,
   DurableWorkflowRepository,
+  P5AutonomyRepository,
   assertCompleteCheckpoint,
   readCrossDomainLifecycle,
+  withTenantContext,
   type DurableTaskRecord,
+  type AutonomyPolicyRecord as DatabaseAutonomyPolicyRecord,
+  type TenantTransactionRunner,
 } from '@agentos/database';
 import { packageName as skillsPackageName } from '@agentos/skills';
 import type {
@@ -118,6 +130,99 @@ function hasResumeEvent(value: unknown): boolean {
   const record = asRecord(value);
   return record !== null && asRecord(record['resume_event']) !== null;
 }
+function workerApprovedState(value: string, field: string): 'MINIMUM' | 'PROMOTED' {
+  if (value === 'MINIMUM' || value === 'PROMOTED') return value;
+  throw new Error(`P5_AUTONOMY_RECORD_INVALID: ${field} must be MINIMUM or PROMOTED.`);
+}
+
+function workerCoreAutonomyRecord(record: DatabaseAutonomyPolicyRecord): AutonomyPolicyRecord {
+  if (record.provenance['source'] !== 'SERVER_POLICY') {
+    throw new Error('P5_AUTONOMY_RECORD_INVALID: autonomy provenance is not server policy.');
+  }
+  return {
+    policy_id: record.policy_id,
+    policy_version: record.policy_version,
+    tenant_id: record.tenant_id,
+    skill_id: record.skill_id,
+    state: record.state,
+    previous_approved_state: workerApprovedState(record.previous_approved_state, 'previous_approved_state'),
+    evidence_window_ref: record.evidence_window_ref,
+    approver_id: record.approver_id,
+    reason: record.reason,
+    parameters: { ...record.parameters },
+    provenance: { source: 'SERVER_POLICY' },
+    effective_at: record.effective_at,
+    rollback: {
+      policy_version: record.rollback_policy_version,
+      state: workerApprovedState(record.rollback_state, 'rollback_state'),
+    },
+    audit_ref: record.audit_ref,
+    evidence_ref: record.evidence_ref,
+  };
+}
+
+function workerDatabaseAutonomyStore(repository: P5AutonomyRepository): AutonomyStore {
+  return {
+    async getCurrent(input) {
+      const record = await repository.get(input.tenant_id, input.skill_id, input.policy_version);
+      return record === null ? undefined : workerCoreAutonomyRecord(record);
+    },
+    async put(record) {
+      await repository.commitPolicy({
+        tenant_id: record.tenant_id,
+        skill_id: record.skill_id,
+        policy_version: record.policy_version,
+        policy_id: record.policy_id,
+        state: record.state,
+        previous_approved_state: record.previous_approved_state,
+        evidence_window_ref: record.evidence_window_ref,
+        approver_id: record.approver_id,
+        reason: record.reason,
+        parameters: { ...record.parameters },
+        provenance: { ...record.provenance },
+        effective_at: record.effective_at,
+        rollback_policy_version: record.rollback.policy_version,
+        rollback_state: record.rollback.state,
+        audit_ref: record.audit_ref,
+        evidence_ref: record.evidence_ref,
+      });
+    },
+    async listCurrent(tenant_id) {
+      const records = await repository.list(tenant_id);
+      return records.map(workerCoreAutonomyRecord);
+    },
+    async listHistory(tenant_id) {
+      const snapshots = await repository.listPolicySnapshots(tenant_id);
+      const records: AutonomyPolicyRecord[] = [];
+      for (const snapshot of snapshots) {
+        if (typeof snapshot !== 'object' || snapshot === null) continue;
+        const record = snapshot as Partial<AutonomyPolicyRecord>;
+        if (record.tenant_id !== tenant_id || record.provenance?.source !== 'SERVER_POLICY') continue;
+        if (typeof record.policy_id !== 'string' || typeof record.skill_id !== 'string') continue;
+        if (typeof record.policy_version !== 'string' || typeof record.state !== 'string') continue;
+        if (typeof record.effective_at !== 'string' || record.rollback === undefined) continue;
+        records.push(record as AutonomyPolicyRecord);
+      }
+      return records;
+    },
+    async isTenantPaused(tenant_id) {
+      const controls = await repository.getControls(tenant_id);
+      return controls?.paused ?? false;
+    },
+    async setTenantPaused(tenant_id, paused) {
+      const current = await repository.getControls(tenant_id);
+      await repository.commitControls({
+        tenant_id,
+        paused,
+        kill_switch: current?.kill_switch ?? false,
+        actor: current?.actor ?? null,
+        reason: current?.reason ?? null,
+        effective_at: new Date().toISOString(),
+      });
+    },
+  };
+}
+
 
 export interface WorkerPollerHandle {
   readonly isRunning: boolean;
@@ -155,6 +260,7 @@ export interface WorkerEnv extends WorkerConnectorEnv {
   readonly MARKETING_SIGNAL_SOURCE_CHANNELS?: string;
   readonly MARKETING_SIGNAL_EVENT_TYPES?: string;
   readonly AUDIT_HMAC_SECRET?: string;
+  readonly DATABASE_URL?: string;
   /**
    * Enables the brokered cross-domain journey (`marketing → sales → care → retention`). Absent or
    * not `true`, no broker is bound and a plan that declares a handoff refuses
@@ -166,6 +272,10 @@ export interface WorkerEnv extends WorkerConnectorEnv {
 export interface WorkerExecutionOptions extends WorkerConnectorOptions {
   readonly workerId?: string;
   readonly tenantIds?: readonly string[];
+  /** Durable database binding used to admit persisted autonomy policies. */
+  readonly databaseRunner?: TenantTransactionRunner;
+  /** Optional autonomy admission override; no in-memory store is created by the worker. */
+  readonly autonomy?: AutonomyAdmissionPort;
   readonly workflowRepository?: Pick<DurableWorkflowRepository,
     'claimNextQueuedTask' | 'getTask' | 'releaseTaskLease' | 'recordFailure' | 'transitionTask'>;
   readonly orchestratorFactory?: (tenant_id: string) => Promise<RevenueOrchestrator | null> | RevenueOrchestrator | null;
@@ -467,6 +577,62 @@ export function startWorker(
   }
 
   const workflowRepository = options.workflowRepository ?? new DurableWorkflowRepository();
+  const hasDatabase = options.databaseRunner !== undefined
+    || (typeof env.DATABASE_URL === 'string' && env.DATABASE_URL.trim().length > 0);
+  const autonomyRepository = hasDatabase
+    ? new P5AutonomyRepository(options.databaseRunner ?? withTenantContext)
+    : undefined;
+  const autonomy: AutonomyAdmissionPort | undefined = options.autonomy
+    ?? (autonomyRepository === undefined
+      ? undefined
+      : new AutonomyService(workerDatabaseAutonomyStore(autonomyRepository), {
+          audit: {
+            async append(event: AutonomyAuditEvent): Promise<void> {
+              const actor = event.actor?.trim();
+              if (actor === undefined || actor.length === 0) {
+                throw new Error('P5_AUTONOMY_ACTOR_REQUIRED: an identified actor is required.');
+              }
+              if (event.event === 'KILL_SWITCH' || event.event === 'CALLER_ASSERTION_REJECTED') {
+                await autonomyRepository.appendControlEvent({
+                  tenant_id: event.tenant_id,
+                  event_type: event.event,
+                  actor,
+                  reason: event.reason,
+                  skill_id: event.skill_id ?? null,
+                  policy_version: event.policy_version ?? null,
+                  occurred_at: event.occurred_at,
+                });
+                if (event.event === 'KILL_SWITCH') {
+                  await autonomyRepository.commitControls({
+                    tenant_id: event.tenant_id,
+                    paused: true,
+                    kill_switch: true,
+                    actor,
+                    reason: event.reason,
+                    effective_at: event.occurred_at,
+                  });
+                }
+                return;
+              }
+              if (event.skill_id === undefined || event.policy_version === undefined || event.record === undefined) {
+                throw new Error('P5_AUTONOMY_EVENT_INCOMPLETE: skill, version, and record are required.');
+              }
+              await autonomyRepository.appendPolicyEvent({
+                tenant_id: event.tenant_id,
+                skill_id: event.skill_id,
+                policy_version: event.policy_version,
+                trigger: event.event,
+                from_state: event.record.previous_approved_state,
+                to_state: event.record.state,
+                actor,
+                reason: event.reason,
+                audit_ref: event.record.audit_ref,
+                snapshot: { ...event.record },
+                occurred_at: event.occurred_at,
+              });
+            },
+          },
+        }));
 
   // The brokered journey is opt-in and fail-closed: without an explicit `true` no broker is bound,
   // so a plan that declares a handoff refuses rather than admitting a cross-domain run.
@@ -486,6 +652,7 @@ export function startWorker(
         erp_read: connectors.erp_read,
         env,
         ...(crossDomainHandoff === undefined ? {} : { crossDomainHandoff }),
+        ...(autonomy === undefined ? {} : { autonomy }),
       }
     : {
         // A caller-supplied options object is the documented injection seam, so the broker is
@@ -495,6 +662,9 @@ export function startWorker(
         ...(options.careFactoryOptions.crossDomainHandoff !== undefined || crossDomainHandoff === undefined
           ? {}
           : { crossDomainHandoff }),
+        ...(options.careFactoryOptions.autonomy !== undefined || autonomy === undefined
+          ? {}
+          : { autonomy }),
       };
 
   const enabledModules = parseEnabledAgentModules(env.ENABLED_AGENT_MODULES);
@@ -538,12 +708,16 @@ export function startWorker(
             workflowRepository: workflowRepository as DurableWorkflowRepository,
             erp_read: connectors.erp_read,
             ...(crossDomainHandoff === undefined ? {} : { crossDomainHandoff }),
+            ...(autonomy === undefined ? {} : { autonomy }),
           }
         : {
             ...options.salesFactoryOptions,
             ...(options.salesFactoryOptions.crossDomainHandoff !== undefined || crossDomainHandoff === undefined
               ? {}
               : { crossDomainHandoff }),
+            ...(options.salesFactoryOptions.autonomy !== undefined || autonomy === undefined
+              ? {}
+              : { autonomy }),
           };
 
       // Reported, never used to suppress the domain: a deployment that binds only the read
@@ -598,6 +772,9 @@ export function startWorker(
           ...(options.marketingFactoryOptions?.crossDomainHandoff !== undefined
             ? {}
             : crossDomainHandoff === undefined ? {} : { crossDomainHandoff }),
+          ...(options.marketingFactoryOptions?.autonomy !== undefined || autonomy === undefined
+            ? {}
+            : { autonomy }),
         });
       } catch (error) {
         blockers.push('MARKETING_ORCHESTRATOR_UNBOUND: ' + (error instanceof Error ? error.message : String(error)));

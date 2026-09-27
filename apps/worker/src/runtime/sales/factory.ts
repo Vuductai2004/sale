@@ -23,12 +23,12 @@ import {
   EffectGuard,
   RevenueOrchestrator,
   type PolicyAuditPort,
+  type AutonomyAdmissionPort,
 } from '@agentos/core-engine';
 import type {
   AssignableAuthority,
   DurableLeaseManager,
   IAdapterDispatcher,
-  ICrossDomainHandoffBroker,
   IAgentRuntime,
   IAuditTrail,
   IContextAggregator,
@@ -37,6 +37,7 @@ import type {
   IPolicyEngine,
   ISessionControl,
   IStatefulWorkflowEngine,
+  ICrossDomainHandoffBroker,
 } from '@agentos/core-engine/contracts';
 import {
   ApprovalRepository,
@@ -90,6 +91,7 @@ export interface SalesOrchestratorFactoryOptions {
   readonly contextAggregator?: IContextAggregator | undefined;
   readonly agentRuntime?: IAgentRuntime | undefined;
   readonly policyEngine?: IPolicyEngine | undefined;
+  readonly autonomy?: AutonomyAdmissionPort | undefined;
   readonly workflowEngine?: IStatefulWorkflowEngine | undefined;
   readonly evidenceLogger?: IEvidenceLogger | undefined;
   readonly auditTrail?: IAuditTrail | undefined;
@@ -388,7 +390,7 @@ export function createSalesOrchestratorFactory(
     auditSecret,
     ...(options.now ? { now: options.now } : {}),
     resolveGrant,
-    audit: options.audit,
+    ...(options.autonomy ? { autonomy: options.autonomy } : {}),
     auditTrail,
     auditRepository: options.auditRepository,
   });

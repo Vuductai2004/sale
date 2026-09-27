@@ -11,6 +11,7 @@ import {
   OrchestratorError,
   RevenueOrchestrator,
   type PolicyEnforcementOptions,
+  type AutonomyAdmissionPort,
   type PolicyRegistrySkill,
 } from '@agentos/core-engine';
 import type {
@@ -468,6 +469,7 @@ export interface MarketingOrchestratorFactoryOptions {
   readonly contextAggregator?: IContextAggregator;
   readonly agentRuntime?: IAgentRuntime;
   readonly policyEngine?: IPolicyEngine;
+  readonly autonomy?: AutonomyAdmissionPort;
   readonly workflowEngine?: IStatefulWorkflowEngine;
   readonly evidenceLogger?: IEvidenceLogger;
   readonly auditTrail?: IAuditTrail;
@@ -560,7 +562,7 @@ export function createMarketingOrchestratorFactory(
     skills: policySkills(),
     allowed_payload_fields: allowedPayloadFields(services),
     resolveGrant,
-    auditSecret,
+    ...(options.autonomy ? { autonomy: options.autonomy } : {}),
     ...(policyAudit ? { audit: policyAudit } : {}),
     ...(options.now === undefined ? {} : { now }),
   });

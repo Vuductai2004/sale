@@ -295,6 +295,8 @@ export interface ApprovalGateResult {
   readonly verdict: AuthorityVerdict;
   /** Present when a stored approval covers this action; policy evaluation itself creates no row. */
   readonly approval_id?: string;
+  /** Controlled-autonomy workflow annotation; present only on an AUTO_APPROVED result. */
+  readonly autonomyWorkflow?: 'UNCHANGED' | 'AUTO_EXECUTE' | 'PARKED_DRAFT';
   readonly reason: string;
 }
 

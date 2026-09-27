@@ -228,7 +228,67 @@ describe('Tenant & Operator Header Injection Contract', () => {
 });
 
 // ============================================================================
-// 4. R14: Approval List, Detail, Decision Contracts
+// 4. P5 Tenant Workspace & Controlled Autonomy Contracts
+// ============================================================================
+describe('P5 Tenant Workspace & Controlled Autonomy Contracts', () => {
+  it('reads the session-bound current tenant projection', async () => {
+    const spy = createFetchSpy(createMockJsonResponse({ tenant_id: 'tenant-acme', status: 'PROVISIONED' }));
+    const client = createApiClient({ baseUrl: 'http://localhost:4000', fetch: spy.mockFetch });
+
+    await client.getCurrentTenant();
+
+    expect(spy.getLastUrl()).toBe('http://localhost:4000/api/v1/admin/tenants/current');
+    expect(spy.getLastInit()?.method).toBe('GET');
+  });
+
+  it('reads session-bound autonomy state without a tenant form override', async () => {
+    const spy = createFetchSpy(createMockJsonResponse({ paused: true, current: [] }));
+    const client = createApiClient({ baseUrl: 'http://localhost:4000', fetch: spy.mockFetch });
+
+    await client.getAutonomy();
+
+    expect(spy.getLastUrl()).toBe('http://localhost:4000/api/v1/admin/autonomy');
+    expect(spy.getLastInit()?.method).toBe('GET');
+  });
+
+  it('posts the pause operator action without caller authority text', async () => {
+    const spy = createFetchSpy(createMockJsonResponse({ accepted: true }));
+    const client = createApiClient({ baseUrl: 'http://localhost:4000', fetch: spy.mockFetch });
+
+    await client.pauseAutonomy();
+
+    expect(spy.getLastUrl()).toBe('http://localhost:4000/api/v1/admin/autonomy/pause');
+    expect(spy.getLastInit()?.method).toBe('POST');
+    expect(spy.getBodyJson()).toBeUndefined();
+  });
+
+  it('posts the resume operator action without caller authority text', async () => {
+    const spy = createFetchSpy(createMockJsonResponse({ accepted: true }));
+    const client = createApiClient({ baseUrl: 'http://localhost:4000', fetch: spy.mockFetch });
+
+    await client.resumeAutonomy();
+
+    expect(spy.getLastUrl()).toBe('http://localhost:4000/api/v1/admin/autonomy/resume');
+    expect(spy.getLastInit()?.method).toBe('POST');
+    expect(spy.getBodyJson()).toBeUndefined();
+  });
+
+  it('posts only skill_id and reason for demotion', async () => {
+    const spy = createFetchSpy(createMockJsonResponse({ accepted: true }));
+    const client = createApiClient({ baseUrl: 'http://localhost:4000', fetch: spy.mockFetch });
+
+    await client.demoteAutonomy({ skill_id: 'skill.sales.check_stock', reason: 'operator safety review' });
+
+    expect(spy.getLastUrl()).toBe('http://localhost:4000/api/v1/admin/autonomy/demote');
+    expect(spy.getLastInit()?.method).toBe('POST');
+    expect(spy.getBodyJson()).toEqual({
+      skill_id: 'skill.sales.check_stock',
+      reason: 'operator safety review',
+    });
+  });
+});
+
+// 5. R14: Approval List, Detail, Decision Contracts
 // ============================================================================
 describe('R14 Approval Contracts', () => {
   it('calls GET /api/v1/approvals with default status=PENDING', async () => {
@@ -378,7 +438,7 @@ describe('R14 Approval Contracts', () => {
 });
 
 // ============================================================================
-// 5. R15: Customer 360 & Timeline Contract
+// 6. R15: Customer 360 & Timeline Contract
 // ============================================================================
 describe('R15 Customer 360 Timeline Contract', () => {
   it('calls GET /api/v1/customers/{id}/timeline with pagination and timeframe params', async () => {
@@ -415,7 +475,7 @@ describe('R15 Customer 360 Timeline Contract', () => {
 });
 
 // ============================================================================
-// 6. R16 & R13: Runs and Operator Retry Contracts
+// 7. R16 & R13: Runs and Operator Retry Contracts
 // ============================================================================
 describe('R16 Runs and R13 Retry Contracts', () => {
   it('calls GET /api/v1/runs with filters and state queries', async () => {
@@ -465,7 +525,7 @@ describe('R16 Runs and R13 Retry Contracts', () => {
 });
 
 // ============================================================================
-// 7. R17: Telemetry KPI Snapshot & SSE Stream URL Contracts
+// 8. R17: Telemetry KPI Snapshot & SSE Stream URL Contracts
 // ============================================================================
 describe('R17 Telemetry KPI & Stream Contracts', () => {
   it('calls GET /api/v1/telemetry/kpi-snapshot with window and timezone queries', async () => {
@@ -510,7 +570,7 @@ describe('R17 Telemetry KPI & Stream Contracts', () => {
 });
 
 // ============================================================================
-// 8. SCR-005: Conversation Takeover, Heartbeat, Resume, Message Contracts
+// 9. SCR-005: Conversation Takeover, Heartbeat, Resume, Message Contracts
 // ============================================================================
 describe('SCR-005 Conversation Console Contracts', () => {
   it('calls POST /api/v1/conversations/{id}/takeover with operator lease request', async () => {
@@ -616,7 +676,7 @@ describe('SCR-005 Conversation Console Contracts', () => {
 });
 
 // ============================================================================
-// 9. Standardized Error Envelope Handling
+// 10. Standardized Error Envelope Handling
 // ============================================================================
 describe('Standardized Error Envelope Contract', () => {
   it('unwraps JSON ApiErrorEnvelope on non-2xx status codes', async () => {

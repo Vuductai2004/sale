@@ -24,6 +24,7 @@ import {
   EffectReservationRepository,
   EvidenceRepository,
   type RedisInjectedClient,
+  type TenantTransactionRunner,
 } from '@agentos/database';
 
 import type {
@@ -59,6 +60,7 @@ import {
   systemClock,
   systemIdentifiers,
 } from './bindings.js';
+import { createP5Ports, type P5Ports } from './p5-ports.js';
 
 /**
  * A capability this build does not bind.
@@ -89,6 +91,8 @@ export interface GatewayEnv {
   readonly JWT_SECRET?: string;
   /** The deployment's ingress HMAC secret; the platform ingress signature falls back to it. */
   readonly WEBHOOK_HMAC_SECRET?: string;
+  /** Presence of a non-empty URL enables database-backed P5 route ports. */
+  readonly DATABASE_URL?: string;
   readonly READINESS_ATTEMPTS?: string;
   readonly REDIS_HOST?: string;
   readonly REDIS_PORT?: string;
@@ -104,6 +108,9 @@ export interface GatewayComposition {
   readonly runtime: GatewayRuntime;
   readonly credentials: CredentialStore;
   readonly normalizer: EventAliasNormalizer;
+  /** P5 ports are present only when this composition has a database binding. */
+  readonly provisioning?: P5Ports['provisioning'];
+  readonly autonomyAdmin?: P5Ports['autonomyAdmin'];
   /** Capabilities this build does not bind, named for the boot log and the report. */
   readonly unbound: readonly string[];
   readonly enabledModules: readonly string[];
@@ -186,6 +193,8 @@ export function createGatewayComposition(
     readonly connectors?: ConnectorRegistry;
     /** Injected takeover store. The composition closes only clients it constructed itself. */
     readonly redis?: RedisInjectedClient;
+    /** Injected tenant transaction runner for database-backed P5 ports. */
+    readonly databaseRunner?: TenantTransactionRunner;
   },
 ): GatewayComposition {
   const enabledModules = parseEnabledAgentModules(env.ENABLED_AGENT_MODULES);
@@ -193,6 +202,11 @@ export function createGatewayComposition(
   const marketingSignalEventTypes = parseMarketingSignalEventTypes(env.MARKETING_SIGNAL_EVENT_TYPES);
   const { session_secret, platform_secret } = resolveSecrets(env);
   const hmac = options?.hmac ?? nodeHmacSha256Hex;
+  const hasDatabase = options?.databaseRunner !== undefined
+    || (typeof env.DATABASE_URL === 'string' && env.DATABASE_URL.trim().length > 0);
+  const p5: P5Ports | undefined = hasDatabase
+    ? createP5Ports(options?.databaseRunner === undefined ? {} : { databaseRunner: options.databaseRunner })
+    : undefined;
 
   const conversationsRepository = new ConversationRepository();
   const careHandoffsRepository = new CareHandoffRepository();
@@ -351,6 +365,7 @@ export function createGatewayComposition(
     runtime,
     credentials: options?.credentials ?? createCredentialStore({ operators: [], sessions: [], widgets: [] }),
     normalizer: createCanonicalEventNormalizer(),
+    ...(p5 === undefined ? {} : { provisioning: p5.provisioning, autonomyAdmin: p5.autonomyAdmin }),
     unbound: unbound_ports,
     enabledModules,
     salesSignalEventTypes,

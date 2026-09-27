@@ -16,6 +16,8 @@ import type {
   ApprovalDecisionRequest,
   ApprovalDecisionResponse,
   ApprovalDetailResponse,
+  AutonomyDemoteRequest,
+  AutonomyInspectionResponse,
   ConversationResumeRequest,
   ConversationResumeResponse,
   ConversationTakeoverHeartbeatRequest,
@@ -36,12 +38,21 @@ import type {
   RunRetryRequest,
   StorefrontStreamRequest,
   TaskAcceptedResponse,
+  TenantWorkspaceResponse,
 } from './api-types';
 
 export * from './api-types';
 
 /** Local API gateway origin used when no build-time URL is configured. */
 export const DEFAULT_API_ORIGIN = 'http://localhost:4000';
+/** P5 tenant-admin route paths. The gateway supplies the /api/v1 prefix. */
+export const TENANT_ADMIN_PATHS = Object.freeze({
+  currentTenant: '/admin/tenants/current',
+  autonomy: '/admin/autonomy',
+  pause: '/admin/autonomy/pause',
+  resume: '/admin/autonomy/resume',
+  demote: '/admin/autonomy/demote',
+} as const);
 
 /**
  * Origin of the API gateway. Inlined at build time from `NEXT_PUBLIC_API_URL`;
@@ -452,6 +463,66 @@ export class CommandCenterApiClient {
     cursor?: string | undefined;
   } | undefined): string {
     return buildApiUrl('/telemetry/stream', params, this.baseUrl);
+  }
+
+  // ==========================================================================
+  // P5: Tenant Workspace & Controlled Autonomy
+  // ==========================================================================
+
+  /** GET /api/v1/admin/tenants/current; tenant identity is resolved by the session. */
+  async getCurrentTenant(options?: RequestOptions | undefined): Promise<TenantWorkspaceResponse> {
+    return this.request<TenantWorkspaceResponse>(
+      TENANT_ADMIN_PATHS.currentTenant,
+      { method: 'GET' },
+      undefined,
+      options
+    );
+  }
+
+  /** GET /api/v1/admin/autonomy; tenant identity is resolved by the session. */
+  async getAutonomy(options?: RequestOptions | undefined): Promise<AutonomyInspectionResponse> {
+    return this.request<AutonomyInspectionResponse>(
+      TENANT_ADMIN_PATHS.autonomy,
+      { method: 'GET' },
+      undefined,
+      options
+    );
+  }
+
+  /** POST /api/v1/admin/autonomy/pause; no caller-supplied authority or prompt is accepted. */
+  async pauseAutonomy(options?: RequestOptions | undefined): Promise<unknown> {
+    return this.request<unknown>(
+      TENANT_ADMIN_PATHS.pause,
+      { method: 'POST' },
+      undefined,
+      options
+    );
+  }
+
+  /** POST /api/v1/admin/autonomy/resume; no caller-supplied authority or prompt is accepted. */
+  async resumeAutonomy(options?: RequestOptions | undefined): Promise<unknown> {
+    return this.request<unknown>(
+      TENANT_ADMIN_PATHS.resume,
+      { method: 'POST' },
+      undefined,
+      options
+    );
+  }
+
+  /** POST /api/v1/admin/autonomy/demote with only server-scoped skill and reason fields. */
+  async demoteAutonomy(
+    body: AutonomyDemoteRequest,
+    options?: RequestOptions | undefined
+  ): Promise<unknown> {
+    return this.request<unknown>(
+      TENANT_ADMIN_PATHS.demote,
+      {
+        method: 'POST',
+        body: JSON.stringify(body),
+      },
+      undefined,
+      options
+    );
   }
 
   // ==========================================================================

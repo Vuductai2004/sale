@@ -397,3 +397,58 @@ Remaining blockers: API-003 provider credentials and an audited provider contrac
 - Real API-001/API-002/API-003 provider credentials, real SoR receipts, owner-approved floor/knowledge policy and cross-functional sign-off remain absent. Gate P1, P2 and P3 remain open for the reasons recorded above them.
 
 `P4 ENGINEERING MERGE READY: YES` — the remaining engineering gaps named for this branch are implemented and executed: worker claim through `processClaimedTask` and the shared registry (`apps/worker/src/e2e/tc-e2e-001-worker-seam.e2e.test.ts`), durable park/re-claim with the same handoff identity (`scripts/p4-cross-domain-smoke.mjs` case 10, 12/12 live PostgreSQL), default Marketing `getProfile` binding, Care onboarding fail-closed at `CARE_ONBOARDING_ITINERARY_UNBOUND` after a real worker claim, retention routed to CS-02 `skill.care.analyze_churn_risk` with `skill.care.issue_retention_offer` still disabled, and `apps/worker` `test:e2e` required by CI. `FORMAL GATE P4 CLOSED: NO` — live provider credentials, SoR receipts, owner-approved floor/knowledge, the Care onboarding itinerary content, and cross-functional sign-off are still absent. Do not start P5.
+# P5 Controlled Autonomy & Global Scale — Engineering Status
+
+## Engineering complete
+
+The following P5 engineering paths are implemented on `feat/p5-controlled-autonomy`:
+
+- Durable tenant-scoped autonomy promotion, demotion, rollback, pause/resume, kill switch, policy drift handling, evidence/audit gates, and per-`tenant_id` + `skill_id` + `policy_version` admission.
+- PEP integration is additive and reuses the existing AUTH-0..AUTH-5, approval, EffectGuard, consent, floor-price, takeover, audit, and evidence paths. AUTH-4 remains approval-gated; AUTH-5 remains terminal deny.
+- Tenant provisioning shell with idempotency, RLS-scoped records, inactive AUTH-0 agent registry shell, unresolved owner inputs, unbound connectors, minimum autonomy rows, namespaces, and provisioning evidence.
+- Command Center tenant/autonomy status and operator controls with explicit `UNAVAILABLE`/`UNRESOLVED` states.
+- Shopify GTM-002 engineering seam with mock transport, OAuth state hashing, webhook verification/replay protection, tenant/shop binding, sync contracts, secret references, and fail-closed credentials. No App Store approval is claimed.
+- ADPT-GL-001 messaging, ADPT-GL-002 payment, and ADPT-GL-003 residency/compliance seams with local/mock tests and fail-closed unbound/ambiguous behavior.
+- Token/cost ledger, configurable budget guard, deterministic load smoke/high-load profile, and fail-closed disaster-recovery scenarios.
+- Generated P5 testcase source now promotes only read-only `skill.sales.check_stock`; outbound `skill.sales.send_message` remains explicitly non-promotable.
+
+## P5 requirement classification
+
+| Area | Classification | Boundary |
+|---|---|---|
+| Controlled autonomy and PEP integration | PARTIAL | Engineering implementation is present; live durable-provider evidence is not a formal gate result. |
+| Automatic demotion/rollback and operator controls | PARTIAL | Local and repository seams are implemented; live operational evidence is deferred. |
+| Dynamic tenant provisioning | PARTIAL | Transactional/idempotent engineering path is implemented; owner onboarding inputs remain unresolved. |
+| Admin workspace provisioning | PARTIAL | Status/readiness/autonomy controls are exposed; no fabricated KPI/provider health. |
+| Shopify package | PARTIAL | Engineering seam and mock transport only; marketplace approval/store credentials absent. |
+| Global adapters | PARTIAL | Contracts, validation, replay/idempotency, and fail-closed seams exist; real providers absent. |
+| Cost/token accounting | PARTIAL | Measurable ledger and `UNAVAILABLE` semantics exist; provider pricing is absent. |
+| Load harness | PARTIAL | Deterministic smoke and configurable high-load profile exist; production benchmark is absent. |
+| Disaster recovery | PARTIAL | Offline engineering simulation exists; production-like recovery evidence is absent. |
+| Formal Gate P5 closure | EXTERNAL BLOCKED | Mock/offline/local evidence cannot close the formal gate. |
+
+## Owner / provider / live / benchmark blocked
+
+- Shopify App Store/platform approval and a real Shopify store/credential set.
+- WhatsApp/global messaging provider credentials and approved account/scopes.
+- Payment-provider accounts, live payment receipts, and production reconciliation evidence.
+- Owner-approved residency decision and retention/DSAR policy.
+- ASM-001 connector approvals and ASM-002 benchmark/KPI baseline.
+- ASM-003/ASM-004 floor, refund, retention, frequency, and promotion-limit policies.
+- Real model/provider pricing and measured cost evidence; ECN-003 `< 1 TWD/dialogue` remains provisional.
+- Production-scale concurrency evidence; 10,000 sessions remains provisional.
+- Formal P5 sign-off and closure of prerequisite formal gates P1-P4.
+
+Local/mock/offline results are engineering evidence only and do not constitute formal Gate P5 closure.
+
+## Verification evidence and environment blocks
+
+- Passed: `python testcases/_generate.py --check`, `pnpm lint`, `pnpm typecheck`, `pnpm test:unit`, `pnpm test:contracts`, `pnpm test:adversarial`, `pnpm test:security`, `pnpm test:pilots`, `pnpm test:e2e`, `NODE_ENV=production pnpm build`, and `git diff --check`.
+- Passed: focused P5 autonomy/provisioning/cost/load/disaster-recovery suites (28 tests), Shopify/global adapter suites (9 tests), and the Command Center settings smoke with unavailable-data fallbacks.
+- Passed: canonical `node scripts/p5-load-harness.mjs`; metrics are measured smoke observations and `benchmarkStatus` is `not-evaluated`.
+- BLOCKED: clean PostgreSQL migration rehearsal and RLS suite failed at environment authentication for `agentos_app` (`28P01`, password authentication failed).
+- BLOCKED/FAILED: `pnpm test:integration` failed all seven P1 Care smoke cases and timed out after 600 seconds; later Sales/P4 smoke results are unavailable.
+- BLOCKED: Docker smoke could not reach the Docker Desktop daemon (`docker info` failed; named pipe unavailable).
+- NOT RUN for this uncommitted working tree: GitHub Actions. The latest listed run (`36294260506`) is for base SHA `a0284e1c...`, not this P5 diff.
+
+No local/mock/offline result above is formal Gate P5 evidence.

@@ -18,6 +18,7 @@ import type {
 import { OrchestratorError } from '@agentos/core-engine/contracts';
 import {
   type ApprovalQueuePort,
+  type AutonomyAdmissionPort,
   type ConsentSource,
   type ConsentState,
   type PolicyEnforcementOptions,
@@ -229,6 +230,7 @@ export interface SalesPolicyEngineOptions {
   readonly price_floor?: SalesPriceFloorPort | null | undefined;
   readonly consent?: SalesConsentPort | null | undefined;
   readonly pep?: PolicyEnforcementPoint | undefined;
+  readonly autonomy?: AutonomyAdmissionPort | undefined;
   readonly resolveGrant?: ((tenant_id: string, agent_id: string) => Promise<AssignableAuthority | null>) | undefined;
   readonly approvals?: ApprovalQueuePort | undefined;
   readonly auditSecret?: string | undefined;
@@ -293,6 +295,7 @@ export class SalesPolicyEngine extends DomainPolicyEngine implements IPolicyEngi
       ...(options.resolveGrant ? { resolveGrant: options.resolveGrant } : {}),
       defaultGrant: defaultSalesGrant,
       ...(options.approvals ? { approvals: options.approvals } : {}),
+      ...(options.autonomy ? { autonomy: options.autonomy } : {}),
       ...(consentSource ? { consent: consentSource } : {}),
       ...(options.auditSecret ? { auditSecret: options.auditSecret } : {}),
       ...(options.audit ? { audit: options.audit } : {}),

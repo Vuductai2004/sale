@@ -12,6 +12,7 @@ export * from './durability/effect-guard.js';
 export * from './durability/evidence.js';
 export * from './durability/redis-client.js';
 export * from './policy/index.js';
+export * from './autonomy/index.js';
 // The in-memory guard is the canonical `IEffectGuard` bound to a Map, so a route or connector test
 // exercises the real effect-key derivation, fingerprinting and reservation protocol instead of a
 // hand-rolled double. `EffectReservationStatus` is deliberately not re-exported: `contracts/types.ts`

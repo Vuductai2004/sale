@@ -576,3 +576,69 @@ export interface EventIngestionResponse {
   readonly correlation_id: string;
   readonly status: 'QUEUED' | 'IGNORED' | 'PROCESSED';
 }
+
+// ============================================================================
+// 9. P5 Tenant Workspace & Controlled Autonomy
+// ============================================================================
+
+export type TenantCapabilityStatus = 'CONFIGURED' | 'UNCONFIGURED';
+export type ConnectorReadinessStatus = 'UNBOUND' | 'DISABLED' | 'BOUND';
+export type AutonomyPolicyState = 'MINIMUM' | 'PROMOTED' | 'PAUSED' | 'DEMOTED';
+
+export interface TenantCapabilitiesProjection {
+  readonly status?: TenantCapabilityStatus | undefined;
+  readonly configured?: readonly string[] | undefined;
+  readonly unconfigured?: readonly string[] | undefined;
+}
+
+export interface ConnectorReadinessProjection {
+  readonly status?: ConnectorReadinessStatus | undefined;
+  readonly enabled?: ConnectorReadinessStatus | undefined;
+}
+
+export interface TenantAutonomyCandidateSkill {
+  readonly skill_id?: string | undefined;
+  readonly workflow?: AutonomyPolicyState | undefined;
+}
+
+export interface TenantAutonomyProjection {
+  readonly candidate_skills?: readonly TenantAutonomyCandidateSkill[] | undefined;
+  readonly summary?: {
+    readonly status?: AutonomyPolicyState | undefined;
+    readonly candidate_count?: number | undefined;
+  } | undefined;
+}
+
+export interface TenantOwnerInputProjection {
+  readonly key?: string | undefined;
+  readonly status?: 'UNRESOLVED' | undefined;
+}
+
+export interface TenantWorkspaceResponse {
+  readonly tenant_id?: string | undefined;
+  readonly status?: string | undefined;
+  readonly capabilities?: TenantCapabilitiesProjection | string | undefined;
+  readonly connector_readiness?: ConnectorReadinessProjection | ConnectorReadinessStatus | undefined;
+  readonly unresolved_owner_inputs?: readonly string[] | undefined;
+  readonly owner_inputs?: readonly TenantOwnerInputProjection[] | undefined;
+  readonly autonomy?: TenantAutonomyProjection | undefined;
+  readonly kpi?: { readonly status?: 'UNAVAILABLE' | undefined } | undefined;
+  readonly provider_health?: { readonly status?: 'UNAVAILABLE' | undefined } | undefined;
+}
+
+export interface AutonomyPolicyRecordProjection {
+  readonly skill_id?: string | undefined;
+  readonly state?: AutonomyPolicyState | undefined;
+}
+
+export interface AutonomyInspectionResponse {
+  readonly tenant_id?: string | undefined;
+  readonly paused?: boolean | undefined;
+  readonly current?: readonly AutonomyPolicyRecordProjection[] | undefined;
+  readonly history?: readonly AutonomyPolicyRecordProjection[] | undefined;
+}
+
+export interface AutonomyDemoteRequest {
+  readonly skill_id: string;
+  readonly reason: string;
+}

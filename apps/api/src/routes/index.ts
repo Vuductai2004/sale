@@ -8,7 +8,9 @@ import { registerCampaignRoutes } from './v1/campaigns.js';
 import { registerChatRoutes } from './v1/chat.js';
 import { registerConversationRoutes } from './v1/conversations.js';
 import { registerEventRoutes } from './v1/events.js';
+import { registerAutonomyAdminRoutes, type AutonomyAdminPort } from './v1/autonomy-admin.js';
 import { registerOperationRoutes } from './v1/operations.js';
+import { registerProvisioningRoutes, type ProvisioningRoutePort } from './v1/provisioning.js';
 import { registerStorefrontRoutes } from './v1/storefront.js';
 import { registerTelemetryRoutes } from './v1/telemetry.js';
 import { registerWebhookRoutes } from './v1/webhooks.js';
@@ -34,6 +36,9 @@ export interface RouteDependencies {
   readonly enabledModules?: readonly string[];
   readonly salesSignalEventTypes?: readonly string[];
   readonly marketingSignalEventTypes?: readonly string[];
+  /** Optional P5 route groups; omitted dependencies leave existing composition unchanged. */
+  readonly provisioning?: ProvisioningRoutePort;
+  readonly autonomyAdmin?: AutonomyAdminPort;
   /** Releases resources owned by this composition. Test doubles may omit it. */
   readonly close?: () => Promise<void>;
 }
@@ -63,6 +68,21 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDependencies): v
       registerStorefrontRoutes(scope, deps);
       registerCampaignRoutes(scope);
       registerWebhookRoutes(scope);
+      if (deps.provisioning !== undefined) {
+        registerProvisioningRoutes(scope, {
+          provisioning: deps.provisioning,
+          credentials: deps.credentials,
+          runtime: deps.runtime,
+          ...(deps.autonomyAdmin === undefined ? {} : { autonomyAdmin: deps.autonomyAdmin }),
+        });
+      }
+      if (deps.autonomyAdmin !== undefined) {
+        registerAutonomyAdminRoutes(scope, {
+          autonomyAdmin: deps.autonomyAdmin,
+          credentials: deps.credentials,
+          runtime: deps.runtime,
+        });
+      }
       done();
     },
     { prefix: API_PREFIX },
