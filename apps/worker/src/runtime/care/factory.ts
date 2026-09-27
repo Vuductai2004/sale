@@ -153,6 +153,7 @@ export function createCarePolicyEngine(options: CreateCarePolicyEngineOptions = 
     ...(options.approvals ? { approvals: options.approvals } : {}),
     ...(options.autonomy ? { autonomy: options.autonomy } : {}),
     ...(policyAuditSink ? { audit: policyAuditSink } : {}),
+    ...(options.auditSecret ? { auditSecret: options.auditSecret } : {}),
     ...(options.now ? { now: options.now } : {}),
   });
 }

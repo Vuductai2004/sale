@@ -22,6 +22,8 @@
 # the database and production-like pilot boundaries remain the live gate evidence.
 # `test:e2e` is implemented by apps/worker (`vitest.e2e.config.ts`, `src/e2e/**/*.e2e.test.ts`)
 # and is required in this pipeline. Offline mocks are engineering regression, not live Gate P4 evidence.
+# P5 live repository smoke runs under the same migrated NOBYPASSRLS application role
+# in job 3. The deterministic load smoke in job 1 is not a 10k benchmark/SLO claim.
 #
 # Nothing in this pipeline publishes: `permissions` is read-only, and the Docker
 # job only builds images into the local daemon, inspects them, boots the Compose
@@ -68,12 +70,16 @@ jobs:
         run: >-
           node scripts/require-implemented-tasks.mjs lint typecheck build test:unit test:contracts test:pilots test:e2e
           test:adversarial test:security db:migrate:rehearse
+      - name: Check generated testcase artifacts against authoritative sources
+        run: python testcases/_generate.py --check
       - name: Lint
         run: pnpm lint
       - name: Type-check
         run: pnpm typecheck
       - name: Build every workspace package
         run: pnpm build
+      - name: Verify deterministic P5 load smoke safety counters
+        run: node scripts/p5-load-harness.mjs --profile smoke --assert-safe-smoke
 
   unit-and-contract-tests:
     name: 2. Unit and Contract Tests
@@ -165,6 +171,11 @@ jobs:
         env:
           DATABASE_URL: postgresql://agentos_app:agentos_app_password@127.0.0.1:5432/agent_os_rehearsal
         run: pnpm test:rls-policies
+      - name: Verify P5 provisioning and autonomy repositories on real PostgreSQL
+        env:
+          APP_ENV: ci
+          DATABASE_URL: postgresql://agentos_app:agentos_app_password@127.0.0.1:5432/agent_os_rehearsal
+        run: pnpm test:p5-db
       # The P1 Customer Care path has no skip path either: it drives the gateway,
       # the durable task store, the skill runtime and the evidence/audit writers
       # against the rehearsed schema, and fails when a prerequisite is missing.

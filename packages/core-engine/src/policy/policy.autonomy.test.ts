@@ -80,6 +80,8 @@ describe('PolicyEnforcementPoint controlled autonomy', () => {
     });
     expect(auth4.verdict).toBe('AWAITING_HUMAN_APPROVAL');
     expect(auth4.authorized).toBe(false);
+    expect(auth4.decisionCode).toBe('REQUIRE_HUMAN_APPROVAL');
+    expect(auth4.autonomyWorkflow).toBeUndefined();
 
     const auth5 = await pep.enforce(CONTEXT, {
       skill_id: 'skill.sales.check_stock',
@@ -89,6 +91,17 @@ describe('PolicyEnforcementPoint controlled autonomy', () => {
     });
     expect(auth5.verdict).toBe('DENIED');
     expect(auth5.errorCode).toBe('PROHIBITED_ACTION');
+    expect(auth5.decisionCode).toBe('DENY_PROHIBITED');
+    expect(auth5.autonomyWorkflow).toBeUndefined();
+    await autonomy.pauseTenant({ tenant_id: TENANT, actor: 'operator-1' });
+    const paused = await pep.enforce(CONTEXT, {
+      skill_id: 'skill.sales.check_stock',
+      tool_name: 'adapter:stock',
+      payload: {},
+    });
+    expect(paused.verdict).toBe('AUTO_APPROVED');
+    expect(paused.decisionCode).toBe('PERMIT');
+    expect(paused.autonomyWorkflow).toBe('PARKED_DRAFT');
   });
   it('parks an AUTO_APPROVED decision when autonomy admission throws', async () => {
     const pep = new PolicyEnforcementPoint({
@@ -115,6 +128,23 @@ describe('PolicyEnforcementPoint controlled autonomy', () => {
     expect(permit.authorized).toBe(true);
     expect(permit.decisionCode).toBe('PERMIT');
     expect(permit.autonomyWorkflow).toBe('PARKED_DRAFT');
+    const canonical = await new PolicyEnforcementPoint({
+      registry: {
+        getSkill: (skill_id) => skill_id === 'skill.sales.check_stock' ? skill() : undefined,
+        getAgent: (agent_id) => agent_id === 'SAL-01' ? { agent_id, assigned_authority: 'AUTH-3' } : undefined,
+      },
+      approvals: { createOrReadPending: async () => ({ approval_id: 'approval-1' }) },
+      audit: { append: async () => undefined },
+      auditSecret: 'autonomy-test-secret',
+    }).enforce(CONTEXT, {
+      skill_id: 'skill.sales.check_stock',
+      tool_name: 'adapter:stock',
+      payload: {},
+    });
+    expect(permit.reason).toBe(canonical.reason);
+    expect(permit.errorCode).toBe(canonical.errorCode);
+    expect(permit.ruleId).toBe(canonical.ruleId);
+    expect(permit.auditStatus).toBe(canonical.auditStatus);
 
     const approval = await pep.enforce(CONTEXT, {
       skill_id: 'skill.sales.check_stock',
@@ -167,5 +197,23 @@ describe('PolicyEnforcementPoint controlled autonomy', () => {
       policy_version: 'v1',
     });
     expect(admission.workflow).toBe('PARKED_DRAFT');
+    const pep = new PolicyEnforcementPoint({
+      registry: {
+        getSkill: (skill_id) => skill_id === 'skill.sales.check_stock' ? skill() : undefined,
+        getAgent: (agent_id) => agent_id === 'SAL-01' ? { agent_id, assigned_authority: 'AUTH-3' } : undefined,
+      },
+      approvals: { createOrReadPending: async () => ({ approval_id: 'approval-1' }) },
+      audit: { append: async () => undefined },
+      auditSecret: 'autonomy-test-secret',
+      autonomy,
+    });
+    const drifted = await pep.enforce(CONTEXT, {
+      skill_id: 'skill.sales.check_stock',
+      tool_name: 'adapter:stock',
+      payload: {},
+    });
+    expect(drifted.verdict).toBe('AUTO_APPROVED');
+    expect(drifted.decisionCode).toBe('PERMIT');
+    expect(drifted.autonomyWorkflow).toBe('PARKED_DRAFT');
   });
 });

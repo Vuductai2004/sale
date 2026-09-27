@@ -564,6 +564,7 @@ export function createMarketingOrchestratorFactory(
     resolveGrant,
     ...(options.autonomy ? { autonomy: options.autonomy } : {}),
     ...(policyAudit ? { audit: policyAudit } : {}),
+    auditSecret,
     ...(options.now === undefined ? {} : { now }),
   });
   const policyEngine: IPolicyEngine = new SharedMarketingPolicyEngine(

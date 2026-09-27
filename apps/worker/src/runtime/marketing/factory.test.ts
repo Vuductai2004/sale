@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type {
+  ActionDraft,
+  HydratedContext,
   DurableLeaseManager,
   IAdapterDispatcher,
   IAgentRuntime,
@@ -68,6 +70,7 @@ interface OrchestratorInternals {
   readonly dependencies: {
     readonly contextAggregator: IContextAggregator;
     readonly agentRuntime: IAgentRuntime;
+    readonly policyEngine: IPolicyEngine;
   };
 }
 
@@ -91,6 +94,78 @@ const makeFactory = (crossDomainHandoff = false) => createMarketingOrchestratorF
 });
 
 const internals = (orchestrator: unknown): OrchestratorInternals => orchestrator as OrchestratorInternals;
+
+describe('Marketing policy factory composition', () => {
+  it('retains the audit secret and autonomy port without promoting AUTH-4 campaign dispatch', async () => {
+    const auditTrail: IAuditTrail = { append: vi.fn(async () => undefined) };
+    const admit = vi.fn(async () => ({ workflow: 'PARKED_DRAFT' as const, reason: 'not promoted' }));
+    const factory = createMarketingOrchestratorFactory({
+      auditSecret: AUDIT_SECRET,
+      autonomy: { admit },
+      resolve_grant: async () => 'AUTH-3',
+      adapters: {
+        workflowEngine: {} as IStatefulWorkflowEngine,
+        evidenceLogger: {} as IEvidenceLogger,
+        auditTrail,
+        sessionControl: {} as ISessionControl,
+        leaseManager: {} as DurableLeaseManager,
+      },
+      adapterDispatcher: {} as IAdapterDispatcher,
+      effectGuard: {} as IEffectGuard,
+    });
+    const policyEngine = internals(await factory(TENANT)).dependencies.policyEngine;
+    const context: HydratedContext = {
+      tenant_id: TENANT,
+      correlation_id: 'correlation-marketing-test',
+      customer: null,
+      working_memory: {
+        session_id: subject.session_id,
+        last_touch_channel: 'WEB_CHAT',
+        turn_count: 1,
+        takeover_active: false,
+      },
+      knowledge_citations: [],
+      hydrated_at: '2026-01-01T00:00:00.000Z',
+    };
+    const action: ActionDraft = {
+      action_id: '33333333-3333-4333-8333-333333333333',
+      run_id: 'run-marketing',
+      tenant_id: TENANT,
+      agent_id: 'MKT-05',
+      skill_id: 'skill.mkt.dispatch_campaign',
+      adapter_target: 'API-003.CommunicationConnector',
+      step_index: 0,
+      mutating: true,
+      price_bearing: false,
+      request_id: 'request-marketing',
+      action_revision: 0,
+      effect_key: 'effect-marketing',
+      required_authority: 'AUTH-4',
+      payload: { tenant_id: TENANT, effect_key: 'effect-marketing' },
+    };
+
+    const approval = await policyEngine.evaluateAuthority(action, context);
+    expect(approval.verdict).toBe('AWAITING_HUMAN_APPROVAL');
+    expect(approval.autonomyWorkflow).toBeUndefined();
+    expect(auditTrail.append).toHaveBeenCalledTimes(1);
+
+    const readOnly = await policyEngine.evaluateAuthority({
+      ...action,
+      agent_id: 'MKT-02',
+      skill_id: 'skill.mkt.segment_audience',
+      adapter_target: 'PostgreSQL.Customer360Store',
+      mutating: false,
+      required_authority: 'AUTH-1',
+      payload: { tenant_id: TENANT },
+    }, context);
+    expect(readOnly.verdict).toBe('AUTO_APPROVED');
+    expect(readOnly.autonomyWorkflow).toBe('PARKED_DRAFT');
+    expect(admit).toHaveBeenCalledWith(expect.objectContaining({
+      tenant_id: TENANT,
+      skill_id: 'skill.mkt.segment_audience',
+    }));
+  });
+});
 
 describe('default Marketing context aggregation', () => {
   it('hydrates a matching customer profile through the default factory aggregator', async () => {

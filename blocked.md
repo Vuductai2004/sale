@@ -443,12 +443,10 @@ Local/mock/offline results are engineering evidence only and do not constitute f
 
 ## Verification evidence and environment blocks
 
-- Passed: `python testcases/_generate.py --check`, `pnpm lint`, `pnpm typecheck`, `pnpm test:unit`, `pnpm test:contracts`, `pnpm test:adversarial`, `pnpm test:security`, `pnpm test:pilots`, `pnpm test:e2e`, `NODE_ENV=production pnpm build`, and `git diff --check`.
-- Passed: focused P5 autonomy/provisioning/cost/load/disaster-recovery suites (28 tests), Shopify/global adapter suites (9 tests), and the Command Center settings smoke with unavailable-data fallbacks.
-- Passed: canonical `node scripts/p5-load-harness.mjs`; metrics are measured smoke observations and `benchmarkStatus` is `not-evaluated`.
-- BLOCKED: clean PostgreSQL migration rehearsal and RLS suite failed at environment authentication for `agentos_app` (`28P01`, password authentication failed).
-- BLOCKED/FAILED: `pnpm test:integration` failed all seven P1 Care smoke cases and timed out after 600 seconds; later Sales/P4 smoke results are unavailable.
-- BLOCKED: Docker smoke could not reach the Docker Desktop daemon (`docker info` failed; named pipe unavailable).
-- NOT RUN for this uncommitted working tree: GitHub Actions. The latest listed run (`36294260506`) is for base SHA `a0284e1c...`, not this P5 diff.
+- Baseline SHA `899aa05db944fbe1177d2593e23c0cda59df2246`, GitHub Actions run `36311117267`: job 1 static analysis **success**, job 2 unit/contract **failure** (six Care/Marketing policy tests: missing audit signing in the P5 factory composition), job 3 raw-SQL migration/RLS/P1–P4 database rehearsal **success**, jobs 4 adversarial/security and 5 Docker **skipped**. That run is not evidence for this correction.
+- Correction: Care and Marketing factories pass `auditSecret` into the canonical PEP alongside autonomy, matching Sales. Combined factory regressions cover signed audit, read-only autonomy, AUTH-4 pause, and unchanged Sales behavior. PEP/orchestrator regressions park unavailable/paused/drifted autonomy without dispatch and preserve AUTH-4/5 precedence.
+- Local passing checks on the correction: `python testcases/_generate.py --check` (419 generated files match), `pnpm lint`, `pnpm typecheck`, `pnpm test:unit`, `pnpm test:contracts`, `pnpm test:adversarial`, `pnpm test:security`, `pnpm test:pilots`, `pnpm test:e2e`, production-mode `pnpm build`, `git diff --check`; deterministic P5 smoke measured four successful samples with zero duplicate effects and zero authority-policy violations, `benchmarkStatus: not-evaluated`. This is not a throughput/10,000-session or cost SLO result.
+- Local live-database attempt `pnpm test:p5-db` **blocked before setup**: PostgreSQL rejected the existing `agentos_app` credentials (`28P01`). The P5 suite has no skip path. Prior local `pnpm test:integration` and Docker failures remain environmental (same DB authentication; Docker Desktop daemon unavailable); they are not claimed passing locally.
+- CI now checks generated testcase parity, runs the deterministic P5 safety smoke after building, and executes the new real-PostgreSQL P5 provisioning/autonomy/RLS/restart/rollback suite as the NOBYPASSRLS app role in job 3. Existing P1 Care, P2 Sales, and P4 cross-domain database integration smokes remain in that job. **Current-HEAD GitHub Actions outcome pending push**; do not infer green from the baseline run.
 
-No local/mock/offline result above is formal Gate P5 evidence.
+`P5 ENGINEERING MERGE READY: PENDING CURRENT-HEAD CI`. `FORMAL GATE P5 CLOSED: NO`. Live provider approvals/credentials, owner policy, measured production-scale benchmark/cost evidence, prerequisite formal gates and sign-off remain unavailable; no offline or CI smoke substitutes for formal acceptance.
