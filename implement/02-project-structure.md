@@ -2,12 +2,10 @@
 
 > **BLUEPRINT STATUS — Gate P0 target design, not an inventory of existing files.**
 > This document specifies the **target monorepo layout** for the Gate P0 (Foundation) deliverable in SRS
-> AI-REV-SRS-001 §24. No directory, package, manifest (`package.json`, `pnpm-workspace.yaml`, `turbo.json`),
-> TypeScript config, seed script, or knowledge file listed below currently exists in this documentation-only
-> repository. Every tree entry and configuration snippet is a **blueprint to be created later**, and no
-> package manager, bundler, or build pipeline is installed or runnable here. Numeric latency, throughput,
-> bundle-size, and retention figures are **provisional design targets pending ASM-002 (KPI baseline) and the
-> NFR-009 benchmark**, not committed values.
+> AI-REV-SRS-001 §24. The tree and configuration snippets describe the agreed final structure and may
+> be ahead of the staged R1–R5 implementation; they are not evidence that every target artifact is
+> already delivered. Package/runtime availability and measurable latency, throughput, bundle-size, and
+> retention claims must be established by the corresponding build, CI, and ASM/NFR checks.
 
 ## 1. Monorepo Directory Layout (pnpm Workspaces + Turborepo) — target blueprint
 
@@ -21,7 +19,7 @@ agent-solution/
 │   └── workflows/
 │       └── production-pipeline.yml   # Target CI pipeline (09 §4): static analysis, contract/
 │                                     # migration/RLS rehearsal, adversarial, pilots, then build
-│                                     # + scan the three named images (local load only — never publish)
+│                                     # + scan the four named images (local load only — never publish)
 ├── apps/
 │   ├── api/                          # High-throughput Core API Gateway (Node.js/Fastify)
 │   │   ├── src/
@@ -45,23 +43,33 @@ agent-solution/
 │   │   │   └── worker.ts             # Worker process runner
 │   │   ├── package.json
 │   │   └── tsconfig.json
-│   └── command-center/               # Administrative Dashboard (Next.js 14 App Router)
+│   ├── tenant-console/                  # Tenant-facing Command Center (Next.js 14, port 3000)
+│   │   ├── src/
+│   │   │   ├── app/                     # /, approvals, takeover, sign-in, /health
+│   │   │   ├── components/              # Executive, approvals, customer, and conversation UI
+│   │   │   └── lib/                     # Tenant-console domain clients and wire DTOs
+│   │   ├── package.json                 # dev/start serve port 3000
+│   │   ├── next.config.mjs
+│   │   └── tsconfig.json
+│   └── platform-admin/                  # Platform Command Center (Next.js 14, port 3001)
 │       ├── src/
-│       │   ├── app/                  # App Router screens (SCR-001 through SCR-005)
-│       │   │   ├── (auth)/           # Authentication & tenant login
-│       │   │   ├── (dashboard)/
-│       │   │   │   ├── analytics/    # SCR-001 Executive & SCR-002 Operational dashboards
-│       │   │   │   ├── approvals/    # SCR-003 Human-in-the-loop Approval Queue (AUTH-4)
-│       │   │   │   ├── takeover/     # SCR-005 Real-time Operator Chat Takeover
-│       │   │   │   └── settings/     # Second Brain knowledge & tenant configuration
-│       │   │   ├── layout.tsx
-│       │   │   └── page.tsx
-│       │   ├── components/           # shadcn/ui and custom high-density UI primitives
-│       │   └── lib/                  # SWR/React Query hooks and WebSocket clients
-│       ├── package.json
-│       ├── tailwind.config.ts
+│       │   ├── app/                     # /, /operations, /sign-in, /health
+│       │   ├── components/              # Tenant workspace and run operations
+│       │   └── lib/                     # Platform-admin domain clients and wire DTOs
+│       ├── package.json                 # dev/start serve port 3001
+│       ├── next.config.mjs
 │       └── tsconfig.json
 ├── packages/
+│   ├── config/
+│   │   ├── eslint/                      # @agentos/eslint-config
+│   │   └── typescript/                  # @agentos/typescript-config
+│   ├── ui-foundation/                   # Browser-safe transport, status, types, and env parser
+│   │   ├── src/
+│   │   │   ├── http-client.ts
+│   │   │   ├── status.ts
+│   │   │   ├── env.mjs
+│   │   │   └── types/common.ts
+│   │   └── package.json
 │   ├── core-engine/                  # Central Orchestrator, Supervisor & State Machine
 │   │   ├── src/
 │   │   │   ├── orchestrator/         # 11-stage lifecycle coordinator
@@ -142,27 +150,25 @@ agent-solution/
 │   │   ├── vite.config.ts            # Micro-bundle compilation (IIFE target)
 │   │   ├── package.json
 │   │   └── tsconfig.json
-│   ├── typescript-config/            # Shared tsconfig definitions (base, react, node)
-│   │   ├── base.json
-│   │   ├── react.json
-│   │   └── package.json
-│   └── eslint-config/                # Shared ESLint + Prettier rules
-│       ├── index.js
-│       └── package.json
-├── docker/                           # Container deployment manifests
+├── docs/                                # Human-facing navigation indexes and moved references
+├── implement/                            # Canonical implementation blueprints
+├── plans/                                # Canonical product/platform plans
+├── testcases/                            # Generated acceptance specification and fixtures
+├── tests/README.md                       # Logical test ownership map
+├── docker/                               # Container deployment manifests
 │   ├── Dockerfile.api
 │   ├── Dockerfile.worker
-│   └── Dockerfile.command-center
-├── services/                         # LOCAL/CI-ONLY simulators — never deployed anywhere shared
-│   └── mock-erp/                     # API-001/API-002 SoR simulator (01 §2 compose service "mock-erp")
-│       ├── src/                      # Simulated ERP/OMS reads and event ingestion
-│       └── Dockerfile                # Built only by local/CI Compose; no staging/production image
-├── docker-compose.yml                # Local Compose topology (local only): backing services plus
-│                                     # api/worker/command-center built from the named Dockerfiles (01 §2)
-├── package.json                      # Monorepo root configuration
-├── pnpm-workspace.yaml               # Workspace definitions
-├── turbo.json                        # Turborepo pipeline cache configuration
-└── tsconfig.json                     # Root TypeScript configuration
+│   ├── Dockerfile.tenant-console
+│   └── Dockerfile.platform-admin
+├── services/                             # LOCAL/CI-ONLY simulators — never deployed anywhere shared
+│   └── mock-erp/                         # API-001/API-002 SoR simulator
+│       ├── src/
+│       └── Dockerfile
+├── docker-compose.yml                    # Local Compose topology (local only)
+├── package.json                           # Monorepo root configuration
+├── pnpm-workspace.yaml                    # Workspace definitions
+├── turbo.json                             # Turborepo pipeline cache configuration
+└── tsconfig.json                          # Root TypeScript configuration
 ```
 
 Two path rules follow from this tree and are relied on by §2, §5, and §6:
@@ -174,7 +180,7 @@ Two path rules follow from this tree and are relied on by §2, §5, and §6:
 
 ## 2. Package Boundaries & Dependency Graph
 
-Dependencies may only flow inward from applications toward core domain libraries. The graph below is the **single allowed dependency DAG** for the target workspace; the earlier draft graph (which let `apps/command-center` reach `packages/core-engine` and `packages/database` directly) is withdrawn, because a browser-rendered application must never hold a database driver or orchestrator implementation (`01` §9 edge 13).
+Dependencies may only flow inward from applications toward core domain libraries. The graph below is the **single allowed dependency DAG** for the target workspace; both browser applications consume only the HTTP wire contract and the browser-safe `packages/ui-foundation` package, never a database driver or orchestrator implementation.
 
 ```mermaid
 graph TD
@@ -196,8 +202,8 @@ graph TD
   pkg_core --> pkg_second_brain["packages/second-brain"]
   pkg_adapters --> pkg_core
 
-  apps_cc["apps/command-center"] --> http_api["/api/v1 over HTTPS"]
-  widget["packages/storefront-widget"] --> http_api
+  tenant_console["apps/tenant-console"] --> http_api["/api/v1 over HTTPS"]
+  platform_admin["apps/platform-admin"] --> http_api
   http_api --> apps_api
 ```
 
@@ -207,14 +213,15 @@ graph TD
 |---|---|---|---|
 | `apps/api` | `core-engine`, `skills`, `adapters`, `database` | any owner contract | browser code, UI packages |
 | `apps/worker` | `core-engine`, `skills`, `adapters`, `database` | any owner contract | browser code, UI packages |
-| `apps/command-center` | nothing from `packages/*` except dev config | nothing (it consumes wire DTOs generated from `06`) | `database` driver, `core-engine`, `adapters`, any provider SDK or secret |
+| `apps/tenant-console` | `ui-foundation` only (browser-safe transport/status/types/env) | wire DTOs owned by the app | `database` driver, `core-engine`, `adapters`, provider SDKs, or secrets |
+| `apps/platform-admin` | `ui-foundation` only (browser-safe transport/status/types/env) | wire DTOs owned by the app | `database` driver, `core-engine`, `adapters`, provider SDKs, or secrets |
 | `packages/core-engine` | `second-brain` loader utilities | `database` contracts | `apps/*`, UI, adapter implementation details |
 | `packages/skills` | `adapters` ports, `database` contracts | `core-engine` contracts | `apps/*`, browser APIs, another agent's private module |
 | `packages/adapters` | nothing from other workspace packages | `core-engine` contracts | `core-engine` implementation, `skills`, `apps/*`, provider SDK leakage upward |
 | `packages/database` | nothing (leaf) | `core-engine` contracts are **not** imported here | `apps/*`, `skills`, UI, adapter SDKs |
 | `packages/second-brain` | nothing (leaf) | — | `apps/*`, adapters, `database` driver |
 | `packages/storefront-widget` | nothing (zero runtime dependencies) | — | any `@agentos/*` runtime package; any secret; any policy or price logic |
-| `packages/typescript-config`, `packages/eslint-config` | dev-only | — | runtime code |
+| `packages/config/eslint`, `packages/config/typescript` | dev-only | — | runtime code |
 
 **Process and network edges (not imports):**
 
@@ -223,7 +230,7 @@ graph TD
 | Operator browser and storefront widget → `apps/api` `/api/v1` | HTTPS, SSE, WebSocket | `06` §1.1, `07` |
 | `apps/api` → `apps/worker` | Durable queue/workflow handoff (Redis + Temporal), never a direct call into worker code | `04` §4 |
 | `apps/api` / `apps/worker` → PostgreSQL, Redis, Qdrant, SoR, providers | Outbound authenticated connections per `01` §9 | `01` §9, `03`, `06` |
-| `apps/command-center` → `apps/api` | HTTPS only (`NEXT_PUBLIC_API_URL`) | `07`, `06` |
+| `apps/tenant-console` / `apps/platform-admin` → `apps/api` | HTTPS only (`NEXT_PUBLIC_API_URL`) | `06`, `07` |
 
 Cycle rule: the import DAG above is acyclic and MUST stay acyclic; any edge that would close a cycle is a build failure, not a judgment call. **Agents never call one another directly** — every cross-domain handoff runs through the orchestrator (`04` §1) so authority, consent, and evidence checks cannot be bypassed by a peer call.
 
@@ -544,7 +551,7 @@ export function evaluatePriceFloorConstraint(
 - Use domain-precise names: `verifyCustomerConsentStatus()`, `dispatchTaiwanCvsShippingOrder()`, `evaluateAuthorityThreshold()`.
 - All exported interfaces, functions, and types must include complete JSDoc annotations describing parameters, return values, exceptions, and associated SRS requirements.
 
-### 4. Strict TypeScript Settings (`packages/typescript-config/base.json`)
+### 4. Strict TypeScript Settings (`packages/config/typescript/base.json`)
 
 ```json
 {
@@ -586,39 +593,42 @@ The tree in §1 is a target layout. Ownership is singular: one artifact owns eac
 |---|---|---|---|---|
 | `apps/api` | `/api/v1` gateway: auth, tenant binding, route registry, webhooks, SSE/WS, rate limiting | `core-engine`, `skills`, `adapters`, `database` | any UI package, any provider SDK bypassing `adapters`, direct SQL strings outside `database` repositories | Node gateway process / `06` |
 | `apps/worker` | Durable workflow activities, queue processors, leases, retry/reconciliation | `core-engine`, `skills`, `adapters`, `database` | browser APIs, UI packages, direct peer-agent calls | Node worker process / `04` |
-| `apps/command-center` | SCR-001..005 operator UI, widget host integration, realtime client | generated API client + wire DTOs from `06` (generated into `src/lib/api-client`, not a workspace package) | `database` driver, `core-engine`, `adapters`, `skills`, any provider secret, any policy/price computation | Next.js 14 server + browser / `07` |
+| `apps/tenant-console` | SCR-001, SCR-003..005 tenant-console UI, realtime client | `ui-foundation` and app-owned wire DTOs | `database` driver, `core-engine`, `adapters`, `skills`, provider secrets, or policy/price computation | Next.js 14 server + browser / `07` |
+| `apps/platform-admin` | SCR-002 operations and tenant workspace UI | `ui-foundation` and app-owned wire DTOs | `database` driver, `core-engine`, `adapters`, `skills`, provider secrets, or policy/price computation | Next.js 14 server + browser / `07` |
+| `packages/ui-foundation` | Browser-safe HTTP/SSE transport, status vocabulary, common wire errors, and fail-closed env parser | browser platform only | database/core/worker/server dependencies and domain DTOs | browser package / `07` |
 | `packages/core-engine` | 11-stage orchestration, supervisor routing, policy/authority verdicts, memory manager, agent definitions, **canonical orchestration contracts in `src/contracts/`** | `database/contracts`, `second-brain` loader utilities | `apps/*`, UI, `adapters` implementation, DDL ownership | library (gateway + worker) / `04` |
 | `packages/skills` | 23-skill registry, deterministic validation, per-skill contract rows | `core-engine/contracts`, `adapters` ports, `database/contracts` | `apps/*`, browser APIs, another agent's private module, direct agent-to-agent calls | library (gateway + worker) / `05` |
 | `packages/database` | Raw SQL migrations, RLS context binder, repositories, connection pool, **canonical persistence projections in `src/contracts/`** | nothing (leaf) | `apps/*`, `skills`, `adapters` SDKs, any ORM migration generator (Prisma/Drizzle/Flyway) | library + migration runner / `03` |
 | `packages/second-brain` | 21 canonical knowledge documents, frontmatter/verification schemas, Qdrant ingestion helpers | nothing (leaf) | `apps/*`, `adapters`, database driver | library / `03` §4, §7 |
 | `packages/adapters` | API-001/002/003 ports and provider connectors; HMAC/mTLS/signature verification; bounded retry | `core-engine/contracts` (type-only) | `core-engine` implementation, `skills`, `apps/*`, upward SDK leakage | library (gateway + worker) / `06` |
 | `packages/storefront-widget` | Embeddable `<agent-storefront-widget>` web component, SSE stream parser, scoped styles | nothing (zero runtime dependencies) | any `@agentos/*` runtime package, any secret, any policy/price logic | browser IIFE bundle / `07` |
-| `packages/typescript-config` | Shared `base.json` / `react.json` TypeScript presets | dev-only | runtime code | build tooling / `02` |
-| `packages/eslint-config` | Shared ESLint + Prettier rules, including the import-direction rule that enforces §2 | dev-only | runtime code | build tooling / `02` |
+| `packages/config/typescript` | Shared `base.json` / `react.json` TypeScript presets | dev-only | runtime code | build tooling / `02` |
+| `packages/config/eslint` | Shared ESLint rules and browser/server dependency-direction presets | dev-only | runtime code | build tooling / `02` |
 | `services/mock-erp` | Local/CI simulator of API-001/API-002 | none — outside the workspace, not importable | anything: it is never imported or deployed (`01` §6) | local/CI container only / `01`, `06` |
 | `docker/Dockerfile.api` | Target image for `apps/api`; build context = repository root | package build outputs | an alternate root `Dockerfile` name | CI image build (`09` §10) / `01` |
 | `docker/Dockerfile.worker` | Target image for `apps/worker` | package build outputs | npm/Prisma alternative build paths | CI image build (`09` §10) / `01` |
-| `docker/Dockerfile.command-center` | Target image for `apps/command-center` | package build outputs | embedding server secrets into the client bundle | CI image build (`09` §10) / `01` |
-| `docker-compose.yml` (root) | Local Compose topology only: backing services (PostgreSQL, Redis, Qdrant, mock ERP, Temporal) **and** the local `api`/`worker`/`command-center` containers built from the named Dockerfiles (`01` §2) | — | staging/pilot/production deployment; contains no real credential | developer workstation / `01` §2 |
+| `docker/Dockerfile.tenant-console` | Target image for `apps/tenant-console` | package build outputs | embedding server secrets into the client bundle | CI image build (`09` §10) / `01` |
+| `docker/Dockerfile.platform-admin` | Target image for `apps/platform-admin` | package build outputs | embedding server secrets into the client bundle | CI image build (`09` §10) / `01` |
+| `docker-compose.yml` (root) | Local Compose topology only: backing services (PostgreSQL, Redis, Qdrant, mock ERP, Temporal) **and** local `api`/`worker`/`tenant-console`/`platform-admin` containers built from named Dockerfiles (`01` §2) | — | staging/pilot/production deployment; contains no real credential | developer workstation / `01` §2 |
 | `package.json` (root) | Workspace scripts and dev dependencies (§3) | — | per-app task names that diverge from §3 | CI entry point / `02`, `09` §10 |
-| `pnpm-workspace.yaml` | Workspace globs `apps/*`, `packages/*` | — | adding `services/*` to the workspace | pnpm bootstrap / `02` |
+| `pnpm-workspace.yaml` | Workspace globs `apps/*`, `packages/*`, and `packages/config/*` | — | adding `services/*` to the workspace | pnpm bootstrap / `02` |
 | `turbo.json` | Task graph and cache configuration (§3) | — | task names not used by `09` §10 | Turborepo / `02`, `09` §10 |
-| `tsconfig.json` (root) | Path aliases and project references only | — | per-package compiler options that contradict `packages/typescript-config` | build tooling / `02` |
+| `tsconfig.json` (root) | Path aliases and project references only | — | per-package compiler options that contradict `packages/config/typescript` | build tooling / `02` |
 
-**Dependency decision (final for this blueprint).** The allowed edges are exactly those in §2. `apps/command-center` consumes only `/api/v1` and generated wire types — the earlier claim that it may import `packages/core-engine` or `packages/database` is withdrawn, because that edge would have given a browser-rendered application a database driver and a second, unaudited path to tenant data (`01` §9 edge 13). `packages/contracts` does **not** exist and MUST NOT be introduced: shared types live at `packages/core-engine/src/contracts/` (orchestration/domain) and `packages/database/src/contracts/` (persistence projections), each owned by the document that defines its contract.
+**Dependency decision (final for this blueprint).** The allowed edges are exactly those in §2. `apps/tenant-console` and `apps/platform-admin` consume only `/api/v1` and browser-safe `packages/ui-foundation` exports; the earlier claim that a browser application may reach `packages/core-engine` or `packages/database` is withdrawn because that edge would give a browser-rendered application a database driver and a second, unaudited path to tenant data (`01` §9 edge 13). `packages/contracts` does **not** exist and MUST NOT be introduced: shared types live at the owner contract paths.
 
 ### 5.1 Rollout prerequisites for the workspace `[BLUEPRINT][SRS §24]`
 
 | Step | Deliverable | Prerequisite | Gate alignment (`09` §7) |
 |---|---|---|---|
-| 1 | Root workspace bootstrap: `package.json`, `pnpm-workspace.yaml`, `turbo.json`, `packages/typescript-config`, `packages/eslint-config` | Environment owner named (`01` §5.1); pnpm 9 + Node 20 available | P0 entry |
+| 1 | Root workspace bootstrap: `package.json`, `pnpm-workspace.yaml`, `turbo.json`, `packages/config/typescript`, `packages/config/eslint` | Environment owner named (`01` §5.1); pnpm 9 + Node 20 available | P0 entry |
 | 2 | Contract modules first: `packages/core-engine/src/contracts/`, `packages/database/src/contracts/` with the §6 interface set | Step 1; owner documents `03`/`04`/`05`/`06`/`08` frozen for the interfaces being declared | P0 entry |
 | 3 | Lint rule that fails a forbidden import edge (§2) before any app code lands | Step 2 | P0 exit evidence |
 | 4 | `packages/database` migrations + RLS rehearsal and `packages/database` seeds | Step 2; `01` §7 readiness order | P0 exit evidence |
 | 5 | `apps/api` gateway skeleton with config validation | Step 3; `01` §8 catalog variables injected | P0 exit evidence |
 | 6 | `apps/worker` durable skeleton with lease/checkpoint probes | Step 4 | P0 exit evidence |
 | 7 | `packages/skills` registry with 23 rows and authority serialization | Step 2; `05` registry invariants | P0 exit evidence |
-| 8 | `apps/command-center` reads only `/api/v1` (no database driver present in its dependency tree) | Step 5; `07` screen contracts | P0 exit evidence |
+| 8 | `apps/tenant-console` and `apps/platform-admin` read only `/api/v1` (no database driver present in either dependency tree) | Step 5; `07` screen contracts | P0 exit evidence |
 | 9 | `packages/storefront-widget` bundle built with zero runtime dependencies | Step 5 | P1 evidence (first real conversation) |
 
 A step MAY be reordered only when its prerequisite set is already satisfied; a missing prerequisite blocks the step rather than being worked around with a mock that later becomes load-bearing (`09` §8 harness boundary).
@@ -660,4 +670,4 @@ Rule: a package that needs one of these types imports the owning package's publi
 
 ## 8. Verification Scenarios `[BLUEPRINT][SRS §24 / NFR-001, NFR-006]`
 
-Future checks MUST reject a forbidden dependency cycle, an undeclared package import, a generated contract incompatible with its owner, an out-of-order raw SQL migration, and a tenant seed containing unapproved policy defaults. The checks verify target structure only until the repository contains runtime artifacts.
+Future checks MUST reject a forbidden dependency cycle, an undeclared package import, a generated contract incompatible with its owner, an out-of-order raw SQL migration, and a tenant seed containing unapproved policy defaults. These checks validate the target structure and implementation evidence as each rollout phase lands.

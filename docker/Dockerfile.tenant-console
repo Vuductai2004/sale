@@ -1,0 +1,46 @@
+# syntax=docker/dockerfile:1
+# apps/tenant-console image. Build context is the repository root:
+#   docker build -f docker/Dockerfile.tenant-console --build-arg NEXT_PUBLIC_API_URL=https://api.example.invalid .
+# NEXT_PUBLIC_API_URL is a public browser origin baked into the client bundle.
+# No credential is passed at build time; rebuild when the public API origin changes.
+
+FROM node:20-bookworm-slim AS builder
+
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
+ENV CI=true
+ENV NEXT_STANDALONE=1
+ARG NEXT_PUBLIC_API_URL
+RUN test -n "$NEXT_PUBLIC_API_URL"
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+RUN corepack enable
+
+WORKDIR /repo
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+COPY packages ./packages
+COPY apps ./apps
+
+RUN pnpm install --frozen-lockfile \
+    && pnpm --filter @agentos/tenant-console... build
+
+FROM node:20-bookworm-slim AS runtime
+
+ENV NODE_ENV=production
+# The Next 14 standalone server binds HOSTNAME:PORT, so both are pinned for the
+# in-container healthcheck on 127.0.0.1:3000.
+ENV HOSTNAME=0.0.0.0
+ENV PORT=3000
+
+WORKDIR /app
+
+# `next build` with `output: 'standalone'` emits a self-contained server that
+# mirrors the workspace layout; client assets are copied next to it.
+COPY --from=builder /repo/apps/tenant-console/.next/standalone ./
+COPY --from=builder /repo/apps/tenant-console/.next/static ./apps/tenant-console/.next/static
+
+EXPOSE 3000
+
+USER node
+
+CMD ["node", "apps/tenant-console/server.js"]

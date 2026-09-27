@@ -175,7 +175,7 @@ services:
       - temporal
     environment:
       - TEMPORAL_ADDRESS=temporal:7233
-      - TEMPORAL_CORS_ORIGINS=http://localhost:3000
+      - TEMPORAL_CORS_ORIGINS=http://localhost:3000,http://localhost:3001
     ports:
       - "8080:8080"
     networks:
@@ -252,29 +252,70 @@ services:
       - agentos-network
 
   # ---------------------------------------------------------------------------
-  # 8. Administrative Command Center Dashboard: Next.js 14
+  # 8. Tenant-facing Command Center surface: Tenant Console (Next.js 14)
   # ---------------------------------------------------------------------------
-  command-center:
+  tenant-console:
     build:
       context: .
-      dockerfile: docker/Dockerfile.command-center
-    container_name: agentos-command-center
+      dockerfile: docker/Dockerfile.tenant-console
+    container_name: agentos-tenant-console
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "${WEB_PORT:-3000}:3000"
     environment:
       NODE_ENV: development
       APP_ENV: local
+      PORT: 3000
       NEXTAUTH_URL: http://localhost:3000
       NEXTAUTH_SECRET: super_secret_jwt_encryption_key_min_32_characters_long
       # Gateway origin only — no /api/v1 suffix in this variable. Browser clients append
       # absolute /api/v1/** paths themselves (07 §7.2; 02 §2 network edges).
       NEXT_PUBLIC_API_URL: http://localhost:4000
-      # No database credential: the Command Center reads and mutates only through the
+      PLATFORM_ADMIN_URL: http://localhost:3001
+      # No database credential: the tenant console reads and mutates only through the
       # /api/v1 gateway (02 §5 ownership table; 07 UI contract). A hidden DATABASE_URL
       # here would create a second, unaudited path to tenant data and is prohibited.
     depends_on:
-      - api
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - agentos-network
+
+  # ---------------------------------------------------------------------------
+  # 9. Platform Command Center surface: Platform Admin (Next.js 14)
+  # ---------------------------------------------------------------------------
+  platform-admin:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.platform-admin
+    container_name: agentos-platform-admin
+    restart: unless-stopped
+    ports:
+      - "${PLATFORM_ADMIN_PORT:-3001}:3001"
+    environment:
+      NODE_ENV: development
+      APP_ENV: local
+      PORT: 3001
+      NEXTAUTH_URL: http://localhost:3001
+      NEXTAUTH_SECRET: super_secret_jwt_encryption_key_min_32_characters_long
+      # Gateway origin only — no /api/v1 suffix in this variable. Browser clients append
+      # absolute /api/v1/** paths themselves (07 §7.2; 02 §2 network edges).
+      NEXT_PUBLIC_API_URL: http://localhost:4000
+      # No database credential: the platform admin reads and mutates only through the
+      # /api/v1 gateway (02 §5 ownership table; 07 UI contract).
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3001/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     networks:
       - agentos-network
 
@@ -420,7 +461,10 @@ APP_ENV=local
 PORT=4000
 API_BASE_URL=http://localhost:4000
 WEB_BASE_URL=http://localhost:3000
-CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:8080
+WEB_PORT=3000
+PLATFORM_ADMIN_URL=http://localhost:3001
+PLATFORM_ADMIN_PORT=3001
+CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:3001,http://localhost:8080
 LOG_LEVEL=debug
 SERVICE_NAME=agentos-api
 
@@ -862,7 +906,7 @@ Owner names, secret-manager product selection, and provider allowlists remain `[
 
 ## 7. Component Startup and Dependency Graph `[BLUEPRINT][SRS §19 / NFR-004, NFR-008]`
 
-Target readiness order: **PostgreSQL → Redis → Qdrant → mock/real SoR connector boundary → API gateway → worker/orchestrator → Command Center**. The gateway and worker MUST NOT accept traffic before their own dependencies report ready; the Command Center is a client of `/api/v1` and never of the data zone (`06` §1.1, `09` §8).
+Target readiness order: **PostgreSQL → Redis → Qdrant → mock/real SoR connector boundary → API gateway → worker/orchestrator → tenant-console → platform-admin**. The gateway and worker MUST NOT accept traffic before their own dependencies report ready; both Command Center applications are clients of `/api/v1` and never of the data zone (`06` §1.1, `09` §8).
 
 | # | Component | Health probe (target) | Readiness condition | Retry/backoff on failure | Fail-closed / startup refusal | Audit or operator signal |
 |---|---|---|---|---|---|---|
@@ -872,20 +916,21 @@ Target readiness order: **PostgreSQL → Redis → Qdrant → mock/real SoR conn
 | 4 | SoR / connector boundary (API-001, API-002, API-003) | Per-adapter TLS/HMAC/mTLS probe plus tenant binding (`06` §9) | Signature/credential verification and tenant binding pass for every enabled adapter | Adapter policy: finite retry for idempotent reads; a dispatched mutation with no acknowledgement becomes `UNKNOWN` and reconciles by `effect_key` (`04` §4.4) | Price, inventory, order, and receipt-dependent actions stop; unknown outcome is never blind-retried | Reconciliation record plus operator route (`06` retry route); no fabricated success |
 | 5 | API gateway (`apps/api`) | Liveness probe endpoint — path is owned by `06` and is not yet in the §1.1 route inventory | Config schema valid, auth middleware registered, tenant binding active, route registry loaded (`04`, `06`) | Restart only after bounded failure; readiness stays false while any dependency is down | Reject requests without verified tenant context; refuse boot on invalid configuration | Boot rejection cites the failing variable name (never its value); SCR-002 dependency banner |
 | 6 | Worker/orchestrator (`apps/worker`) | Worker lease heartbeat plus workflow-store probe | Durable queue lease acquired, workflow store reachable, optimistic-version read succeeds (`04` §4.2–4.3) | Lease retry with bounded backoff and optimistic version; expired lease re-queues the task | No new step and no new effect; resume only from durable state | Lease/lost-lease events recorded; operator inspects run history in SCR-002 |
-| 7 | Command Center (`apps/command-center`) | Authenticated read of `/api/v1/telemetry/kpi-snapshot` | `/api/v1` read route and stream authorization probe pass with operator session | Reconnect with exponential backoff for streams (`07`) | Show unavailable/stale/unauthenticated state; never imply backend success or fabricate a value | UI state is one of the `07` shared UI states (loading/empty/stale/permission denied/dependency unavailable) |
+| 7 | Tenant Console (`apps/tenant-console`) | Authenticated read of `/api/v1/telemetry/kpi-snapshot` | `/api/v1` read route and stream authorization probe pass with operator session | Reconnect with exponential backoff for streams (`07`) | Show unavailable/stale/unauthenticated state; never imply backend success or fabricate a value | UI state is one of the `07` shared UI states (loading/empty/stale/permission denied/dependency unavailable) |
+| 8 | Platform Admin (`apps/platform-admin`) | Authenticated reads of its existing tenant-workspace and run-operation `/api/v1` routes | `/api/v1` route authorization and operator session probes pass | Reconnect or surface unavailable state according to the owning screen contract | Show unavailable/stale/unauthenticated state; never imply backend success or fabricate a value | UI state is one of the `07` shared UI states (loading/empty/stale/permission denied/dependency unavailable) |
 
 Startup is all-or-nothing per process: a process whose **required** dependency fails readiness MUST exit non-zero rather than serve partially, and MUST NOT substitute an internal default for a missing dependency or credential (NFR-008 fail closed).
 
 **Required vs. optional dependency scoping (a disabled capability never blocks an unrelated process).** The required set is computed per process role and per enabled capability — never as "every service in the diagram":
 
-- A disabled capability removes its dependency from that process's readiness gate: `MOCK_ERP_ENABLED=false`, the durable workflow engine off, knowledge answers off, or an adapter disabled per tenant (`06` §9.2). The gateway, worker, and Command Center MUST still boot and serve the capabilities that remain enabled.
+- A disabled capability removes its dependency from that process's readiness gate: `MOCK_ERP_ENABLED=false`, the durable workflow engine off, knowledge answers off, or an adapter disabled per tenant (`06` §9.2). The gateway, worker, tenant-console, and platform-admin MUST still boot and serve the capabilities that remain enabled.
 - A capability's dependency joins the readiness gate as soon as the capability is enabled; enabling it with an absent, incomplete, or placeholder credential set is a startup failure (catalog §8 rules 1–3), not a silent fallback.
 - Credential absence never enables anything. Missing provider credentials leave the adapter disabled and it refuses calls with `CAPABILITY_NOT_ENABLED`; conversely, a mock/default credential MUST NOT satisfy a capability that the environment profile or pilot scope declares required (`09` §7–§8), which is why the §4 validator has no mock defaults and rejects placeholders outside local/CI.
 - The Compose `depends_on` lists in §2 reflect the local default profile where every local service is enabled. A profile that disables a service omits it from `depends_on` instead of gating on a service it does not run.
 
 ## 8. Configuration Catalog `[MUST][SRS §19 / NFR-001, NFR-006, NFR-008]`
 
-Every variable that appears in the `.env.example` blueprint (§3), the boot-time validators (§4), or the target Compose topology (§2) has exactly one row below. Legend: **Req** `MUST` = required in every profile and rejected when absent; `COND` = required when the consuming adapter/feature is enabled; `OPT` = optional with an explicit safe default. **Secret** `YES`/`NO`/`COND`. Consumers: `api` = `apps/api`, `worker` = `apps/worker`, `cc` = `apps/command-center`, `mig` = migration runner, `mock` = `services/mock-erp` local simulator.
+Every variable that appears in the `.env.example` blueprint (§3), the boot-time validators (§4), or the target Compose topology (§2) has exactly one row below. Legend: **Req** `MUST` = required in every profile and rejected when absent; `COND` = required when the consuming adapter/feature is enabled; `OPT` = optional with an explicit safe default. **Secret** `YES`/`NO`/`COND`. Consumers: `api` = `apps/api`, `worker` = `apps/worker`, `tenant-console` = `apps/tenant-console`, `platform-admin` = `apps/platform-admin`, `mig` = migration runner, `mock` = `services/mock-erp` local simulator.
 
 Global rules (apply to every row):
 
@@ -899,15 +944,15 @@ Global rules (apply to every row):
 
 | Name | Type | Req | Owner | Secret | Safe placeholder / validation rule | Rotation | Consumer |
 |---|---|---|---|---|---|---|---|
-| `NODE_ENV` | enum `development\|test\|production` | MUST | `01` | NO | Node runtime mode only — never the profile selector (§3.1); validator rejects unknown values | n/a | api, worker, cc |
+| `NODE_ENV` | enum `development\|test\|production` | MUST | `01` | NO | Node runtime mode only — never the profile selector (§3.1); validator rejects unknown values | n/a | api, worker, tenant-console, platform-admin |
 | `APP_ENV` | enum `local\|ci\|staging\|sandbox\|production` | MUST | `01` | NO | MUST match the §6 environment row; no default — absence refuses startup; selects the placeholder policy (§3.1) | n/a | api (startup gate) |
 | `PORT` | int 1–65535 | MUST | `01` | NO | local `4000`; must match the published container port | n/a | api |
-| `API_BASE_URL` | url | MUST | `01` | NO | local `http://localhost:4000`; production = signed ingress host | n/a | api (callback generation), cc |
+| `API_BASE_URL` | url | MUST | `01` | NO | local `http://localhost:4000`; production = signed ingress host | n/a | api (callback generation), tenant-console, platform-admin |
 | `WEB_BASE_URL` | url | MUST | `07` | NO | local `http://localhost:3000` | n/a | api (links), provider callback allowlist |
 | `CORS_ALLOWED_ORIGINS` | csv(url) | MUST | `07` | NO | explicit origin list; `*` rejected outside local/CI | n/a | api |
 | `LOG_LEVEL` | enum `error\|warn\|info\|debug` | OPT (`info`) | `08` | NO | `debug` only in local/CI; logs MUST NOT contain secrets or unmasked PII | n/a | api, worker |
 | `SERVICE_NAME` | string | MUST | `01` | NO | `agentos-api` / `agentos-worker` per process | n/a | api, worker (OTel resource) |
-| `JWT_SECRET` | string ≥32 | MUST | `08` | YES | local-only placeholder; staging/production inject a random ≥32-char value | security runbook; version bump + rolling restart | api, cc (session signing) |
+| `JWT_SECRET` | string ≥32 | MUST | `08` | YES | local-only placeholder; staging/production inject a random ≥32-char value | security runbook; version bump + rolling restart | api, tenant-console, platform-admin (session signing) |
 | `JWT_EXPIRES_IN` | duration | OPT (`24h`) | `08` | NO | operator session lifetime; not an authority value | n/a | api |
 | `INTERNAL_API_KEY` | string ≥32 | MUST | `08` | YES | service-to-service authentication; local-only placeholder | on incident and on operator change | api, worker |
 | `WEBHOOK_HMAC_SECRET` | string ≥16 | MUST | `06` | YES | generic callback signature secret; per-provider secrets win where defined | with provider; overlap window for in-flight callbacks | api |
@@ -1027,13 +1072,16 @@ These appear only in the target Compose blueprint (§2) or the staging/productio
 | `POSTGRES_SEEDS` | host | COND | `04` | NO | Temporal database host | n/a | temporal container |
 | `DYNAMIC_CONFIG_FILE_PATH` | path | OPT | `04` | NO | local dynamic-config path; production uses a managed config map | n/a | temporal container |
 | `TEMPORAL_CORS_ORIGINS` | csv(url) | COND | `07` | NO | Temporal UI origin allowlist; UI is a local operator convenience only | n/a | temporal-ui container |
-| `NEXTAUTH_URL` | url | MUST | `07` | NO | Command Center origin; must match the registered callback | n/a | cc |
-| `NEXTAUTH_SECRET` | string ≥32 | MUST | `07` | YES | operator session secret; injected per environment | security runbook | cc |
-| `NEXT_PUBLIC_API_URL` | url | MUST | `07` | NO | gateway **origin only** (scheme + host + port — e.g. `http://localhost:4000`); MUST NOT include the `/api/v1` suffix and MUST NOT carry any secret — browser clients append absolute `/api/v1/**` paths themselves (`07` §7.2; `02` §2 network edges) | n/a | cc |
+| `WEB_PORT` | int 1–65535 | COND (local/CI) | `01` | NO | host port for the tenant-console mapping; default `3000` | n/a | tenant-console container |
+| `PLATFORM_ADMIN_URL` | url | MUST | `07` | NO | platform-admin origin only; local `http://localhost:3001`; no path or `/api/v1` suffix | n/a | tenant-console redirects, platform-admin session origin |
+| `PLATFORM_ADMIN_PORT` | int 1–65535 | COND (local/CI) | `01` | NO | host port for the platform-admin mapping; default `3001` | n/a | platform-admin container |
+| `NEXTAUTH_URL` | url | MUST | `07` | NO | Tenant Console origin `http://localhost:3000` or Platform Admin origin `http://localhost:3001`; must match the registered callback | n/a | tenant-console, platform-admin |
+| `NEXTAUTH_SECRET` | string ≥32 | MUST | `07` | YES | operator session secret; injected per environment | security runbook | tenant-console, platform-admin |
+| `NEXT_PUBLIC_API_URL` | url | MUST | `07` | NO | gateway **origin only** (scheme + host + port — e.g. `http://localhost:4000`); MUST NOT include the `/api/v1` suffix and MUST NOT carry any secret — browser clients append absolute `/api/v1/**` paths themselves (`07` §7.2; `02` §2 network edges) | n/a | tenant-console, platform-admin |
 | `POSTGRES_PRIMARY_URL` | postgres URI | COND (staging/production) | `03` | YES | write/transactional-read endpoint via the pooler; `sslmode=verify-full` | with role rotation | api, worker |
 | `POSTGRES_REPLICA_URL` | postgres URI | COND (staging/production) | `03` | YES | read-only analytics endpoint; MUST NOT accept writes | with role rotation | api (SCR-001/002 reads) |
 
-Catalog size: **120 variable rows** — 98 from `.env.example` (§3), 20 that appear only in the Compose blueprint (§2), and 2 topology URLs (§2.2). Known gap, to be closed before the dependent feature is enabled: the §4 Zod/Pydantic schemas now cover `APP_ENV`/`NODE_ENV`, the required secrets, the core data-store settings, and the optional adapter credential sets (with managed-profile placeholder rejection and all-or-nothing set checks), but still omit `JWT_EXPIRES_IN`, `TEMPORAL_*`, `REDIS_DB`, `SESSION_MUTEX_TTL_SECONDS`, storage credentials, and topology URLs; the validators MUST be extended to cover every `MUST` row above, and until then those variables are contract-defined here but not yet boot-enforced.
+Catalog size: **123 variable rows** — 101 from `.env.example` (§3), 20 that appear only in the Compose blueprint (§2), and 2 topology URLs (§2.2). Known gap, to be closed before the dependent feature is enabled: the §4 Zod/Pydantic schemas now cover `APP_ENV`/`NODE_ENV`, the required secrets, the core data-store settings, and the optional adapter credential sets (with managed-profile placeholder rejection and all-or-nothing set checks), but still omit `JWT_EXPIRES_IN`, `TEMPORAL_*`, `REDIS_DB`, `SESSION_MUTEX_TTL_SECONDS`, storage credentials, and topology URLs; the validators MUST be extended to cover every `MUST` row above, and until then those variables are contract-defined here but not yet boot-enforced.
 
 Two non-variable configuration items also live in the Compose blueprint and are catalogued for completeness: Redis container arguments (`--requirepass` = secret with the same rotation rule as `REDIS_PASSWORD`; `--maxmemory`, `--maxmemory-policy`, `--appendonly`, `--appendfsync` = `[PROVISIONAL]` capacity/durability settings owned by `03`), and the PgBouncer `pool_mode = transaction` setting (§2.2) which is an RLS invariant owned by `03` and MUST NOT be changed to session pooling without re-validating tenant-context reset.
 
@@ -1055,7 +1103,7 @@ Default posture: deny by default, no ingress to the data zone, and no connection
 | 10 | Gateway / worker | Communication and payment providers | HTTPS, outbound | Provider token + consent check before outreach (`08` BR-004) + approval state for AUTH-4 classes | Outbound messages and payment intents within approval scope | Dispatch without consent or approval; AUTH-5 classes; sending under a human hold (`07` SCR-005) |
 | 11 | Gateway / worker | OTel collector | OTLP over TLS, outbound | Collector credential | Traces/metrics with PII masking | Secrets, unmasked PII, or raw conversation bodies in span attributes |
 | 12 | Operators / CI runners | Secret store | TLS, outbound | Workload identity or operator session `[UNCONFIRMED][ASM-001]` | Secret fetch at boot or deploy time | Secrets written into images, Compose files, repository files, or logs |
-| 13 | Command Center container | PostgreSQL | **Prohibited** | — | None | Any direct database connection (`01` §8.3; `02` §5) |
+| 13 | Tenant Console and Platform Admin containers | PostgreSQL | **Prohibited** | — | None | Any direct database connection (`01` §8.3; `02` §5) |
 | 14 | Public internet | PostgreSQL / Redis / Qdrant | **Prohibited** | — | None | Publishing 5432 / 6379 / 6333 / 6334 (or the mapped equivalents) beyond the private network |
 
 ## 10. Resource, Scaling, and Failure Bounds `[PROVISIONAL][ASM-002][SRS §19 / NFR-003, NFR-004, NFR-009, NFR-010]`

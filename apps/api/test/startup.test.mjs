@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import http from 'node:http';
 import test from 'node:test';
 
-import { parseCommandCenterEnv } from '../../command-center/src/server.mjs';
+import { parseCommandCenterEnv } from '../../../packages/ui-foundation/src/env.mjs';
 import { start } from '../src/server.mjs';
 
 const SENTINEL = 'SENTINEL_SECRET_VALUE_DO_NOT_LEAK_123456';

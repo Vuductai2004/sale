@@ -27,7 +27,6 @@ import {
   GENESIS_HASH,
   OrchestratorError,
   assertHandoffSourceDomain,
-  highestAuthority,
   type ActionDraft,
   type AgentRunLogRecord,
   type AuthorityLevel,
@@ -37,7 +36,6 @@ import {
   type ExecutionReceipt,
   type ExecutionStatus,
   type HandoffAdmission,
-  type HandoffEvidenceRef,
   type HydratedContext,
   type HypothesisRecord,
   type ImmutableEvidenceRecord,
@@ -46,7 +44,6 @@ import {
   type RetryClass,
   type RoutingDecision,
   type SignalEnvelope,
-  type TaskLifecycleState,
 } from '../contracts/index.js';
 import type {
   DurableLeaseManager,
@@ -64,94 +61,32 @@ import type {
 import { canonicalizeJson } from '../durability/canonical-json.js';
 import { StageJournal, type LifecycleStage } from '../lifecycle/stages.js';
 import { assertOrchestratorBrokered } from './agent-boundary.js';
+import {
+  classifyFailure,
+  enforceEpistemicSeparation,
+  floorMirrors,
+  isPlainJsonObject,
+  nextStepCursor,
+  outcomeFields,
+  readCompleteResumeCheckpoint,
+  serializeError,
+  validateSignalEnvelope,
+  verifyFloorPrice,
+  type StepLoopOutcome,
+} from './checkpoint-guards.js';
+import {
+  acquireEffectSlot,
+  dispatchWithDeadline,
+  reconcileProviderEffect,
+  type ReconciledEffect,
+} from './effect-reconciliation.js';
+import { buildHandoffDraft } from './handoff-coordinator.js';
 
 /** Mutable chain cursor shared across plan steps (previous_evidence_hash threading, §3.1). */
 interface EvidenceChain {
   previous: string;
 }
 
-/**
- * The plan-step cursor a resume must continue from: the ordinal AFTER the last planned step.
- *
- * `executeSteps` skips only the steps whose `step_index` is below `from_step`, so a cursor equal to
- * the last step's index would re-enter that step. Parking a completed plan therefore records one
- * past its highest step ordinal, whatever the ordinals are.
- */
-function nextStepCursor(plan: ExecutionPlan): number {
-  return plan.steps.reduce((highest, step) => Math.max(highest, step.step_index), 0) + 1;
-}
-
-/** Disposition of the guarded step loop, consumed by `processSignal` and `resumeTask`. */
-interface StepLoopOutcome {
-  readonly lifecycle_state: TaskLifecycleState;
-  readonly evidence?: ImmutableEvidenceRecord;
-  readonly message?: string;
-}
-
-/** One provider proof consumed by the exact parked effect before the step loop resumes. */
-interface ReconciledEffect {
-  readonly effect_key: string;
-  readonly action_id: string;
-  readonly kind: 'REPLAY' | 'DISPATCH';
-  readonly receipt?: unknown;
-}
-
-/**
- * Copies the optional outcome fields that are actually present.
- *
- * `exactOptionalPropertyTypes` rejects an explicit `undefined` for an optional member, and a run
- * result must not carry `evidence: undefined` — a run with no evidence and a run with evidence are
- * different results.
- */
-function outcomeFields(fields: {
-  evidence?: ImmutableEvidenceRecord | undefined;
-  message?: string | undefined;
-}): { evidence?: ImmutableEvidenceRecord; message?: string } {
-  const present: { evidence?: ImmutableEvidenceRecord; message?: string } = {};
-  if (fields.evidence !== undefined) {
-    present.evidence = fields.evidence;
-  }
-  if (fields.message !== undefined) {
-    present.message = fields.message;
-  }
-  return present;
-}
-function isPlainJsonObject(value: unknown): value is Record<string, unknown> {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
-}
-
-function readCompleteResumeCheckpoint(
-  value: unknown,
-  run_id: string,
-): DurableTaskCheckpoint {
-  if (!isPlainJsonObject(value)) {
-    throw new OrchestratorError(
-      'CHECKPOINT_INCOMPLETE',
-      'Task ' + run_id + ' has no complete resume checkpoint; a human operator must resolve it in SCR-003.',
-    );
-  }
-  const { plan, current_step, pending_action, context, previous_evidence_hash, request_id } = value;
-  if (
-    !isPlainJsonObject(plan) ||
-    !Number.isInteger(current_step) ||
-    (current_step as number) < 1 ||
-    !Object.prototype.hasOwnProperty.call(value, 'pending_action') ||
-    (pending_action !== null && !isPlainJsonObject(pending_action)) ||
-    !isPlainJsonObject(context) ||
-    typeof previous_evidence_hash !== 'string' ||
-    !/^[0-9a-f]{64}$/.test(previous_evidence_hash) ||
-    typeof request_id !== 'string' ||
-    request_id.trim().length === 0
-  ) {
-    throw new OrchestratorError(
-      'CHECKPOINT_INCOMPLETE',
-      'Task ' + run_id + ' has no complete resume checkpoint; a human operator must resolve it in SCR-003.',
-    );
-  }
-  return value as unknown as DurableTaskCheckpoint;
-}
 
 export class RevenueOrchestrator {
   private readonly defaultWorkerId = `worker_${randomUUID().substring(0, 8)}`;
@@ -204,7 +139,7 @@ export class RevenueOrchestrator {
     this.journal = new StageJournal();
 
     // STEP 1: SIGNAL VALIDATION — fail closed before any durable write.
-    this.validateSignalEnvelope(signal);
+    validateSignalEnvelope(signal);
     this.journal.enter('SIGNAL');
 
     const request_id = signal.signal_id; // immutable inbound identity (idempotency anchor)
@@ -247,7 +182,7 @@ export class RevenueOrchestrator {
     this.journal = new StageJournal();
     this.claimedWorkerId = options?.worker_id ?? this.workerId;
     // STEP 1: SIGNAL VALIDATION — fail closed before any durable action.
-    this.validateSignalEnvelope(signal);
+    validateSignalEnvelope(signal);
 
     const effectiveWorkerId = this.claimedWorkerId;
     const task = await this.dependencies.workflowEngine.getTask(signal.tenant_id, run_id);
@@ -425,7 +360,7 @@ export class RevenueOrchestrator {
         // STEP 3: HYPOTHESIS FORMATION (explicitly HYPOTHESIS-class, cannot write to FACT)
         this.journal.enter('HYPOTHESIS');
         const hypothesis = await this.dependencies.agentRuntime.deriveHypothesis(signal, context);
-        this.enforceEpistemicSeparation(hypothesis);
+        enforceEpistemicSeparation(hypothesis);
         // STEP 4: DECISION & ROUTING (FR-ORC-001)
         this.journal.enter('DECISION');
         const routing = assertOrchestratorBrokered(
@@ -524,7 +459,7 @@ export class RevenueOrchestrator {
     try {
       return await attempt();
     } catch (error) {
-      const failure_class = this.classifyFailure(error);
+      const failure_class = classifyFailure(error);
       // A restarted mutating step is the same reconciliation state as an indeterminate provider
       // outcome: its effect may have landed under an unsettled reservation, so it is parked for
       // resolution by `effect_key` instead of being failed or re-dispatched (§4.4).
@@ -539,7 +474,7 @@ export class RevenueOrchestrator {
             tenant_id,
             run_id,
             error_class: 'FATAL',
-            error_details: this.serializeError(error),
+            error_details: serializeError(error),
           });
           throw error;
         }
@@ -562,7 +497,7 @@ export class RevenueOrchestrator {
         tenant_id,
         run_id,
         error_class: failure_class,
-        error_details: this.serializeError(error),
+        error_details: serializeError(error),
       });
       throw error;
     } finally {
@@ -666,7 +601,7 @@ export class RevenueOrchestrator {
         : reconciled
           ? (reconciledAction as ActionDraft)
           : await this.draftAction(step, context, run_id, tenant_id, request_id, 0);
-      this.verifyFloorPrice(action);
+      verifyFloorPrice(action);
       // Save the exact draft before dispatch. A restarted effect-bearing run cannot re-draft and
       // re-send until the reservation and provider outcome have been reconciled by this key.
       await this.dependencies.workflowEngine.updateTaskProgress(tenant_id, run_id, step.step_index, {
@@ -796,7 +731,7 @@ export class RevenueOrchestrator {
       // STEP 8: RESERVATION THEN DISPATCH. `acquireEffectSlot()` reserves the deterministic
       // `effect_key` durably before every mutating dispatch; a read-only action is dispatched
       // unreserved because it has no external effect to deduplicate.
-      const slot = await this.acquireEffectSlot(action, run_id, reconciledEffect);
+      const slot = await acquireEffectSlot(this.dependencies, action, run_id, reconciledEffect);
       if (reconciledEffect !== null) {
         reconciledEffect = null;
       }
@@ -833,10 +768,10 @@ export class RevenueOrchestrator {
           return { lifecycle_state: 'waiting', ...outcomeFields({ message: reason }) };
         }
         try {
-          dispatchedReceipt = await this.dispatchWithDeadline(action, step);
+          dispatchedReceipt = await dispatchWithDeadline(this.dependencies, action, step);
           providerReceipt = dispatchedReceipt;
         } catch (error) {
-          const classified = this.classifyFailure(error);
+          const classified = classifyFailure(error);
           // `UNKNOWN` is reserved for a step with an external effect (§3.2.4): a read-only step
           // reserved nothing, so an unconfirmed outcome is a transient provider failure that is
           // re-queued under its declared retry policy instead of parking the task for a
@@ -846,7 +781,7 @@ export class RevenueOrchestrator {
             ? error
             : new OrchestratorError(
                 'PROVIDER_UNAVAILABLE',
-                `Read-only step ${step.step_index} returned no verifiable outcome: ${JSON.stringify(this.serializeError(error))}`
+                `Read-only step ${step.step_index} returned no verifiable outcome: ${JSON.stringify(serializeError(error))}`
               );
           await this.logRun({
             tenant_id, run_id, correlation_id, trigger, step, context,
@@ -856,7 +791,7 @@ export class RevenueOrchestrator {
             approval: approvalRecord,
             action,
             evidence: { recorded: false, reason: 'DISPATCH_FAILED' },
-            error: { ...this.serializeError(dispatchFailure), outcome: failure_class === 'UNKNOWN' ? 'UNKNOWN' : 'FAILED' },
+            error: { ...serializeError(dispatchFailure), outcome: failure_class === 'UNKNOWN' ? 'UNKNOWN' : 'FAILED' },
             // `UNKNOWN` and `RETRYABLE` leave the step undecided (it is parked or re-queued), so
             // only a terminal classification appends the step's single run-log row.
             disposition: failure_class === 'FATAL' ? 'terminal' : 'attempt',
@@ -1007,7 +942,7 @@ export class RevenueOrchestrator {
         if (!effectMayHaveLanded) {
           throw error;
         }
-        const reconcileReason = `EVIDENCE_RECONCILE_REQUIRED: ${String(this.serializeError(error).code)} after a possible effect on ${action.effect_key}; the evidence/audit trail is incomplete and must be reconciled by effect_key before any retry (§08 §4.3, §7).`;
+        const reconcileReason = `EVIDENCE_RECONCILE_REQUIRED: ${String(serializeError(error).code)} after a possible effect on ${action.effect_key}; the evidence/audit trail is incomplete and must be reconciled by effect_key before any retry (§08 §4.3, §7).`;
         await this.parkTask({
           tenant_id, run_id, reason: reconcileReason, plan, current_step: step.step_index,
           pending_action: action, context, previous_evidence_hash: chain.previous, request_id,
@@ -1253,7 +1188,7 @@ export class RevenueOrchestrator {
             ...outcomeFields({ message: 'Provider outcome remains unresolved; no dispatch was authorized.' }),
           };
         }
-        reconciledEffect = await this.reconcileProviderEffect(pendingAction);
+        reconciledEffect = await reconcileProviderEffect(this.dependencies, pendingAction);
         reconciledAction = pendingAction;
         const resumeCheckpoint: DurableTaskCheckpoint = {
           plan: checkpoint.plan,
@@ -1306,7 +1241,7 @@ export class RevenueOrchestrator {
           ? await this.applyModification(pendingAction, resumeEvent.modifications!, checkpoint.context)
           : pendingAction;
         if (decision === 'APPROVED' || decision === 'MODIFIED') {
-          this.verifyFloorPrice(candidate);
+          verifyFloorPrice(candidate);
           const eligibility = await this.dependencies.policyEngine.evaluateAuthority(candidate, checkpoint.context);
           if (eligibility.verdict === 'DENIED') {
             throw new OrchestratorError('AUTHORITY_DENIED', eligibility.reason);
@@ -1445,7 +1380,7 @@ export class RevenueOrchestrator {
         // authoritative GET; only an explicit manual escalation consumes the event.
         throw error;
       }
-      const failure_class = this.classifyFailure(error);
+      const failure_class = classifyFailure(error);
       if (failure_class === 'UNKNOWN') {
         await this.parkTask({
           tenant_id: resumeEvent.tenant_id,
@@ -1468,7 +1403,7 @@ export class RevenueOrchestrator {
         tenant_id: resumeEvent.tenant_id,
         run_id,
         error_class: failure_class,
-        error_details: this.serializeError(error),
+        error_details: serializeError(error),
       });
       throw error;
     } finally {
@@ -1512,231 +1447,6 @@ export class RevenueOrchestrator {
     }
   }
 
-  /**
-   * Reserves the effect slot for one action and reports what the reservation permits. Called
-   * before EVERY mutating dispatch (BR-005) and never for a read-only action: a read-only action
-   * has no external effect to deduplicate, so it is dispatched unreserved and stays freely
-   * retryable under its declared policy (§4.4).
-   *
-   * Returns WAIT when the outcome cannot be proven yet — the caller parks the durable task instead
-   * of guessing, and never re-dispatches on an unproven effect.
-   */
-  private async acquireEffectSlot(
-    action: ActionDraft,
-    run_id: string,
-    reconciledEffect: ReconciledEffect | null = null,
-  ): Promise<{ kind: 'DISPATCH' } | { kind: 'REPLAY'; receipt: unknown | null } | { kind: 'WAIT'; reason: string }> {
-    if (!action.mutating) {
-      if (reconciledEffect !== null) {
-        throw new OrchestratorError(
-          'RECONCILIATION_BINDING_REQUIRED',
-          'Provider reconciliation proof is bound to a mutating pending action, not a read-only step.',
-        );
-      }
-      return { kind: 'DISPATCH' };
-    }
-
-    if (reconciledEffect !== null) {
-      if (
-        reconciledEffect.effect_key !== action.effect_key
-        || reconciledEffect.action_id !== action.action_id
-      ) {
-        throw new OrchestratorError(
-          'RECONCILIATION_BINDING_REQUIRED',
-          'Provider reconciliation proof is bound to a different action or effect key than the resumed action.',
-        );
-      }
-      return reconciledEffect.kind === 'REPLAY'
-        ? { kind: 'REPLAY', receipt: reconciledEffect.receipt ?? null }
-        : { kind: 'DISPATCH' };
-    }
-
-    const outcome = await this.dependencies.effectGuard.reserve({
-      tenant_id: action.tenant_id,
-      run_id,
-      request_id: action.request_id,
-      effect_key: action.effect_key,
-      request_fingerprint: this.dependencies.effectGuard.computeRequestFingerprint(action.payload),
-      skill_id: action.skill_id,
-      step_index: action.step_index,
-      action_revision: action.action_revision,
-    });
-
-    switch (outcome.kind) {
-      case 'RESERVED':
-        return { kind: 'DISPATCH' };
-      case 'REPLAY':
-        // Same key, same fingerprint, already SUCCEEDED: the reservation's stored receipt is
-        // returned verbatim so the caller re-emits the evidence link without calling the provider.
-        return { kind: 'REPLAY', receipt: outcome.receipt ?? null };
-      case 'IN_FLIGHT':
-        return { kind: 'WAIT', reason: 'EFFECT_IN_FLIGHT: an identical effect is still in flight' };
-      case 'CONFLICT':
-        throw new OrchestratorError(
-          'IDEMPOTENCY_CONFLICT',
-          `effect_key ${action.effect_key} was already used with a different payload (BR-005).`
-        );
-      case 'RECONCILE_REQUIRED': {
-        // The guard only reads durable reservation state. It cannot prove what the provider did,
-        // especially after an EXPIRED row, so no dispatch is admitted from that local read.
-        const providerReconcile = this.dependencies.adapterDispatcher.reconcile;
-        if (providerReconcile === undefined) {
-          return { kind: 'WAIT', reason: 'EFFECT_UNKNOWN: provider reconciliation is not bound' };
-        }
-        const reconciled = await providerReconcile({
-          tenant_id: action.tenant_id,
-          effect_key: action.effect_key,
-          action_id: action.action_id,
-          adapter_target: action.adapter_target,
-          skill_id: action.skill_id,
-        });
-        if (reconciled.outcome === 'SUCCEEDED') {
-          // Provider proof becomes durable truth before the replay is exposed to the run.
-          await this.dependencies.effectGuard.resolve({
-            tenant_id: action.tenant_id,
-            effect_key: action.effect_key,
-            status: 'SUCCEEDED',
-            ...(reconciled.receipt === undefined ? {} : { receipt: reconciled.receipt }),
-          });
-          return { kind: 'REPLAY', receipt: reconciled.receipt ?? null };
-        }
-        if (reconciled.outcome === 'FAILED') {
-          // Provider-confirmed absence is not itself a dispatch slot. Settle the proof, then reopen
-          // the same deterministic key; only the RESERVED row created by reopen admits dispatch.
-          await this.dependencies.effectGuard.resolve({
-            tenant_id: action.tenant_id,
-            effect_key: action.effect_key,
-            status: 'FAILED',
-          });
-          const reopened = await this.dependencies.effectGuard.reopenForRetry?.({
-            tenant_id: action.tenant_id,
-            effect_key: action.effect_key,
-          });
-          if (reopened !== true) {
-            return { kind: 'WAIT', reason: 'EFFECT_UNKNOWN: reservation could not be reopened for retry' };
-          }
-          return { kind: 'DISPATCH' };
-        }
-        return { kind: 'WAIT', reason: 'EFFECT_UNKNOWN: provider reconciliation is indeterminate' };
-      }
-    }
-  }
-
-  /**
-   * Queries the bound provider for the exact parked action, then makes that proof durable before the
-   * guarded loop can replay or re-dispatch it. Operator receipts and resolution labels never settle
-   * a reservation; they only select this provider-proof path.
-   */
-  private async reconcileProviderEffect(action: ActionDraft): Promise<ReconciledEffect> {
-    if (!action.mutating) {
-      throw new OrchestratorError(
-        'RECONCILIATION_BINDING_REQUIRED',
-        'Provider reconciliation proof is bound to a mutating pending action, not a read-only step.',
-      );
-    }
-    const providerReconcile = this.dependencies.adapterDispatcher.reconcile;
-    if (providerReconcile === undefined) {
-      throw new OrchestratorError(
-        'RECONCILIATION_PROVIDER_UNAVAILABLE',
-        'No provider reconciliation boundary is bound for the parked mutating effect.',
-      );
-    }
-
-    const reconciled = await providerReconcile({
-      tenant_id: action.tenant_id,
-      effect_key: action.effect_key,
-      action_id: action.action_id,
-      adapter_target: action.adapter_target,
-      skill_id: action.skill_id,
-    });
-
-    if (reconciled.outcome === 'SUCCEEDED') {
-      await this.dependencies.effectGuard.resolve({
-        tenant_id: action.tenant_id,
-        effect_key: action.effect_key,
-        status: 'SUCCEEDED',
-        ...(reconciled.receipt === undefined ? {} : { receipt: reconciled.receipt }),
-      });
-      return {
-        effect_key: action.effect_key,
-        action_id: action.action_id,
-        kind: 'REPLAY',
-        receipt: reconciled.receipt ?? null,
-      };
-    }
-
-    if (reconciled.outcome === 'FAILED') {
-      await this.dependencies.effectGuard.resolve({
-        tenant_id: action.tenant_id,
-        effect_key: action.effect_key,
-        status: 'FAILED',
-      });
-      const reopened = await this.dependencies.effectGuard.reopenForRetry?.({
-        tenant_id: action.tenant_id,
-        effect_key: action.effect_key,
-      });
-      if (reopened !== true) {
-        throw new OrchestratorError(
-          'RECONCILIATION_REOPEN_FAILED',
-          'Provider absence was proven, but the same effect reservation could not be reopened for retry.',
-        );
-      }
-      return { effect_key: action.effect_key, action_id: action.action_id, kind: 'DISPATCH' };
-    }
-
-    throw new OrchestratorError(
-      'RECONCILIATION_PROVIDER_PROOF_REQUIRED',
-      'The provider did not return proof of success or absence; no reservation settlement or re-dispatch is authorized.',
-    );
-  }
-
-  /**
-   * The dispatch guard (§3.1 `PlannedStep.timeout_ms`, §4.4): it enforces the registry-declared hard
-   * deadline around the adapter call and reports the outcome in the one vocabulary the engine
-   * classifies (§3.2.4).
-   *
-   *   * The deadline fires, or the request dies on the wire after it left the process → the effect
-   *     is UNPROVEN, so the attempt is raised as `DISPATCH_TIMEOUT` / `PROVIDER_INDETERMINATE`
-   *     (both `UNKNOWN`). The caller parks the durable task with its checkpoint and reconciles by
-   *     `effect_key`; nothing is retried on transport grounds.
-   *   * A bare, non-canonical adapter error is treated the same way, never as a terminal failure:
-   *     a call that returned no verifiable receipt cannot be shown to be a no-op, and fail-closed
-   *     beats guessing that a possibly-applied effect never landed.
-   *   * A canonical `OrchestratorError` raised by the adapter (the platform's connector error
-   *     vocabulary) passes through unchanged and keeps its own classification, so this guard never
-   *     widens what may be retried.
-   */
-  private async dispatchWithDeadline(action: ActionDraft, step: PlannedStep): Promise<ExecutionReceipt> {
-    let deadlineTimer: NodeJS.Timeout | undefined;
-    try {
-      await this.dependencies.assertExecutionLease?.(action.tenant_id, action.run_id);
-      const inFlight = this.dependencies.adapterDispatcher.dispatch(action, { timeout_ms: step.timeout_ms });
-      // A settlement that arrives after the deadline is late, not unhandled.
-      inFlight.catch(() => undefined);
-      return await Promise.race([
-        inFlight,
-        new Promise<never>((_, reject) => {
-          deadlineTimer = setTimeout(
-            () => reject(new OrchestratorError(
-              'DISPATCH_TIMEOUT',
-              `Adapter call for step ${step.step_index} exceeded its ${step.timeout_ms}ms deadline`
-            )),
-            step.timeout_ms
-          );
-        }),
-      ]);
-    } catch (error) {
-      if (error instanceof OrchestratorError) {
-        throw error;
-      }
-      throw new OrchestratorError(
-        'PROVIDER_INDETERMINATE',
-        `Adapter call for step ${step.step_index} returned no verifiable outcome (${JSON.stringify(this.serializeError(error))}).`
-      );
-    } finally {
-      clearTimeout(deadlineTimer);
-    }
-  }
 
   /**
    * Parks the task in `waiting` with the checkpoint the resume path needs (§4.4): a task that is
@@ -1785,81 +1495,6 @@ export class RevenueOrchestrator {
       : { approval_id: ref.approval_id, decision: ref.decision ?? 'APPROVED', operator_id: ref.operator_id };
   }
 
-  private validateSignalEnvelope(signal: SignalEnvelope): void {
-    const uuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-    if (!uuid.test(signal.tenant_id)) {
-      throw new OrchestratorError('INVALID_TENANT_ID', 'tenant_id must be a UUID (NFR-006).');
-    }
-    if (!signal.signal_id || !signal.correlation_id || !signal.source_channel) {
-      throw new OrchestratorError('INVALID_SIGNAL', 'Missing mandatory envelope routing metadata (SRS §17).');
-    }
-    if (!signal.subject?.session_id) {
-      throw new OrchestratorError(
-        'INVALID_SESSION',
-        'A unique server-issued session_id is mandatory for every signal, including anonymous traffic (NFR-006).'
-      );
-    }
-  }
-
-  /** Hard Invariant FR-C360-003: HYPOTHESIS records can never be promoted to FACT. */
-  private enforceEpistemicSeparation(hypothesis: HypothesisRecord): void {
-    if (hypothesis.classification !== 'HYPOTHESIS') {
-      throw new OrchestratorError('SECURITY_VIOLATION', 'Inferred data must be stamped classification: HYPOTHESIS');
-    }
-  }
-
-  /** Hard Invariant BR-001 / BR-002 / BR-003: a price-bearing action needs an authoritative floor. */
-  private verifyFloorPrice(action: ActionDraft): void {
-    const payloadPriceBearing = action.payload['price_bearing'] === true
-      || action.payload['offer_id'] !== undefined
-      || action.payload['discount_amount'] !== undefined
-      || action.payload['discount_percent'] !== undefined
-      || action.proposed_price !== undefined;
-    if (!action.price_bearing && !payloadPriceBearing) return;
-    const proposedPrice = action.proposed_price;
-    const priceFloor = action.computed_price_floor;
-    if (typeof proposedPrice !== 'number'
-      || !Number.isFinite(proposedPrice)
-      || typeof priceFloor !== 'number'
-      || !Number.isFinite(priceFloor)
-      || !action.floor_source?.trim()) {
-      throw new OrchestratorError(
-        'P_FLOOR_UNAVAILABLE',
-        `No owner-approved P_floor with provenance for ${action.skill_id}; refusing to price (BR-001, BR-003, NFR-008).`
-      );
-    }
-    if (proposedPrice < priceFloor) {
-      throw new OrchestratorError(
-        'ERR_FLOOR_PRICE_VIOLATION',
-        `Proposed price ${proposedPrice} < P_floor ${priceFloor} (${action.floor_source}).`
-      );
-    }
-  }
-
-  private classifyFailure(error: unknown): RetryClass {
-    if (error instanceof OrchestratorError) {
-      switch (error.code) {
-        case 'DISPATCH_TIMEOUT':
-        case 'PROVIDER_INDETERMINATE':
-        case 'EFFECT_UNKNOWN':
-          return 'UNKNOWN';
-        case 'PROVIDER_RATE_LIMITED':
-        case 'PROVIDER_UNAVAILABLE':
-        case 'CONCURRENT_TASK_LOCK':
-          return 'RETRYABLE';
-        default:
-          return 'FATAL';
-      }
-    }
-    return 'FATAL';
-  }
-
-  private serializeError(error: unknown): Record<string, unknown> {
-    if (error instanceof OrchestratorError) {
-      return { code: error.code, message: error.message };
-    }
-    return { code: 'UNCLASSIFIED', message: error instanceof Error ? error.message : String(error) };
-  }
 
   private async applyModification(base: ActionDraft, delta: Record<string, unknown>, context: HydratedContext): Promise<ActionDraft> {
     const action_revision = base.action_revision + 1;
@@ -1903,22 +1538,10 @@ export class RevenueOrchestrator {
       payload: step.mutating
         ? { ...step.input_parameters, tenant_id, effect_key }
         : { ...step.input_parameters, tenant_id },
-      ...this.floorMirrors(step),
+      ...floorMirrors(step),
     }, context);
   }
 
-  /**
-   * Copies the optional floor mirrors a plan step actually carries. An absent floor is not an
-   * `undefined` floor — that difference is exactly what `verifyFloorPrice()` refuses on — and
-   * `exactOptionalPropertyTypes` forbids writing it away at the draft boundary.
-   */
-  private floorMirrors(step: PlannedStep): Pick<ActionDraft, 'computed_price_floor' | 'floor_source' | 'proposed_price'> {
-    const mirrors: { computed_price_floor?: number; floor_source?: string; proposed_price?: number } = {};
-    if (step.computed_price_floor !== undefined) mirrors.computed_price_floor = step.computed_price_floor;
-    if (step.floor_source !== undefined) mirrors.floor_source = step.floor_source;
-    if (step.proposed_price !== undefined) mirrors.proposed_price = step.proposed_price;
-    return mirrors;
-  }
 
   private buildClarificationPlan(
     routing: RoutingDecision,
@@ -2017,21 +1640,11 @@ export class RevenueOrchestrator {
       await this.dependencies.evidenceLogger.logAgentRun(record);
     }
   }
-
   /**
    * STEP 10.5 of the run lifecycle: the brokered handoff (implement/04 §8, plans/customer-lifecycle.md §3).
    *
-   * A plan that declares a next leg of the customer journey is handed to the injected broker BEFORE
-   * the run is settled, so a handoff that could not be admitted parks the run instead of completing
-   * a journey leg whose successor does not exist. Everything in the draft is server-derived: the
-   * verified customer of the run's own hydrated context, the leg the run's own steps corroborate,
-   * the authority those steps actually required, and evidence references that describe what the run
-   * did — never a value the inbound signal asserted.
-   *
-   * A guard refusal is permanent and propagates: the plan asked for a handoff the journey does not
-   * contain, and re-running it would refuse again. An admission that could not be resolved is an
-   * unresolved effect, so the run is parked in `waiting` with the same complete checkpoint a
-   * reconciliation resume uses, and the same idempotency key is reused when it is claimed again.
+   * The handoff package and evidence references are projected by the sibling coordinator from
+   * server-derived plan/context data; admission and durable parking remain owned by this façade.
    */
   private async brokerPlanHandoff(params: {
     tenant_id: string;
@@ -2052,36 +1665,18 @@ export class RevenueOrchestrator {
       return { kind: 'NONE' };
     }
 
-    const sourceRunId = params.run_id;
-
     assertHandoffSourceDomain(
       intent.source_domain,
       params.plan.steps.map((step) => step.agent_id),
     );
 
-    const sourceStep = params.plan.steps[0];
-    if (sourceStep === undefined) {
-      throw new OrchestratorError(
-        'HANDOFF_PACKAGE_INVALID',
-        'A plan that declares a handoff must have at least one step: an empty plan has no leg of '
-          + 'the journey to hand off from (plans/customer-lifecycle.md §3).',
-      );
-    }
-
-    const draft: CrossDomainHandoffDraft = {
+    const draft: CrossDomainHandoffDraft = buildHandoffDraft({
       tenant_id: params.tenant_id,
-      customer_id: params.context.customer?.customer_id ?? '',
+      run_id: params.run_id,
       correlation_id: params.correlation_id,
-      source_domain: intent.source_domain,
-      source_agent: sourceStep.agent_id,
-      source_run_id: sourceRunId,
-      source_authority: highestAuthority(params.plan.steps.map((step) => step.required_authority)),
-      target_domain: intent.target_domain,
-      target_agent: intent.target_agent,
-      reason: intent.reason,
-      evidence: this.handoffEvidenceRefs(sourceRunId, params.plan, intent.source_domain),
-      occurred_at: new Date().toISOString(),
-    };
+      plan: params.plan,
+      context: params.context,
+    });
 
     const broker = this.dependencies.crossDomainHandoff;
     if (broker === undefined) {
@@ -2104,13 +1699,11 @@ export class RevenueOrchestrator {
 
       await this.parkTask({
         tenant_id: params.tenant_id,
-        run_id: sourceRunId,
+        run_id: params.run_id,
         reason: 'HANDOFF_ADMISSION_UNRESOLVED: the durable handoff could not be admitted; the same '
           + 'idempotency key is retried before the journey leg is reported complete (§4.4).',
         plan: params.plan,
-        // The cursor is the NEXT step ordinal, not the array length: a resume skips only the steps
-        // whose `step_index` is below it, so parking at `steps.length` would re-enter the last step
-        // (and re-draft its evidence) instead of continuing past it.
+        // The cursor is the NEXT step ordinal, not the array length.
         current_step: nextStepCursor(params.plan),
         pending_action: null,
         context: params.context,
@@ -2121,7 +1714,7 @@ export class RevenueOrchestrator {
       return {
         kind: 'PARKED',
         result: {
-          run_id: sourceRunId,
+          run_id: params.run_id,
           lifecycle_state: 'waiting',
           ...outcomeFields({
             message: 'Handoff admission unresolved; the run parks and retries the same handoff key',
@@ -2131,46 +1724,6 @@ export class RevenueOrchestrator {
     }
   }
 
-  /**
-   * The evidence a handoff carries: what THIS run did, described from its own plan.
-   *
-   * The references are built field by field from server-derived plan data, so an inbound payload
-   * can never place a fact, a receipt or a claim into a handoff. The classification is the
-   * strongest the run can honestly assert about itself — a `DECISION` that the leg completed, plus
-   * an `ACTION` for every mutating step it executed — and never a `FACT` about the customer, which
-   * only an authoritative read can produce and only the admission boundary may accept.
-   */
-  private handoffEvidenceRefs(
-    run_id: string,
-    plan: ExecutionPlan,
-    source_domain: string,
-  ): readonly HandoffEvidenceRef[] {
-    const refs: HandoffEvidenceRef[] = [
-      {
-        classification: 'DECISION',
-        claim: `Run ${run_id} completed the ${source_domain} leg of the customer journey `
-          + `(${plan.steps.length} planned step(s), plan ${plan.plan_id})`,
-        source_uri: `agentos://runs/${run_id}`,
-        source_version: String(plan.steps.length),
-        verified_by: 'agentos.orchestrator',
-      },
-    ];
-
-    for (const step of plan.steps) {
-      if (!step.mutating) {
-        continue;
-      }
-      refs.push({
-        classification: 'ACTION',
-        claim: `${step.skill_id} executed by ${step.agent_id} at step ${step.step_index}`,
-        source_uri: `agentos://runs/${run_id}/steps/${step.step_index}`,
-        source_version: String(step.step_index),
-        verified_by: step.agent_id,
-      });
-    }
-
-    return refs;
-  }
 
   /**
    * STEP 11: LEARNING — and nothing else.

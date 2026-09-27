@@ -36,7 +36,6 @@
 import { randomUUID } from 'node:crypto';
 import { OrchestratorError } from '@agentos/core-engine/contracts';
 import type {
-  AuthorityLevel,
   ExecutionPlan,
   HandoffIntent,
   HydratedContext,
@@ -47,119 +46,74 @@ import type {
   RoutingDecision,
   SignalEnvelope,
 } from '@agentos/core-engine/contracts';
-import type { SkillEffectClass } from '@agentos/skills';
-import type {
-  SalesReplenishmentPolicy,
-  SalesReplenishmentPolicyPort,
-} from './skills/types.js';
-/** Authoritative Customer 360 verified purchase/order evidence entry. */
-export interface VerifiedPurchaseEvidence {
-  readonly order_id: string;
-  readonly order_date: string;
-  readonly sku_ids?: readonly string[] | undefined;
-  readonly items?: readonly string[] | undefined;
-  readonly quantity?: number | undefined;
-  readonly total_amount?: number | undefined;
-  readonly currency?: string | undefined;
-}
-
-/** Query parameters for authoritative purchase evidence retrieval. */
-export interface SalesPurchaseEvidenceQuery {
-  readonly tenant_id: string;
-  readonly customer_id: string;
-}
-
-/** Authoritative purchase evidence port for Sales runtime. */
-const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}(?::?\d{2})?)$/;
-
-function isValidIsoTimestamp(ts: unknown): ts is string {
-  if (typeof ts !== 'string' || !ISO_TIMESTAMP.test(ts.trim())) return false;
-  const ms = new Date(ts.trim()).getTime();
-  return Number.isFinite(ms) && !isNaN(ms);
-}
-
-export interface SalesPurchaseEvidencePort {
-  read(query: SalesPurchaseEvidenceQuery): Promise<readonly VerifiedPurchaseEvidence[]>;
-}
-
-function getEvidenceSkus(evidence: VerifiedPurchaseEvidence): readonly string[] {
-  return evidence.sku_ids ?? evidence.items ?? [];
-}
-/**
- * Effect policy derivation matrix transcribed from implement/05 §6.5:
- * Only READ rows are permitted in the Sales foundation runtime.
- */
-export interface DerivedEffectPolicy {
-  readonly mutating: boolean;
-  readonly idempotent: boolean;
-  readonly price_bearing: boolean;
-}
-
-export function deriveEffectPolicy(effectClass: SkillEffectClass): DerivedEffectPolicy {
-  switch (effectClass) {
-    case 'READ':
-      return { mutating: false, idempotent: true, price_bearing: false };
-    case 'INTERNAL':
-      return { mutating: true, idempotent: false, price_bearing: false };
-    case 'EFFECT':
-      return { mutating: true, idempotent: false, price_bearing: false };
-    case 'APPROVAL':
-      return { mutating: true, idempotent: false, price_bearing: false };
-    default:
-      return { mutating: false, idempotent: true, price_bearing: false };
-  }
-}
-
-/**
- * Minimal skill registry row interface required for policy extraction (implement/05 §3, §6.5).
- */
-export interface SkillRegistryRowMetadata {
-  readonly skill_id: string;
-  readonly effect_class: SkillEffectClass;
-  readonly guarded_dependency: string;
-  readonly required_authority: AuthorityLevel;
-  readonly timeout_ms: number;
-  readonly allowed_agents?: readonly string[] | undefined;
-  readonly enabled?: boolean | undefined;
-  readonly mutating?: boolean | undefined;
-  readonly idempotent?: boolean | undefined;
-  readonly price_bearing?: boolean | undefined;
-}
-
-export interface SkillRegistryPort {
-  get?(skill_id: string): SkillRegistryRowMetadata | null | undefined;
-  resolve?(skill_id: string): SkillRegistryRowMetadata | null | undefined;
-}
-
-export type SkillRegistryResolver =
-  | SkillRegistryPort
-  | ((skill_id: string) => SkillRegistryRowMetadata | null | undefined)
-  | Map<string, SkillRegistryRowMetadata>;
-
-function lookupRegistryRow(
-  registry: SkillRegistryResolver | undefined,
-  skillId: string,
-): SkillRegistryRowMetadata | null {
-  if (!registry) return null;
-  try {
-    if (typeof registry === 'function') {
-      return registry(skillId) ?? null;
-    }
-    if (registry instanceof Map) {
-      return registry.get(skillId) ?? null;
-    }
-    if (typeof registry.get === 'function') {
-      return registry.get(skillId) ?? null;
-    }
-    if (typeof registry.resolve === 'function') {
-      return registry.resolve(skillId) ?? null;
-    }
-  } catch {
-    return null;
-  }
-  return null;
-}
-
+import {
+  cleanSearchQuery,
+  extractCartRecoveryData,
+  extractMessageContent,
+  extractSku,
+  isCartRecoveryInquiry,
+  isCustomerLookupInquiry,
+  isDependencyResolvable,
+  isInventoryInquiry,
+  isPriceInquiry,
+  isProductSearchInquiry,
+  isRecommendInquiry,
+  isReplenishmentInquiry,
+  isReplenishmentSignal,
+  isRowExecutable,
+  lookupRegistryRow,
+  type CartRecoveryData,
+  type DependencyReachabilityPredicate,
+  type SkillRegistryPort,
+  type SkillRegistryResolver,
+  type SkillRegistryRowMetadata,
+} from './intent-classifier.js';
+import {
+  evaluateReplenishmentRefusal,
+  extractVerifiedPurchases,
+  getEvidenceSkus,
+  type ReplenishmentEvaluationOptions,
+  type SalesPurchaseEvidencePort,
+  type SalesPurchaseEvidenceQuery,
+  type VerifiedPurchaseEvidence,
+} from './replenishment-evaluator.js';
+import {
+  buildPlannedStep,
+  deriveEffectPolicy,
+  type DerivedEffectPolicy,
+} from './plan-composer.js';
+import type { SalesReplenishmentPolicyPort } from './skills/types.js';
+export {
+  cleanSearchQuery,
+  deriveEffectPolicy,
+  evaluateReplenishmentRefusal,
+  extractCartRecoveryData,
+  extractMessageContent,
+  extractSku,
+  extractVerifiedPurchases,
+  isCartRecoveryInquiry,
+  isCustomerLookupInquiry,
+  isDependencyResolvable,
+  isInventoryInquiry,
+  isPriceInquiry,
+  isProductSearchInquiry,
+  isRecommendInquiry,
+  isReplenishmentInquiry,
+  isReplenishmentSignal,
+  isRowExecutable,
+};
+export type {
+  CartRecoveryData,
+  DependencyReachabilityPredicate,
+  DerivedEffectPolicy,
+  ReplenishmentEvaluationOptions,
+  SalesPurchaseEvidencePort,
+  SalesPurchaseEvidenceQuery,
+  SkillRegistryPort,
+  SkillRegistryResolver,
+  SkillRegistryRowMetadata,
+  VerifiedPurchaseEvidence,
+};
 /** Returns the brokered journey leg encoded by the orchestrator, when present. */
 function readHandoffTargetDomain(signal: SignalEnvelope): string | undefined {
   // Only the orchestrator writes this channel: a customer-facing delivery that carries a handoff
@@ -176,491 +130,6 @@ function extractSalesHandoffReason(signal: SignalEnvelope): string | undefined {
   if (readHandoffTargetDomain(signal) !== 'sales') return undefined;
   const reason = signal.payload.handoff_reason;
   return typeof reason === 'string' && reason.trim().length > 0 ? reason.trim() : undefined;
-}
-
-export function extractMessageContent(signal: SignalEnvelope): string {
-  const p = signal.payload as Record<string, unknown> | null | undefined;
-  if (!p || typeof p !== 'object') return '';
-  if (typeof p.message === 'string') return p.message.trim();
-  if (typeof p.content === 'string') return p.content.trim();
-  if (typeof p.text === 'string') return p.text.trim();
-  return '';
-}
-
-/**
- * Extracts SKU identifier from message text.
- * Matches:
- *  - SKU-XXXX, PROD-XXXX, ITEM-XXXX
- *  - sku #12345, sku: 12345
- */
-export function extractSku(text: string): string | null {
-  if (!text) return null;
-
-  // 1. Prefixed canonical IDs: SKU-XXXX, PROD-XXXX, ITEM-XXXX
-  const prefixMatch = text.match(/\b((?:SKU|PROD|ITEM)-[A-Za-z0-9_-]+)\b/i);
-  if (prefixMatch && prefixMatch[1]) return prefixMatch[1].toUpperCase();
-
-  // 2. Keyword followed by SKU code
-  const kwMatch = text.match(/\b(?:sku|product|item)\s*(?:#|id|code|no\.?|num)?\s*[:#]?\s*([A-Za-z0-9_-]{3,})/i);
-  if (kwMatch && kwMatch[1]) {
-    const candidate = kwMatch[1].trim();
-    if (!/^(status|details|update|info|is|the|my|available|stock|price|cost|costs|check|search|in|out|have|has|need|rate|rates|value|quote|quotation|discount|fee|fees)$/i.test(candidate)) {
-      return candidate.toUpperCase();
-    }
-  }
-
-  return null;
-}
-
-/**
- * Cleans query text by stripping search-preamble phrases.
- */
-export function cleanSearchQuery(text: string): string {
-  if (!text) return '';
-  let q = text
-    .replace(/\b(?:search(?:\s+for)?|find|look(?:\s+for)?|looking(?:\s+for)?|show(?:\s+me)?|browse|catalog|list)\b/gi, '')
-    .replace(/[?!.]+$/g, '')
-    .trim();
-  return q.length > 0 ? q : text.trim();
-}
-
-/**
- * Identifies if text expresses a price inquiry (disabled in P2).
- */
-export function isPriceInquiry(text: string): boolean {
-  if (!text) return false;
-  return /\b(price|pricing|discount|cost|how much|quote|quotation|rate|fee|p_floor)\b/i.test(text);
-}
-
-/**
- * Identifies if text expresses an inventory / stock check.
- */
-export function isInventoryInquiry(text: string): boolean {
-  if (!text) return false;
-  return /\b(stock|inventory|available|availability|in stock|out of stock|quantity)\b/i.test(text);
-}
-
-/**
- * Identifies if text expresses a recommendation / cross-sell request.
- */
-export function isRecommendInquiry(text: string): boolean {
-  if (!text) return false;
-  return /\b(recommend|recommendation|recommendations|suggest|suggestion|suggestions|cross-sell|upsell|bundle|substitute|pair with|complementary)\b/i.test(text);
-}
-
-/**
- * Identifies if text expresses a customer lookup / profile inquiry.
- */
-export function isCustomerLookupInquiry(text: string): boolean {
-  if (!text) return false;
-  return /\b(customer|profile|account|my account|purchase history|order history|loyalty|my details|user info|member info)\b/i.test(text);
-}
-
-/**
- * Identifies if text expresses a product catalog search.
- */
-export function isProductSearchInquiry(text: string): boolean {
-  if (!text) return false;
-  return /\b(search|find|looking for|look for|catalog|browse|show me|products?)\b/i.test(text);
-}
-export type DependencyReachabilityPredicate =
-  | readonly string[]
-  | ((guardedDependency: string) => boolean);
-
-export function isDependencyResolvable(
-  dependency: string | undefined,
-  resolvableDependencies?: DependencyReachabilityPredicate,
-): boolean {
-  if (!dependency || typeof dependency !== 'string' || dependency.trim().length === 0) {
-    return false;
-  }
-  if (resolvableDependencies) {
-    if (typeof resolvableDependencies === 'function') {
-      return resolvableDependencies(dependency);
-    }
-    if (Array.isArray(resolvableDependencies)) {
-      return resolvableDependencies.includes(dependency);
-    }
-  }
-  return true;
-}
-
-export function isRowExecutable(
-  row: SkillRegistryRowMetadata | null | undefined,
-  targetAgent: PlatformAgentId,
-  resolvableDependencies?: DependencyReachabilityPredicate,
-): row is SkillRegistryRowMetadata {
-  if (!row) return false;
-  if (row.enabled === false) return false;
-  if (row.allowed_agents && !row.allowed_agents.includes(targetAgent)) {
-    return false;
-  }
-  if (!isDependencyResolvable(row.guarded_dependency, resolvableDependencies)) {
-    return false;
-  }
-  return true;
-}
-
-/**
- * Identifies if text expresses a cart recovery inquiry.
- */
-export function isCartRecoveryInquiry(text: string): boolean {
-  if (!text) return false;
-  return /\b(abandoned[ -]?cart|cart[ -]?recovery|recover[ -]?cart|left in cart|items left in cart|resume my cart|forgot my cart)\b/i.test(text);
-}
-
-/**
- * Identifies if text expresses a replenishment / reorder inquiry.
- */
-export function isReplenishmentInquiry(text: string): boolean {
-  if (!text) return false;
-  return /\b(replenish|replenishment|reorder|repurchase|recurring order|refill|subscribe again|order again|buy again)\b/i.test(text);
-}
-
-export interface CartRecoveryData {
-  readonly cartId?: string | undefined;
-  readonly skus: readonly string[];
-}
-
-export function extractCartRecoveryData(signal: SignalEnvelope): CartRecoveryData | null {
-  const payload = (signal.payload ?? {}) as Record<string, unknown>;
-  const rawCartId = payload.cart_id ?? payload.cartId;
-  const cartId = typeof rawCartId === 'string' && rawCartId.trim().length > 0 ? rawCartId.trim() : undefined;
-
-  const rawSkus = payload.skus ?? payload.sku_list ?? payload.cart_skus ?? payload.items;
-  const skus: string[] = [];
-  if (Array.isArray(rawSkus)) {
-    for (const item of rawSkus) {
-      if (typeof item === 'string' && item.trim().length > 0) {
-        skus.push(item.trim());
-      } else if (item && typeof item === 'object') {
-        const itemObj = item as Record<string, unknown>;
-        const skuId = itemObj.sku_id ?? itemObj.sku;
-        if (typeof skuId === 'string' && skuId.trim().length > 0) {
-          skus.push(skuId.trim());
-        }
-      }
-    }
-  }
-
-  const isCartAbandonedEvent =
-    signal.event_type === 'cart.abandoned' ||
-    signal.event_type === 'cart_abandoned' ||
-    signal.event_type.endsWith('.cart.abandoned');
-
-  if (isCartAbandonedEvent || (cartId && skus.length > 0)) {
-    return { cartId, skus: Object.freeze(skus) };
-  }
-  return null;
-}
-
-export function isReplenishmentSignal(signal: SignalEnvelope, text: string): boolean {
-  const payload = (signal.payload ?? {}) as Record<string, unknown>;
-  const rawRef =
-    payload.prior_purchase_reference ??
-    payload.order_reference ??
-    payload.prior_order_id ??
-    payload.purchase_reference ??
-    payload.last_purchase_reference ??
-    payload.previous_order_id;
-  const hasRef = typeof rawRef === 'string' && rawRef.trim().length > 0;
-  const isReplenishmentEvent =
-    signal.event_type === 'replenishment' ||
-    signal.event_type === 'replenishment.cycle' ||
-    signal.event_type === 'customer.repurchase' ||
-    signal.event_type.includes('replenishment');
-  const hasText = isReplenishmentInquiry(text);
-
-  return hasRef || isReplenishmentEvent || hasText;
-}
-
- export interface ReplenishmentEvaluationOptions {
-   readonly registry?: SkillRegistryResolver | undefined;
-   readonly resolvableDependencies?: DependencyReachabilityPredicate | undefined;
-   readonly replenishment_policy?: SalesReplenishmentPolicyPort | undefined;
-  readonly replenishment_policy_port?: SalesReplenishmentPolicyPort | undefined;
-  readonly purchase_evidence?: SalesPurchaseEvidencePort | undefined;
-   readonly now?: (() => Date) | undefined;
- }
-
-export async function extractVerifiedPurchases(
-  context: HydratedContext,
-  port?: SalesPurchaseEvidencePort | undefined,
-): Promise<readonly VerifiedPurchaseEvidence[]> {
-  if (!port) {
-    throw new Error('purchase evidence missing or stale: purchase evidence missing');
-  }
-
-  const customerId = context.customer?.customer_id;
-  if (!customerId || typeof customerId !== 'string' || customerId.trim().length === 0) {
-    throw new Error('purchase evidence missing or stale: purchase evidence missing');
-  }
-
-  const tenantId = context.tenant_id;
-  if (!tenantId || typeof tenantId !== 'string' || tenantId.trim().length === 0) {
-    throw new Error('purchase evidence missing or stale: purchase evidence missing');
-  }
-
-  let rawList: readonly VerifiedPurchaseEvidence[];
-  try {
-    rawList = await port.read({ tenant_id: tenantId, customer_id: customerId });
-  } catch {
-    throw new Error('purchase evidence missing or stale: purchase evidence missing');
-  }
-
-  if (!Array.isArray(rawList) || rawList.length === 0) {
-    throw new Error('purchase evidence missing or stale: purchase evidence missing');
-  }
-
-  const validated: VerifiedPurchaseEvidence[] = [];
-  for (const item of rawList) {
-    if (!item || typeof item !== 'object') {
-      throw new Error('purchase evidence missing or stale: purchase evidence missing');
-    }
-    const orderId = 'order_id' in item && typeof item.order_id === 'string' ? item.order_id.trim() : null;
-    if (!orderId) {
-      throw new Error('purchase evidence missing or stale: purchase evidence missing');
-    }
-    const orderDate = 'order_date' in item && typeof item.order_date === 'string' ? item.order_date.trim() : null;
-    if (!orderDate || !isValidIsoTimestamp(orderDate)) {
-      throw new Error('purchase evidence missing or stale: purchase evidence missing');
-    }
-
-    const rawSkuIds =
-      ('sku_ids' in item && Array.isArray(item.sku_ids) ? item.sku_ids : undefined) ??
-      ('items' in item && Array.isArray(item.items) ? item.items : undefined);
-    let itemsList: string[] | undefined = undefined;
-    if (Array.isArray(rawSkuIds)) {
-      const filtered = rawSkuIds.filter(
-        (s): s is string => typeof s === 'string' && s.trim().length > 0,
-      );
-      if (filtered.length > 0) {
-        itemsList = filtered.map((s) => s.trim());
-      }
-    }
-
-    const quantity =
-      'quantity' in item && typeof item.quantity === 'number' && Number.isFinite(item.quantity)
-        ? item.quantity
-        : undefined;
-    const totalAmount =
-      'total_amount' in item && typeof item.total_amount === 'number' && Number.isFinite(item.total_amount)
-        ? item.total_amount
-        : undefined;
-    const currency =
-      'currency' in item && typeof item.currency === 'string' && item.currency.trim().length > 0
-        ? item.currency.trim()
-        : undefined;
-
-    validated.push({
-      order_id: orderId,
-      order_date: orderDate,
-      ...(itemsList ? { items: itemsList, sku_ids: itemsList } : {}),
-      ...(quantity !== undefined ? { quantity } : {}),
-      ...(totalAmount !== undefined ? { total_amount: totalAmount } : {}),
-      ...(currency !== undefined ? { currency } : {}),
-    });
-  }
-
-  if (validated.length === 0) {
-    throw new Error('purchase evidence missing or stale: purchase evidence missing');
-  }
-
-  return Object.freeze(validated);
- }
-
-export async function evaluateReplenishmentRefusal(
-  signal: SignalEnvelope,
-  context: HydratedContext,
-  options?: ReplenishmentEvaluationOptions,
-): Promise<string | null> {
-  const payload = (signal.payload ?? {}) as Record<string, unknown>;
-  const text = extractMessageContent(signal);
-  const sku =
-    extractSku(text) ??
-    (typeof payload.sku_id === 'string' && payload.sku_id.trim().length > 0
-      ? payload.sku_id.trim()
-      : undefined);
-
-  // 1. Authoritative purchase evidence
-  const port = options?.purchase_evidence;
-  if (!port || !context.customer) {
-     return 'purchase evidence missing or stale: purchase evidence missing';
-   }
-
-  let purchases: readonly VerifiedPurchaseEvidence[];
-  try {
-    purchases = await extractVerifiedPurchases(context, port);
-  } catch (err) {
-    if (err instanceof Error && err.message.includes('evidence stale')) {
-      return 'purchase evidence missing or stale: evidence stale';
-    }
-    return 'purchase evidence missing or stale: purchase evidence missing';
-  }
-
-  if (purchases.length === 0) {
-    return 'purchase evidence missing or stale: purchase evidence missing';
-  }
-
-  const rawRef =
-    payload.prior_purchase_reference ??
-    payload.order_reference ??
-    payload.prior_order_id ??
-    payload.purchase_reference ??
-    payload.last_purchase_reference ??
-    payload.previous_order_id;
-  const payloadHypothesisRef =
-    typeof rawRef === 'string' && rawRef.trim().length > 0 ? rawRef.trim() : null;
-
-  let matchedEvidence: VerifiedPurchaseEvidence | undefined;
-  let resolvedSku: string | undefined;
-
-  if (payloadHypothesisRef) {
-    matchedEvidence = purchases.find((p) => p.order_id === payloadHypothesisRef);
-    if (!matchedEvidence) {
-      // Caller-asserted order reference does not match authoritative verified evidence -> refuses
-      return 'purchase evidence missing or stale: purchase evidence missing';
-    }
-    const matchedSkus = getEvidenceSkus(matchedEvidence);
-    if (sku) {
-      const hasItemEvidence = matchedSkus.length > 0;
-      const skuInMatchedOrder = hasItemEvidence && matchedSkus.includes(sku);
-      const skuInAnyPurchase = purchases.some((p) => getEvidenceSkus(p).includes(sku));
-      if (hasItemEvidence ? !skuInMatchedOrder : !skuInAnyPurchase) {
-        return 'purchase evidence missing or stale: purchase evidence missing';
-      }
-      resolvedSku = sku;
-    } else {
-      resolvedSku = matchedSkus[0];
-    }
-  } else {
-    if (sku) {
-      matchedEvidence = purchases.find((p) => getEvidenceSkus(p).includes(sku));
-      if (!matchedEvidence) {
-        return 'purchase evidence missing or stale: purchase evidence missing';
-      }
-      resolvedSku = sku;
-    } else {
-      matchedEvidence = purchases[0];
-      resolvedSku = matchedEvidence ? getEvidenceSkus(matchedEvidence)[0] : undefined;
-    }
-  }
-
-  if (!matchedEvidence || !resolvedSku) {
-    return 'purchase evidence missing or stale: purchase evidence missing';
-  }
-
-  // 2. Owner-approved replenishment policy port (SAL-05)
-  const policyPort = options?.replenishment_policy;
-  if (!policyPort) {
-    return 'no owner-approved replenishment interval';
-  }
-
-  const querySku = resolvedSku;
-  let policy: SalesReplenishmentPolicy | undefined;
-  try {
-    const policyResult = policyPort.read({
-      tenant_id: context.tenant_id,
-      sku_id: querySku,
-    });
-    policy = policyResult instanceof Promise ? await policyResult : policyResult;
-  } catch {
-    return 'no owner-approved replenishment interval';
-  }
-
-  if (
-    !policy ||
-    policy.owner_approved !== true ||
-    typeof policy.replenishment_interval_days !== 'number' ||
-    policy.replenishment_interval_days <= 0 ||
-    !Number.isFinite(policy.replenishment_interval_days) ||
-    typeof policy.evidence_staleness_window_days !== 'number' ||
-    policy.evidence_staleness_window_days <= 0 ||
-    !Number.isFinite(policy.evidence_staleness_window_days)
-  ) {
-    return 'no owner-approved replenishment interval';
-  }
-
-  // 3. Consent missing or withdrawn (server-hydrated customer record only)
-  if (context.customer.consent_marketing !== true) {
-    return 'consent missing or withdrawn';
-  }
-
-  // 4. Suppression active (server-hydrated customer record only)
-  if (context.customer.suppression_active === true) {
-    return 'suppression active';
-  }
-
-  // 5. Consent authority unavailable: authoritative Customer360 read must be reachable
-  const registry = options?.registry;
-  const resolvableDependencies = options?.resolvableDependencies;
-  const consentRow = lookupRegistryRow(registry, 'skill.sales.retrieve_customer');
-  if (!consentRow || !isRowExecutable(consentRow, 'SAL-05', resolvableDependencies) || consentRow.effect_class !== 'READ') {
-    return 'consent authority skill.sales.retrieve_customer unavailable';
-  }
-
-  // 6. Outbound touch channel missing: outbound-bearing plan requires verified channel from context
-  const rawChannel = context.working_memory?.last_touch_channel;
-  const channel = typeof rawChannel === 'string' && rawChannel.trim().length > 0 ? rawChannel.trim() : null;
-  if (!channel) {
-    return 'outbound channel missing';
-  }
-
-  // 7. Product inactive: authoritative catalog/price read must be reachable
-  const productRow =
-    lookupRegistryRow(registry, 'skill.sales.check_price') ??
-    lookupRegistryRow(registry, 'skill.sales.search_product');
-  if (!isRowExecutable(productRow, 'SAL-05', resolvableDependencies)) {
-    return 'product inactive';
-  }
-
-  // 8. Stock unavailable: authoritative stock read must be reachable
-  const stockRow = lookupRegistryRow(registry, 'skill.sales.check_stock');
-  if (!isRowExecutable(stockRow, 'SAL-05', resolvableDependencies)) {
-    return 'stock unavailable';
-  }
-  // 7. Recent purchase that invalidates reorder hypothesis
-  const nowFn = options?.now;
-  const currentDate = nowFn ? nowFn() : (signal.timestamp ? new Date(signal.timestamp) : new Date());
-  const currentMs = currentDate.getTime();
-
-  const intervalDays = policy.replenishment_interval_days;
-  const intervalMs = intervalDays * 24 * 60 * 60 * 1000;
-
-  const matchedOrderDate = new Date(matchedEvidence.order_date);
-  const matchedOrderMs = matchedOrderDate.getTime();
-  if (isNaN(matchedOrderMs)) {
-    return 'purchase evidence missing or stale: purchase evidence missing';
-  }
-
-  if (currentMs - matchedOrderMs < intervalMs) {
-    return 'recent purchase invalidates reorder hypothesis';
-  }
-
-  for (const purchase of purchases) {
-    if (purchase.order_id === matchedEvidence.order_id) continue;
-    if (purchase.items && !purchase.items.includes(querySku)) continue;
-    const pDate = new Date(purchase.order_date);
-    const pMs = pDate.getTime();
-    if (!isNaN(pMs) && currentMs - pMs < intervalMs && pMs > matchedOrderMs) {
-      return 'recent purchase invalidates reorder hypothesis';
-    }
-  }
-
-  // 8. Purchase evidence stale (beyond evidence staleness window)
-  const stalenessWindowDays = policy.evidence_staleness_window_days;
-  const maxAgeDays =
-    stalenessWindowDays >= intervalDays
-      ? stalenessWindowDays
-      : intervalDays + stalenessWindowDays;
-  const maxAgeMs = maxAgeDays * 24 * 60 * 60 * 1000;
-
-  const elapsedMs = currentMs - matchedOrderMs;
-  if (elapsedMs > maxAgeMs) {
-    return 'purchase evidence missing or stale: evidence stale';
-  }
-
-  return null;
 }
 
 export type SalesIntent =
@@ -1959,20 +1428,7 @@ export interface SalesAgentRuntimeOptions {
     inputParameters: Record<string, unknown>,
     dependsOnSteps: readonly number[],
   ): PlannedStep {
-    const policy = deriveEffectPolicy(row.effect_class);
-    return {
-      step_index: stepIndex,
-      agent_id: agentId,
-      skill_id: row.skill_id,
-      adapter_target: row.guarded_dependency,
-      input_parameters: inputParameters,
-      required_authority: row.required_authority,
-      mutating: row.mutating ?? policy.mutating,
-      price_bearing: row.price_bearing ?? policy.price_bearing,
-      idempotent: row.idempotent ?? policy.idempotent,
-      timeout_ms: row.timeout_ms,
-      depends_on_steps: [...dependsOnSteps],
-    };
+    return buildPlannedStep(stepIndex, agentId, row, inputParameters, dependsOnSteps);
   }
 
   /**

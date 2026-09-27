@@ -2,7 +2,7 @@
 # Copy .env.example to .env before `docker compose up`, or pass `--env-file .env.example`
 # for a placeholder local boot. Required secrets use ${VAR:?} so an empty value fails
 # closed. mock-erp is labeled local-ci-only and exits unless APP_ENV is local or ci.
-# The command-center service has no database, cache, vector, or ERP credential.
+# Browser services have no database, cache, vector, or ERP credential.
 
 # Single source for the Qdrant API key. `QDRANT_API_KEY` is the only variable a
 # caller sets: the qdrant service's own key and both clients alias this one
@@ -279,11 +279,13 @@ services:
     networks:
       - agentos-network
 
-  command-center:
+  tenant-console:
     build:
       context: .
-      dockerfile: docker/Dockerfile.command-center
-    container_name: ${COMPOSE_CONTAINER_PREFIX:-agentos}-command-center
+      dockerfile: docker/Dockerfile.tenant-console
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL is required}
+    container_name: ${COMPOSE_CONTAINER_PREFIX:-agentos}-tenant-console
     restart: unless-stopped
     ports:
       - "${WEB_PORT:-3000}:3000"
@@ -295,6 +297,7 @@ services:
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?NEXTAUTH_SECRET is required}
       # Origin only. Browser clients append /api/v1 themselves.
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL is required}
+      PLATFORM_ADMIN_URL: ${PLATFORM_ADMIN_URL:?PLATFORM_ADMIN_URL is required}
     depends_on:
       api:
         condition: service_healthy
@@ -304,6 +307,38 @@ services:
         - node
         - -e
         - fetch('http://127.0.0.1:3000/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - agentos-network
+
+  platform-admin:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.platform-admin
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL is required}
+    container_name: ${COMPOSE_CONTAINER_PREFIX:-agentos}-platform-admin
+    restart: unless-stopped
+    ports:
+      - "${PLATFORM_ADMIN_PORT:-3001}:3001"
+    environment:
+      NODE_ENV: ${NODE_ENV:?NODE_ENV is required}
+      APP_ENV: ${APP_ENV:?APP_ENV is required}
+      PORT: 3001
+      NEXTAUTH_URL: ${PLATFORM_ADMIN_URL:?PLATFORM_ADMIN_URL is required}
+      NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?NEXTAUTH_SECRET is required}
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL is required}
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - fetch('http://127.0.0.1:3001/health').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))
       interval: 10s
       timeout: 5s
       retries: 5

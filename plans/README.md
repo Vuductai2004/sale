@@ -91,7 +91,7 @@ Hệ thống phân định rành mạch giữa 2 nhóm mã hiệu: Nhóm SRS (qu
 
 1. Người phụ trách kinh doanh: [bản dễ hiểu](plan-easy-read-flow.md) → [sản phẩm và cách đóng gói](product-and-packaging.md).
 2. Người thiết kế nghiệp vụ: [hành trình khách hàng](customer-lifecycle.md) → mô-đun liên quan.
-3. Nhóm kỹ thuật: [bản đặc tả kỹ thuật PDF](../DAC_TA_KY_THUAT_HE_THONG_AI_AGENT.pdf) → [kiến trúc](platform/architecture.md) → [dữ liệu](platform/data-and-knowledge.md) → [API](platform/api-and-integrations.md) → [nghiệm thu](delivery/mvp-and-roadmap.md).
+3. Nhóm kỹ thuật: [bản đặc tả kỹ thuật PDF](../docs/demo/exports/DAC_TA_KY_THUAT_HE_THONG_AI_AGENT.pdf) → [kiến trúc](platform/architecture.md) → [dữ liệu](platform/data-and-knowledge.md) → [API](platform/api-and-integrations.md) → [nghiệm thu](delivery/mvp-and-roadmap.md).
 4. Người ra quyết định đầu tư: [đo lường và kinh tế đơn hàng](delivery/analytics.md) → [thứ tự thử nghiệm](delivery/mvp-and-roadmap.md).
 5. Tra từ viết tắt: [bảng thuật ngữ](glossary.md).
 
@@ -132,12 +132,12 @@ Bảng đối chiếu tổng thể giữa các Mục tiêu kinh doanh (Business 
 |---|---|---|
 | Đề bài SRS v0.1 (`AI-REV-SRS-001`) | 6 Business Objectives (OBJ-001..006), 6 Cổng Gate (P0–P5), Bộ kiểm thử TC-E2E-001..009, 5 Giả định ASM-001..005, DoD 10 thành tố thực tế | Chuẩn hóa toàn bộ cấu trúc quy hoạch, ma trận đối chiếu và điều kiện nghiệm thu |
 | Bộ `plans/` trước lần hợp nhất này | Ba mô-đun độc lập; API hai chiều; dữ liệu riêng từng doanh nghiệp; người duyệt; chống xử lý trùng; xác nhận từ hệ thống gốc | Gộp phần lặp, dịch phần tiếng Anh, giữ ràng buộc kỹ thuật và tiêu chí kiểm chứng |
-| [Báo cáo PDF](../BAO_CAO_DE_AN_AI_ECOMMERCE_3_MODULE.pdf), trang 1–2 | Giảm thao tác, giảm bị làm phiền, tư vấn theo nhu cầu, tạo niềm tin | Dùng ba nhóm động cơ mua làm giả thuyết nghiên cứu; không coi tuổi hay tỷ lệ trong báo cáo là dữ liệu khảo sát |
+| [Báo cáo PDF](../docs/demo/exports/BAO_CAO_DE_AN_AI_ECOMMERCE_3_MODULE.pdf), trang 1–2 | Giảm thao tác, giảm bị làm phiền, tư vấn theo nhu cầu, tạo niềm tin | Dùng ba nhóm động cơ mua làm giả thuyết nghiên cứu; không coi tuổi hay tỷ lệ trong báo cáo là dữ liệu khảo sát |
 | PDF, trang 2–4 | Ưu đãi từ chi phí thực sự tiết kiệm; máy chủ kiểm soát giá sàn | Bổ sung chi phí AI, đối tác, vận hành và rủi ro; không cam kết lợi nhuận hay an toàn tuyệt đối |
 | PDF, trang 4–5 | Giải thích thông số dễ hiểu; so sánh nâng cấp; phiếu bù giá; chọn nhanh; lưu món; theo dõi đơn | Phân kỳ theo độ rủi ro, yêu cầu bằng chứng và dữ liệu kết nối |
 | PDF, trang 5–6 | Giao diện nhúng nhẹ; điều phối hiển thị; đồng ý nhận tin; QR; chuyển nhân viên | Bộ giao diện là tùy chọn, không thay lõi máy chủ; không hứa mọi ngân hàng mở được, phí bằng 0 hoặc thanh toán trong 3 giây |
 | PDF, kết luận trang 6 | Soát giỏ hàng, can ngăn mua đắt, xem video mở hộp | Hai ý đầu là thử nghiệm tư vấn; video chỉ xem xét sau, không tự quyết đổi trả |
-| [Tài liệu nghiên cứu thị trường](../research/market_research.md), mục I–XXI | Nhu cầu thật, tín hiệu sớm, nơi tập trung khách, giải pháp, thời điểm và lợi thế có bằng chứng | Đưa thành phiếu cơ hội có nguồn, giả thuyết, phép thử và tiêu chí dừng |
+| [Tài liệu nghiên cứu thị trường](../docs/reference/market-research.md), mục I–XXI | Nhu cầu thật, tín hiệu sớm, nơi tập trung khách, giải pháp, thời điểm và lợi thế có bằng chứng | Đưa thành phiếu cơ hội có nguồn, giả thuyết, phép thử và tiêu chí dừng |
 | Tài liệu thị trường, mục XXII–XXVIII | Bốn vai trò Tiếp thị; đối tác; mua lại; giới thiệu | Bốn vai trò nghiệp vụ trong một mô-đun; thử thủ công trước khi tự động hóa |
 
 ### Những thay đổi có chủ ý so với kế hoạch cũ

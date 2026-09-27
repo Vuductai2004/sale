@@ -1,0 +1,42 @@
+# syntax=docker/dockerfile:1
+# apps/platform-admin image. Build context is the repository root:
+#   docker build -f docker/Dockerfile.platform-admin --build-arg NEXT_PUBLIC_API_URL=https://api.example.invalid .
+# NEXT_PUBLIC_API_URL is a public browser origin baked into the client bundle.
+# No credential is passed at build time; rebuild when the public API origin changes.
+
+FROM node:20-bookworm-slim AS builder
+
+ENV PNPM_HOME=/pnpm
+ENV PATH=$PNPM_HOME:$PATH
+ENV CI=true
+ENV NEXT_STANDALONE=1
+ARG NEXT_PUBLIC_API_URL
+RUN test -n "$NEXT_PUBLIC_API_URL"
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+RUN corepack enable
+
+WORKDIR /repo
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml turbo.json ./
+COPY packages ./packages
+COPY apps ./apps
+
+RUN pnpm install --frozen-lockfile \
+    && pnpm --filter @agentos/platform-admin... build
+
+FROM node:20-bookworm-slim AS runtime
+
+ENV NODE_ENV=production
+ENV HOSTNAME=0.0.0.0
+ENV PORT=3001
+
+WORKDIR /app
+
+COPY --from=builder /repo/apps/platform-admin/.next/standalone ./
+COPY --from=builder /repo/apps/platform-admin/.next/static ./apps/platform-admin/.next/static
+
+EXPOSE 3001
+
+USER node
+
+CMD ["node", "apps/platform-admin/server.js"]
