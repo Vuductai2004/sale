@@ -1,6 +1,3 @@
-// Test doubles in this file use vitest mocks whose generic variance fails exactOptionalPropertyTypes.
-// The executable assertions are in the it() bodies; the worker seam case lives in tc-e2e-001-worker-seam.e2e.test.ts.
-// @ts-nocheck
 
 import { describe, expect, it, vi } from 'vitest';
 import {
@@ -179,7 +176,7 @@ function marketingContext(overrides: Record<string, unknown> = {}) {
   } as never;
 }
 
-async function approvedDispatchScenario(dispatcher: ReturnType<typeof vi.fn> = vi.fn(async () => receipt)) {
+async function approvedDispatchScenario(dispatcher: (...args: never[]) => Promise<typeof receipt> = async () => receipt) {
   const input = marketingInput();
   const context = marketingContext();
   const ports = dispatchPorts({ dispatcher: { dispatch: dispatcher, reconcile: vi.fn(async () => ({ outcome: 'INDETERMINATE' })) } });
@@ -227,7 +224,7 @@ async function approvedDispatchScenario(dispatcher: ReturnType<typeof vi.fn> = v
   ports.workflowEngine.getTask = vi.fn(async () => ({
     state: 'running',
     state_payload: { pending_action: action },
-  }));
+  })) as never;
   const approvalBinding = await claimCanonicalApproval({
     workflow: ports.workflowEngine as never,
     tenant_id: TENANT_ID,
@@ -243,7 +240,7 @@ async function approvedDispatchScenario(dispatcher: ReturnType<typeof vi.fn> = v
   return { input, context, ports, approvalBinding };
 }
 
-function policyPoint(approvalTicket: ReturnType<typeof vi.fn>) {
+function policyPoint(approvalTicket: (...args: never[]) => Promise<{ approval_id: string }>) {
   return new PolicyEnforcementPoint({
     registry: {
       getSkill: () => ({
@@ -261,7 +258,7 @@ function policyPoint(approvalTicket: ReturnType<typeof vi.fn>) {
       }),
       getAgent: () => ({ agent_id: 'MKT-05', assigned_authority: 'AUTH-3' }),
     },
-    approvals: { createOrReadPending: approvalTicket },
+    approvals: { createOrReadPending: approvalTicket as never },
     auditSecret: AUDIT_SECRET,
     now: () => NOW,
     audit: { append: vi.fn(async () => undefined) },
@@ -284,7 +281,7 @@ describe('P4 cross-domain worker e2e', () => {
       try {
         await dispatchCampaign(input, context, ports as never, { brandReview: { compliant: true, violations: [], confidence_score: 1 }, expected_task_version: 1 });
       } catch (error) {
-        result.code = (error as { code?: string }).code;
+        result.code = (error as { code?: string }).code ?? '';
       }
     });
     const registry = createDomainRuntimeRegistry([{ contract: { module: 'marketing', source_channels: ['MARKETING_CAMPAIGN'], event_types: ['campaign.requested'], signal_invalid_code: 'MARKETING_SIGNAL_INVALID' }, createOrchestrator: async () => marketing }]);
@@ -339,7 +336,7 @@ describe('P4 cross-domain worker e2e', () => {
 
   it('TC-E2E-005 suppresses duplicate effects with EffectGuard REPLAY and one connector dispatch', async () => {
     const connectorDispatch = vi.fn(async () => receipt);
-    const scenario = await approvedDispatchScenario(connectorDispatch);
+    const scenario = await approvedDispatchScenario(connectorDispatch as never);
     const outcomes: string[] = [];
     const marketing = orchestratorFor(async () => {
       const result = await dispatchCampaign(scenario.input, scenario.context, scenario.ports as never, { approvalBinding: scenario.approvalBinding, brandReview: { compliant: true, violations: [], confidence_score: 1 } });
@@ -355,7 +352,7 @@ describe('P4 cross-domain worker e2e', () => {
 
   it('TC-E2E-006 denies injection and AUTH-5 escalation before adapter calls or approval tickets', async () => {
     const approvalTicket = vi.fn(async () => ({ approval_id: 'must-not-exist' }));
-    const pep = policyPoint(approvalTicket);
+    const pep = policyPoint(approvalTicket as never);
     const adapter = vi.fn();
     const outcome: { verdict?: string; code?: string } = {};
     const marketing = orchestratorFor(async () => {
@@ -375,7 +372,7 @@ describe('P4 cross-domain worker e2e', () => {
         required_authority: 'AUTH-5',
       });
       outcome.verdict = decision.verdict;
-      outcome.code = decision.verdict === 'DENIED' ? decision.errorCode ?? undefined : undefined;
+      outcome.code = decision.verdict === 'DENIED' ? (decision.errorCode ?? '') : '';
     });
     const registry = createDomainRuntimeRegistry([{ contract: { module: 'marketing', source_channels: ['MARKETING_CAMPAIGN'], event_types: ['campaign.requested'], signal_invalid_code: 'MARKETING_SIGNAL_INVALID' }, createOrchestrator: async () => marketing }]);
     await runClaim(taskFor('run-auth5', signalFor('marketing', 'campaign.requested', 'MARKETING_CAMPAIGN', 'run-auth5', { skill_id: 'skill.mkt.dispatch_campaign' })), registry, new Map());
@@ -392,7 +389,7 @@ describe('P4 cross-domain worker e2e', () => {
       try {
         await dispatchCampaign(marketingInput(), marketingContext(), ports as never, { brandReview: { compliant: true, violations: [], confidence_score: 1 } });
       } catch (error) {
-        result.code = (error as { code?: string }).code;
+        result.code = (error as { code?: string }).code ?? '';
       }
     });
     const registry = createDomainRuntimeRegistry([{ contract: { module: 'marketing', source_channels: ['MARKETING_CAMPAIGN'], event_types: ['campaign.requested'], signal_invalid_code: 'MARKETING_SIGNAL_INVALID' }, createOrchestrator: async () => marketing }]);
@@ -403,7 +400,7 @@ describe('P4 cross-domain worker e2e', () => {
 
   it('TC-E2E-008 leaves connector TIMEOUT UNKNOWN for reconciliation without blind retry', async () => {
     const connectorDispatch = vi.fn(async () => ({ ...receipt, adapter_status: 'TIMEOUT' as const }));
-    const scenario = await approvedDispatchScenario(connectorDispatch);
+    const scenario = await approvedDispatchScenario(connectorDispatch as never);
     const outcomes: string[] = [];
     const marketing = orchestratorFor(async () => {
       try {
@@ -468,7 +465,7 @@ describe('P4 cross-domain worker e2e', () => {
       adapterDispatcher: { dispatch: vi.fn(async () => receipt), reconcile: vi.fn(async () => ({ outcome: 'INDETERMINATE' as const })) },
       resolve_grant: async () => 'AUTH-3',
       resolve_correlation_id: async () => CORRELATION_ID,
-      contextAggregator: { hydrateContext: async (tenant_id: string, subject: { session_id: string }, correlation_id: string) => ({ tenant_id, correlation_id, customer: { customer_id: CUSTOMER_ID, tenant_id, verified_phone: null, verified_email: null, total_spent: 0, order_count: 0, rfm_segment_hypothesis: null, consent_marketing: true, consent_updated_at: null, suppression_active: false, created_at: NOW.toISOString() }, working_memory: { session_id: subject.session_id, turn_count: 0, takeover_active: false }, knowledge_citations: [], hydrated_at: NOW.toISOString() }) },
+      contextAggregator: { hydrateContext: async (tenant_id: string, subject: { session_id: string }, correlation_id: string) => ({ tenant_id, correlation_id, customer: { customer_id: CUSTOMER_ID, tenant_id, verified_phone: null, verified_email: null, total_spent: 0, order_count: 0, rfm_segment_hypothesis: null, consent_marketing: true, consent_updated_at: null, suppression_active: false, created_at: NOW.toISOString() }, working_memory: { session_id: subject.session_id, turn_count: 0, takeover_active: false }, knowledge_citations: [], hydrated_at: NOW.toISOString() }) } as never,
     });
     const registry = createDomainRuntimeRegistry([{
       contract: { module: 'marketing', source_channels: ['MARKETING_CAMPAIGN'], event_types: ['campaign.requested'], signal_invalid_code: 'MARKETING_SIGNAL_INVALID' },
