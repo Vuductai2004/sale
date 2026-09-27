@@ -24,6 +24,7 @@ import {
 } from '@agentos/core-engine';
 import type {
   AssignableAuthority,
+  ICrossDomainHandoffBroker,
   DurableLeaseManager,
   IAdapterDispatcher,
   IAgentRuntime,
@@ -88,6 +89,12 @@ export interface CareOrchestratorFactoryOptions {
   readonly effectGuard?: IEffectGuard | undefined;
   readonly sessionControl?: ISessionControl | undefined;
   readonly leaseManager?: DurableLeaseManager | undefined;
+  /**
+   * The brokered cross-domain handoff binding (plans/customer-lifecycle.md §3). Absent ⇒ a plan
+   * that declares a handoff refuses (`HANDOFF_BROKER_UNBOUND`) instead of completing a journey leg
+   * whose successor cannot be admitted.
+   */
+  readonly crossDomainHandoff?: ICrossDomainHandoffBroker | undefined;
   readonly effectReservationRepository?: EffectReservationRepository | undefined;
   readonly adapters?: Partial<CareAdaptersShape> | undefined;
   readonly skillServices?: CareSkillServices | undefined;
@@ -292,8 +299,10 @@ export function createCareOrchestratorFactory(
   // the same canonical registry: without it every Care intent falls closed to an empty plan.
   let adapterDispatcher = options.adapterDispatcher ?? options.skillServices?.dispatcher;
   let registry = options.registry ?? options.skillServices?.registry;
-  if (!options.skillServices && !options.adapterDispatcher) {
-    const skillServices = createCareSkillServices({
+  // The planner reads step metadata from the canonical registry. An injected dispatcher does not
+  // replace that registry: without it every handoff intent falls closed to an empty plan.
+  if (!registry || !adapterDispatcher) {
+    const skillServices = options.skillServices ?? createCareSkillServices({
       erp_read: options.erp_read ?? null,
       env: options.env ?? {},
       ...(options.now ? { now: options.now } : {}),
@@ -303,7 +312,7 @@ export function createCareOrchestratorFactory(
       resolve_correlation_id: resolveCorrelationId,
       resolve_grant: resolveGrant,
     });
-    adapterDispatcher = skillServices.dispatcher;
+    adapterDispatcher ??= skillServices.dispatcher;
     registry ??= skillServices.registry;
   }
 
@@ -345,6 +354,9 @@ export function createCareOrchestratorFactory(
       sessionControl,
       leaseManager,
       workerId,
+      ...(options.crossDomainHandoff === undefined
+        ? {}
+        : { crossDomainHandoff: options.crossDomainHandoff }),
     });
   };
 }

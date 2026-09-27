@@ -533,5 +533,154 @@ export type EffectReservationOutcome =
   | { readonly kind: 'RECONCILE_REQUIRED' }
   | { readonly kind: 'CONFLICT' };
 
+export type CrossDomainHandoffClassification = 'FACT' | 'SIGNAL' | 'HYPOTHESIS' | 'DECISION' | 'ACTION';
+
+export interface HandoffEvidenceRow {
+  classification: CrossDomainHandoffClassification;
+  claim: string;
+  source_uri: string;
+  source_version: string;
+  verified_by: string;
+}
+
+export interface CrossDomainHandoffRecord {
+  handoff_id: string;
+  tenant_id: string;
+  customer_id: string;
+  correlation_id: string;
+  idempotency_key: string;
+  request_fingerprint: string | null;
+  source_domain: string;
+  source_agent: string;
+  source_run_id: string;
+  target_domain: string;
+  target_agent: string;
+  target_module: string;
+  target_run_id: string;
+  reason: string;
+  classification: CrossDomainHandoffClassification;
+  evidence: readonly HandoffEvidenceRow[];
+  lifecycle_state: string;
+  lifecycle_version: number;
+  hop_count: number;
+  visited_domains: readonly string[];
+  occurred_at: string;
+  created_at: string;
+}
+
+export interface CrossDomainLifecycleRecord {
+  tenant_id: string;
+  customer_id: string;
+  state: string;
+  version: number;
+  hop_count: number;
+  domains: readonly string[];
+  /** Source run of the latest durable hop; used to recognize an exact admission retry. */
+  source_run_id: string;
+  updated_at: string;
+}
+
+/**
+ * The Customer 360 timeline row a handoff appends.
+ *
+ * It is committed by the SAME tenant transaction as the reservation, the target task and the ledger
+ * row (`CareHandoffRepository` sets the same precedent for its queue row, parked task and
+ * reservation). A handoff therefore cannot exist without its timeline row, and a replayed admission
+ * cannot append a second one: `(tenant_id, source_event_id)` is the stream's deduplication key and
+ * the insert is `ON CONFLICT DO NOTHING`.
+ */
+export interface CrossDomainHandoffTimelineEvent {
+  /** The stream's deduplication key; the broker passes the handoff's own idempotency key. */
+  source_event_id: string;
+  event_name: string;
+  session_id: string;
+  channel: string;
+  occurred_at: string;
+  payload: Record<string, unknown>;
+}
+
+export interface AdmitCrossDomainHandoffInput {
+  /**
+   * The handoff's durable identity, minted once by the orchestrator and stored as the ledger's
+   * primary key. The target run's signal cites this same id, so one hop never carries two
+   * identities.
+   */
+  handoff_id: string;
+  tenant_id: string;
+  customer_id: string;
+  correlation_id: string;
+  idempotency_key: string;
+  request_fingerprint: string;
+  source_domain: string;
+  source_agent: string;
+  source_run_id: string;
+  target_domain: string;
+  target_agent: string;
+  target_module: string;
+  reason: string;
+  classification: CrossDomainHandoffClassification;
+  evidence: readonly HandoffEvidenceRow[];
+  lifecycle_state: string;
+  lifecycle_version: number;
+  hop_count: number;
+  visited_domains: readonly string[];
+  occurred_at: string;
+  run_id: string;
+  signal: Record<string, unknown>;
+  /**
+   * The Customer 360 row committed with the admission. REQUIRED: a handoff's timeline row is part
+   * of its admission, not a follow-up step, and the repository refuses an admission whose event is
+   * absent, unkeyed or unmarked rather than committing an invisible handoff.
+   */
+  timeline_event: CrossDomainHandoffTimelineEvent;
+  reservation_ttl_ms: number;
+  now?: () => Date;
+}
+
+export type CrossDomainHandoffAdmission =
+  | {
+      kind: 'ADMITTED';
+      handoff_id: string;
+      run_id: string;
+      task: {
+        readonly task_id: string;
+        readonly tenant_id: string;
+        readonly run_id: string;
+        readonly correlation_id: string;
+        readonly current_step: number;
+        readonly state: 'queued' | 'running' | 'waiting' | 'awaiting_human' | 'completed' | 'stopped' | 'failed';
+        readonly task_version: number;
+        readonly lease_owner: string | null;
+        readonly lease_expires_at: string | null;
+        readonly retry_count: number;
+        readonly max_retries: number;
+        readonly last_error_class: 'RETRYABLE' | 'FATAL' | null;
+        readonly paused_for_approval_id: string | null;
+        readonly state_payload: unknown;
+        readonly error_details: unknown;
+        readonly created_at: string;
+        readonly updated_at: string;
+      };
+      reservation: {
+        readonly tenant_id: string;
+        readonly effect_key: string;
+        readonly request_id: string;
+        readonly request_fingerprint: string;
+        readonly run_id: string;
+        readonly step_index: number;
+        readonly skill_id: string;
+        readonly status: EffectReservationStatus;
+        readonly response_receipt: unknown;
+        readonly reserved_at: string;
+        readonly resolved_at: string | null;
+        readonly expires_at: string;
+        readonly expired: boolean;
+      };
+    }
+  | { kind: 'REPLAY'; handoff_id: string; run_id: string; receipt: Record<string, unknown> | null }
+  | { kind: 'IN_FLIGHT'; handoff_id: string; run_id: string }
+  | { kind: 'CONFLICT' }
+  | { kind: 'RECONCILE_REQUIRED' };
+
 export * from './service-cases.js';
 export * from './care-handoffs.js';

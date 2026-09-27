@@ -5,10 +5,18 @@ import {
   packageName as databasePackageName,
   DurableWorkflowRepository,
   assertCompleteCheckpoint,
+  readCrossDomainLifecycle,
   type DurableTaskRecord,
 } from '@agentos/database';
 import { packageName as skillsPackageName } from '@agentos/skills';
-import type { ActionDraft, ExecutionReceipt, SignalEnvelope } from '@agentos/core-engine/contracts';
+import type {
+  ActionDraft,
+  ExecutionReceipt,
+  ICrossDomainHandoffBroker,
+  SignalEnvelope,
+} from '@agentos/core-engine/contracts';
+
+import { createCrossDomainHandoffBroker } from './runtime/shared/cross-domain-handoff.js';
 
 import { createWorkerConnectors, type WorkerConnectorEnv, type WorkerConnectorOptions } from './runtime/connectors.js';
 import { nodeHmacSha256Hex } from './runtime/hmac.js';
@@ -37,10 +45,30 @@ import {
 
 export const VALID_AGENT_MODULES: readonly string[] = Object.freeze(['support', 'sales', 'marketing']);
 
+/**
+ * The channel and event types a brokered handoff is admitted on (plans/customer-lifecycle.md §3).
+ *
+ * `ORCHESTRATOR_HANDOFF` is an INTERNAL channel: it is never a customer-facing channel, and no
+ * external ingestion route admits it. The broker writes it into the target run's signal after the
+ * durable admission of the handoff, so only the orchestrator can produce a run that carries it.
+ */
+export const CROSS_DOMAIN_HANDOFF_CHANNEL = 'ORCHESTRATOR_HANDOFF';
+
+/** Canonical event type of one journey edge, keyed by the edge's target domain and leg. */
+export const CROSS_DOMAIN_HANDOFF_EVENT_TYPES: Readonly<Record<string, string>> = Object.freeze({
+  marketing_to_sales: 'handoff.marketing_to_sales',
+  sales_to_care: 'handoff.sales_to_care',
+  care_to_retention: 'handoff.care_to_retention',
+});
+
 export const CARE_SIGNAL_CONTRACT: DomainSignalContract = Object.freeze({
   module: 'support',
-  source_channels: Object.freeze(['WEB_CHAT']),
-  event_types: Object.freeze(['message.received']),
+  source_channels: Object.freeze(['WEB_CHAT', CROSS_DOMAIN_HANDOFF_CHANNEL]),
+  event_types: Object.freeze([
+    'message.received',
+    CROSS_DOMAIN_HANDOFF_EVENT_TYPES['sales_to_care'] as string,
+    CROSS_DOMAIN_HANDOFF_EVENT_TYPES['care_to_retention'] as string,
+  ]),
   signal_invalid_code: 'CARE_SIGNAL_INVALID',
 });
 
@@ -127,6 +155,12 @@ export interface WorkerEnv extends WorkerConnectorEnv {
   readonly MARKETING_SIGNAL_SOURCE_CHANNELS?: string;
   readonly MARKETING_SIGNAL_EVENT_TYPES?: string;
   readonly AUDIT_HMAC_SECRET?: string;
+  /**
+   * Enables the brokered cross-domain journey (`marketing → sales → care → retention`). Absent or
+   * not `true`, no broker is bound and a plan that declares a handoff refuses
+   * (`HANDOFF_BROKER_UNBOUND`) — a default deployment never admits a cross-domain run.
+   */
+  readonly CROSS_DOMAIN_JOURNEY_ENABLED?: string;
 }
 
 export interface WorkerExecutionOptions extends WorkerConnectorOptions {
@@ -145,6 +179,10 @@ export interface WorkerExecutionOptions extends WorkerConnectorOptions {
   readonly onError?: (tenant_id: string, error: unknown) => void;
   readonly careFactoryOptions?: CareOrchestratorFactoryOptions;
   readonly salesFactoryOptions?: SalesOrchestratorFactoryOptions;
+  /** The brokered handoff binding; when supplied it overrides the env-gated default broker. */
+  readonly crossDomainHandoff?: ICrossDomainHandoffBroker;
+  /** Persistence the broker reads the durable journey from; defaults to the real repository. */
+  readonly handoffRepository?: { readCrossDomainLifecycle: typeof readCrossDomainLifecycle };
 }
 /**
  * Releases a task only while this worker still owns the lease. Event-bearing parked tasks retain
@@ -429,14 +467,35 @@ export function startWorker(
   }
 
   const workflowRepository = options.workflowRepository ?? new DurableWorkflowRepository();
-  const careFactoryOptions: CareOrchestratorFactoryOptions = options.careFactoryOptions ?? {
-    workerId,
-    workflowRepository: workflowRepository as DurableWorkflowRepository,
-    // The connector's own read surface, or `null` when no system of record is bound — in which
-    // case the order skill refuses at dispatch instead of the worker substituting a cached value.
-    erp_read: connectors.erp_read,
-    env,
-  };
+
+  // The brokered journey is opt-in and fail-closed: without an explicit `true` no broker is bound,
+  // so a plan that declares a handoff refuses rather than admitting a cross-domain run.
+  const crossDomainHandoff: ICrossDomainHandoffBroker | undefined = options.crossDomainHandoff
+    ?? (env.CROSS_DOMAIN_JOURNEY_ENABLED === 'true'
+      ? createCrossDomainHandoffBroker({
+          handoffRepository: options.handoffRepository ?? { readCrossDomainLifecycle },
+        })
+      : undefined);
+
+  const careFactoryOptions: CareOrchestratorFactoryOptions = options.careFactoryOptions === undefined
+    ? {
+        workerId,
+        workflowRepository: workflowRepository as DurableWorkflowRepository,
+        // The connector's own read surface, or `null` when no system of record is bound — in which
+        // case the order skill refuses at dispatch instead of the worker substituting a cached value.
+        erp_read: connectors.erp_read,
+        env,
+        ...(crossDomainHandoff === undefined ? {} : { crossDomainHandoff }),
+      }
+    : {
+        // A caller-supplied options object is the documented injection seam, so the broker is
+        // merged into it unless the caller bound one itself — otherwise enabling the journey would
+        // silently do nothing on that path.
+        ...options.careFactoryOptions,
+        ...(options.careFactoryOptions.crossDomainHandoff !== undefined || crossDomainHandoff === undefined
+          ? {}
+          : { crossDomainHandoff }),
+      };
 
   const enabledModules = parseEnabledAgentModules(env.ENABLED_AGENT_MODULES);
   const bindings: DomainRuntimeBinding[] = [];
@@ -473,11 +532,19 @@ export function startWorker(
     if (salesChannels.length === 0 || salesEventTypes.length === 0) {
       blockers.push('SALES_CAPABILITY_UNBOUND: SALES_SIGNAL_SOURCE_CHANNELS and SALES_SIGNAL_EVENT_TYPES must be configured and non-empty');
     } else {
-      const salesFactoryOptions: SalesOrchestratorFactoryOptions = options.salesFactoryOptions ?? {
-        workerId,
-        workflowRepository: workflowRepository as DurableWorkflowRepository,
-        erp_read: connectors.erp_read,
-      };
+      const salesFactoryOptions: SalesOrchestratorFactoryOptions = options.salesFactoryOptions === undefined
+        ? {
+            workerId,
+            workflowRepository: workflowRepository as DurableWorkflowRepository,
+            erp_read: connectors.erp_read,
+            ...(crossDomainHandoff === undefined ? {} : { crossDomainHandoff }),
+          }
+        : {
+            ...options.salesFactoryOptions,
+            ...(options.salesFactoryOptions.crossDomainHandoff !== undefined || crossDomainHandoff === undefined
+              ? {}
+              : { crossDomainHandoff }),
+          };
 
       // Reported, never used to suppress the domain: a deployment that binds only the read
       // connectors still serves catalog/stock/customer reads and refuses each mutation at
@@ -499,8 +566,11 @@ export function startWorker(
         bindings.push({
           contract: {
             module: 'sales',
-            source_channels: Object.freeze(salesChannels),
-            event_types: Object.freeze(salesEventTypes),
+            source_channels: Object.freeze([...salesChannels, CROSS_DOMAIN_HANDOFF_CHANNEL]),
+            event_types: Object.freeze([
+              ...salesEventTypes,
+              CROSS_DOMAIN_HANDOFF_EVENT_TYPES['marketing_to_sales'] as string,
+            ]),
             signal_invalid_code: 'SALES_SIGNAL_INVALID',
           },
           createOrchestrator: salesOrchestratorFactory,
@@ -525,6 +595,9 @@ export function startWorker(
           workerId,
           workflowRepository: options.marketingFactoryOptions?.workflowRepository ?? workflowRepository as DurableWorkflowRepository,
           ...(env.AUDIT_HMAC_SECRET === undefined ? {} : { auditSecret: env.AUDIT_HMAC_SECRET }),
+          ...(options.marketingFactoryOptions?.crossDomainHandoff !== undefined
+            ? {}
+            : crossDomainHandoff === undefined ? {} : { crossDomainHandoff }),
         });
       } catch (error) {
         blockers.push('MARKETING_ORCHESTRATOR_UNBOUND: ' + (error instanceof Error ? error.message : String(error)));

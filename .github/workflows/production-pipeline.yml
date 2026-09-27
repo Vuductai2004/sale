@@ -17,10 +17,11 @@
 # gate-environment rehearsal. A green suite here proves the named offline cases
 # ran — it does not close a durability item that needs the real durable store.
 #
-# \`test:pilots\` is implemented by apps/worker and runs the executable offline
+# `test:pilots` is implemented by apps/worker and runs the executable offline
 # E2E-OFF-ESC/PILOT-04 harness. It is included here as local regression evidence;
 # the database and production-like pilot boundaries remain the live gate evidence.
-# \`test:e2e\` remains a later-gate task and is not invoked here.
+# `test:e2e` is implemented by apps/worker (`vitest.e2e.config.ts`, `src/e2e/**/*.e2e.test.ts`)
+# and is required in this pipeline. Offline mocks are engineering regression, not live Gate P4 evidence.
 #
 # Nothing in this pipeline publishes: `permissions` is read-only, and the Docker
 # job only builds images into the local daemon, inspects them, boots the Compose
@@ -65,7 +66,7 @@ jobs:
       # images — instead of reporting "0 total" as a green suite in job 2, 3 or 4.
       - name: Require every gate task this pipeline invokes to be implemented
         run: >-
-          node scripts/require-implemented-tasks.mjs lint typecheck build test:unit test:contracts test:pilots
+          node scripts/require-implemented-tasks.mjs lint typecheck build test:unit test:contracts test:pilots test:e2e
           test:adversarial test:security db:migrate:rehearse
       - name: Lint
         run: pnpm lint
@@ -95,13 +96,15 @@ jobs:
       # if that implementer disappears, because reporting this job green would
       # claim a suite that never ran.
       - name: Require the unit and contract tasks to be implemented
-        run: node scripts/require-implemented-tasks.mjs test:unit test:contracts test:pilots
+        run: node scripts/require-implemented-tasks.mjs test:unit test:contracts test:pilots test:e2e
       - name: Unit tests
         run: pnpm test:unit
       - name: Contract tests
         run: pnpm test:contracts
       - name: Offline P1 pilot harness
         run: pnpm test:pilots
+      - name: Offline worker E2E regression suite
+        run: pnpm test:e2e
 
   database-migration-rehearsal:
     name: 3. Raw SQL Migration and RLS Rehearsal
@@ -179,6 +182,9 @@ jobs:
           # to (services/mock-erp/src/fixtures.mjs); Care keeps its own pilot tenant above, so the
           # two smokes never share fixtures, tenants or effect state.
           SALES_TENANT_IDS: 00000000-0000-4000-8000-000000000001
+          # The P4 smoke is scoped to its own tenant and proves the durable handoff ledger against
+          # the rehearsed schema; it drives no API or worker, so it needs neither provider.
+          P4_TENANT_IDS: 22222222-2222-4222-8222-222222222222
           SESSION_SECRET: ci-session-secret-0000000000
           PLATFORM_SECRET: ci-platform-secret-0000000
           AUDIT_HMAC_SECRET: ci-audit-hmac-secret-000000

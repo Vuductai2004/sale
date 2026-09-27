@@ -17,6 +17,9 @@ import {
   type HypothesisRecord,
   type IEvidenceLogger,
   type PlannedStep,
+  type CrossDomainHandoffDraft,
+  type HandoffIntent,
+  type ICrossDomainHandoffBroker,
   type PlatformAgentId,
   type ActionDraft,
   type RoutingDecision,
@@ -24,6 +27,7 @@ import {
   type DurableLeaseManager,
   type IStatefulWorkflowEngine,
   type DurableTaskGuard,
+  type DurableTaskCheckpoint,
 } from '../contracts/index.js';
 import { computeEffectKey } from '../effects/effect-key.js';
 import { MemoryEffectGuard } from '../effects/memory-effect-guard.js';
@@ -115,6 +119,12 @@ function receipt(): ExecutionReceipt {
 
 interface HarnessOptions {
   readonly steps?: PlannedStep[];
+  /** The next journey leg this run's plan declares, when the case exercises the handoff path. */
+  readonly handoff_intent?: HandoffIntent;
+  /** The brokered handoff binding; absent means this deployment brokers nothing. */
+  readonly crossDomainHandoff?: ICrossDomainHandoffBroker;
+  /** The verified Customer 360 subject of the run, when the case needs one to exist. */
+  readonly customer?: HydratedContext['customer'];
   readonly agents?: PlatformAgentId[];
   readonly hypothesisRecord?: HypothesisRecord;
   readonly dispatch?: (action?: ActionDraft) => Promise<ExecutionReceipt>;
@@ -148,7 +158,9 @@ function harness(options: HarnessOptions = {}) {
     : new MemoryWorkflowEngine();
   const workflow = options.workflowEngine ?? memoryWorkflow;
   const evidenceLogger = options.evidenceLogger ?? new MemoryEvidenceLogger('test-hmac-secret');
-  const hydrate = vi.fn(async () => context());
+  const hydrate = vi.fn(async () => (
+    options.customer === undefined ? context() : { ...context(), customer: options.customer }
+  ));
   const deriveHypothesis = vi.fn(async () => options.hypothesisRecord ?? hypothesis());
   const resolveRouting = vi.fn(async (): Promise<RoutingDecision> => ({
     target_agent: options.agents?.[0] ?? 'SAL-01',
@@ -156,15 +168,19 @@ function harness(options: HarnessOptions = {}) {
     rationalization: 'orchestrator routed',
   }));
   const formulatePlan = vi.fn(async () => {
-    if (options.steps !== undefined) {
-      return plan(options.steps);
-    }
-    const agents = options.agents ?? ['SAL-01'];
-    return plan(agents.map((agent_id, index) => step({ step_index: index + 1, agent_id })));
+    const base = options.steps !== undefined
+      ? plan(options.steps)
+      : plan((options.agents ?? ['SAL-01']).map((agent_id, index) => step({ step_index: index + 1, agent_id })));
+    return options.handoff_intent === undefined
+      ? base
+      : { ...base, handoff_intent: options.handoff_intent };
   });
   const dispatch = vi.fn(options.dispatch ?? (async (_action?: ActionDraft) => receipt()));
   const reconcile = options.reconcile !== undefined ? vi.fn(options.reconcile) : undefined;
   const orchestrator = new RevenueOrchestrator({
+    ...(options.crossDomainHandoff === undefined
+      ? {}
+      : { crossDomainHandoff: options.crossDomainHandoff }),
     contextAggregator: { hydrateContext: hydrate },
     agentRuntime: { deriveHypothesis, resolveRouting, formulatePlan },
     policyEngine: {
@@ -1436,5 +1452,229 @@ describe('RevenueOrchestrator', () => {
       tenant_id: TENANT,
     });
     expect(effectGuard.peek(TENANT, readOnlyAction.effect_key)).toBeNull();
+  });
+});
+
+describe('brokered cross-domain handoff', () => {
+  const HANDOFF_INTENT: HandoffIntent = {
+    source_domain: 'sales',
+    target_domain: 'care',
+    target_agent: 'CS-01',
+    reason: 'Sales leg completed; Care onboarding is the next leg',
+  };
+
+  const HANDOFF_CUSTOMER: NonNullable<HydratedContext['customer']> = {
+    customer_id: 'cust-1',
+    tenant_id: TENANT,
+    verified_phone: null,
+    verified_email: 'buyer@example.test',
+    total_spent: 0,
+    order_count: 0,
+    rfm_segment_hypothesis: 'NEW',
+    consent_marketing: false,
+    consent_updated_at: null,
+    suppression_active: false,
+    created_at: '2026-09-01T00:00:00.000Z',
+  };
+
+  function queuedRecoveryHarness(
+    checkpoint: DurableTaskCheckpoint,
+    crossDomainHandoff: ICrossDomainHandoffBroker,
+  ) {
+    const run_id = 'run-recovered-handoff';
+    const workflow = {
+      getTask: vi.fn(async () => ({
+        task_version: 4,
+        state: 'running' as const,
+        correlation_id: 'corr-1',
+        state_payload: { ...checkpoint, signal: signal() },
+        lease_owner: 'worker-test',
+        lease_expires_at: new Date(Date.now() + 30_000).toISOString(),
+      })),
+      updateTaskProgress: vi.fn(async () => undefined),
+      transitionTask: vi.fn(async () => undefined),
+      recordFailure: vi.fn(async () => ({ requeued: true })),
+    } as unknown as IStatefulWorkflowEngine;
+    const leaseManager: DurableLeaseManager = {
+      acquireLease: vi.fn(async () => true),
+      releaseLease: vi.fn(async () => undefined),
+    };
+    const bound = harness({ workflowEngine: workflow, crossDomainHandoff, leaseManager });
+    return { ...bound, workflow, leaseManager, run_id };
+  }
+
+  it('brokers a handoff when recovery finds the checkpoint already complete', async () => {
+    const admit = vi.fn(async (_draft: CrossDomainHandoffDraft) => ({
+      handoff_id: 'handoff-recovered-1',
+      target_run_id: 'run-care-recovered-1',
+      admitted: true,
+      lifecycle: { version: 1, state: 'HANDED_OFF' as const },
+    }));
+    const checkpoint: DurableTaskCheckpoint = {
+      plan: { ...plan([step({ mutating: false })]), handoff_intent: HANDOFF_INTENT },
+      context: { ...context(), customer: HANDOFF_CUSTOMER },
+      current_step: 2,
+      pending_action: null,
+      previous_evidence_hash: GENESIS_HASH,
+      request_id: SIGNAL_ID,
+    };
+    const { orchestrator, workflow, run_id } = queuedRecoveryHarness(checkpoint, { admit });
+
+    const result = await orchestrator.processQueuedSignal(run_id, signal(), { worker_id: 'worker-test' });
+
+    expect(result.lifecycle_state).toBe('completed');
+    expect(result.handoff).toMatchObject({
+      handoff_id: 'handoff-recovered-1',
+      target_run_id: 'run-care-recovered-1',
+      admitted: true,
+    });
+    expect(admit).toHaveBeenCalledTimes(1);
+    expect(workflow.transitionTask).toHaveBeenCalledWith(
+      TENANT,
+      run_id,
+      'completed',
+      'Recovered evidenced plan verified',
+    );
+  });
+
+  it('parks a recovered completed-step handoff when admission is unresolved', async () => {
+    const admit = vi.fn(async () => {
+      throw new OrchestratorError('HANDOFF_ADMISSION_UNRESOLVED', 'the ledger could not decide');
+    });
+    const checkpoint: DurableTaskCheckpoint = {
+      plan: { ...plan([step({ mutating: false })]), handoff_intent: HANDOFF_INTENT },
+      context: { ...context(), customer: HANDOFF_CUSTOMER },
+      current_step: 1,
+      pending_action: null,
+      previous_evidence_hash: GENESIS_HASH,
+      request_id: SIGNAL_ID,
+    };
+    const { orchestrator, workflow, run_id } = queuedRecoveryHarness(checkpoint, { admit });
+
+    const result = await orchestrator.processQueuedSignal(run_id, signal(), { worker_id: 'worker-test' });
+
+    expect(result.lifecycle_state).toBe('waiting');
+    expect(admit).toHaveBeenCalledTimes(1);
+    expect(workflow.transitionTask).toHaveBeenCalledWith(
+      TENANT,
+      run_id,
+      'waiting',
+      expect.stringContaining('HANDOFF_ADMISSION_UNRESOLVED'),
+      expect.objectContaining({ request_id: SIGNAL_ID, current_step: 2 }),
+    );
+    expect((workflow.transitionTask as ReturnType<typeof vi.fn>).mock.calls.filter((call: unknown[]) => call[2] === 'completed')).toHaveLength(0);
+  });
+  it('brokers exactly one handoff for a completed run and reports the admission', async () => {
+    const admit = vi.fn(async (_draft: CrossDomainHandoffDraft) => ({
+      handoff_id: 'handoff-1',
+      target_run_id: 'run-care-1',
+      admitted: true,
+      lifecycle: { version: 1, state: 'HANDED_OFF' as const },
+    }));
+    const { orchestrator } = harness({
+      agents: ['SAL-01'],
+      handoff_intent: HANDOFF_INTENT,
+      crossDomainHandoff: { admit },
+      customer: {
+        customer_id: 'cust-1',
+        tenant_id: TENANT,
+        verified_phone: null,
+        verified_email: 'buyer@example.test',
+        total_spent: 0,
+        order_count: 0,
+        rfm_segment_hypothesis: 'NEW',
+        consent_marketing: false,
+        consent_updated_at: null,
+        suppression_active: false,
+        created_at: '2026-09-01T00:00:00.000Z',
+      },
+    });
+
+    const result = await orchestrator.processSignal(signal());
+
+    expect(result.lifecycle_state).toBe('completed');
+    expect(result.handoff).toEqual({
+      handoff_id: 'handoff-1',
+      target_run_id: 'run-care-1',
+      admitted: true,
+      lifecycle: { version: 1, state: 'HANDED_OFF' },
+    });
+    expect(admit).toHaveBeenCalledTimes(1);
+
+    // Everything in the draft is server-derived: the verified subject of the run's own context,
+    // the leg its own steps corroborate, and what those steps actually required.
+    const [draft] = admit.mock.calls[0]!;
+    expect(draft).toMatchObject({
+      tenant_id: TENANT,
+      customer_id: 'cust-1',
+      source_domain: 'sales',
+      target_domain: 'care',
+      target_agent: 'CS-01',
+      source_authority: 'AUTH-1',
+      reason: HANDOFF_INTENT.reason,
+    });
+    expect(draft.evidence.length).toBeGreaterThan(0);
+    expect(draft.evidence.every((ref) => ref.classification !== 'FACT')).toBe(true);
+  });
+
+  it('completes with no handoff when the plan declares none', async () => {
+    const admit = vi.fn(async (_draft: CrossDomainHandoffDraft) => ({
+      handoff_id: 'handoff-1',
+      target_run_id: 'run-care-1',
+      admitted: true,
+      lifecycle: { version: 1, state: 'HANDED_OFF' as const },
+    }));
+    const { orchestrator } = harness({ agents: ['SAL-01'], crossDomainHandoff: { admit } });
+
+    const result = await orchestrator.processSignal(signal());
+
+    expect(result.lifecycle_state).toBe('completed');
+    expect(result.handoff).toBeUndefined();
+    expect(admit).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when a plan declares a handoff and no broker is bound', async () => {
+    const { orchestrator } = harness({ agents: ['SAL-01'], handoff_intent: HANDOFF_INTENT });
+
+    await expect(orchestrator.processSignal(signal())).rejects.toMatchObject({
+      code: 'HANDOFF_BROKER_UNBOUND',
+    });
+  });
+
+  it('parks the run, keeping its request identity, when the admission cannot be resolved', async () => {
+    const admit = vi.fn(async () => {
+      throw new OrchestratorError('HANDOFF_ADMISSION_UNRESOLVED', 'the ledger could not decide');
+    });
+    const workflow = new MemoryWorkflowEngine();
+    const { orchestrator } = harness({
+      agents: ['SAL-01'],
+      handoff_intent: HANDOFF_INTENT,
+      crossDomainHandoff: { admit },
+      workflowEngine: workflow,
+      customer: {
+        customer_id: 'cust-1',
+        tenant_id: TENANT,
+        verified_phone: null,
+        verified_email: 'buyer@example.test',
+        total_spent: 0,
+        order_count: 0,
+        rfm_segment_hypothesis: 'NEW',
+        consent_marketing: false,
+        consent_updated_at: null,
+        suppression_active: false,
+        created_at: '2026-09-01T00:00:00.000Z',
+      },
+    });
+
+    const result = await orchestrator.processSignal(signal());
+
+    expect(result.lifecycle_state).toBe('waiting');
+    // The retry must reuse the SAME handoff key, so the parked checkpoint keeps the immutable
+    // inbound identity and the chain cursor the run actually reached.
+    const parked = await workflow.getTask(TENANT, result.run_id);
+    expect(parked?.state).toBe('waiting');
+    const checkpoint = parked?.state_payload as { request_id?: string; current_step?: number };
+    expect(checkpoint.request_id).toBe('sig-inbound-1');
+    expect(checkpoint.current_step).toBe(2);
   });
 });

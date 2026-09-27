@@ -9,7 +9,15 @@ import { createCareSkillDispatcher } from './dispatcher.js';
 import { createCareSkillToolPort } from './tool-port.js';
 import type { CareSkillOptions, CareSkillServices } from './types.js';
 
-export type { CareSkillEnv, CareSkillOptions, CareSkillServices, VerifiedCustomerIdentity } from './types.js';
+export type {
+  CareAnalyzeChurnRiskInput,
+  CareAnalyzeChurnRiskOutput,
+  CareAnalyticsLayer,
+  CareSkillEnv,
+  CareSkillOptions,
+  CareSkillServices,
+  VerifiedCustomerIdentity,
+} from './types.js';
 export { CareSkillToolError, createCareSkillToolPort } from './tool-port.js';
 export { createCareSkillDispatcher } from './dispatcher.js';
 
@@ -45,6 +53,9 @@ export function createCareSkillServices(options: CareSkillOptions): CareSkillSer
   const unbound: string[] = [];
   if (!options.erp_read) {
     unbound.push('API-001.OrderConnector: no ERP read connector is bound (erp_read is null)');
+  }
+  if (!options.analytics_layer) {
+    unbound.push('Customer360.AnalyticsLayer: no churn analytics provider is bound');
   }
   const caseManagementEnabled = (
     options.skill_enablement ?? DEFAULT_P0_PLATFORM_SKILL_ENABLEMENT

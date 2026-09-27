@@ -34,9 +34,11 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import { OrchestratorError } from '@agentos/core-engine/contracts';
 import type {
   AuthorityLevel,
   ExecutionPlan,
+  HandoffIntent,
   HydratedContext,
   HypothesisRecord,
   IAgentRuntime,
@@ -158,9 +160,24 @@ function lookupRegistryRow(
   return null;
 }
 
-/**
- * Extracts raw textual message from signal payload.
- */
+/** Returns the brokered journey leg encoded by the orchestrator, when present. */
+function readHandoffTargetDomain(signal: SignalEnvelope): string | undefined {
+  // Only the orchestrator writes this channel: a customer-facing delivery that carries a handoff
+  // payload is not a brokered handoff, and reading one would let a caller route itself onward.
+  if (signal.source_channel !== 'ORCHESTRATOR_HANDOFF') return undefined;
+  const raw = signal.payload.handoff;
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const handoff = raw as Record<string, unknown>;
+  return typeof handoff.target_domain === 'string' ? handoff.target_domain : undefined;
+}
+
+/** Reads only the broker-stamped reason for the canonical marketing → sales edge. */
+function extractSalesHandoffReason(signal: SignalEnvelope): string | undefined {
+  if (readHandoffTargetDomain(signal) !== 'sales') return undefined;
+  const reason = signal.payload.handoff_reason;
+  return typeof reason === 'string' && reason.trim().length > 0 ? reason.trim() : undefined;
+}
+
 export function extractMessageContent(signal: SignalEnvelope): string {
   const p = signal.payload as Record<string, unknown> | null | undefined;
   if (!p || typeof p !== 'object') return '';
@@ -656,8 +673,8 @@ export type SalesIntent =
   | 'cart_recovery'
   | 'replenishment'
   | 'ambiguous'
-  | 'unknown';
-
+  | 'unknown'
+  | 'sales:sales';
 export interface ParsedSalesRationale {
   readonly reason: string;
   readonly intent: SalesIntent;
@@ -668,6 +685,7 @@ export interface ParsedSalesRationale {
   readonly priorPurchaseRef?: string | undefined;
   readonly replenishmentIntervalDays?: number | undefined;
   readonly refusalReason?: string | undefined;
+  readonly handoff_reason?: string | undefined;
 }
 
 export interface SalesAgentRuntimeOptions {
@@ -699,6 +717,27 @@ export interface SalesAgentRuntimeOptions {
    }
 
   async deriveHypothesis(signal: SignalEnvelope, context: HydratedContext): Promise<HypothesisRecord> {
+    const handoffTarget = readHandoffTargetDomain(signal);
+    if (handoffTarget === 'sales') {
+      const handoff_reason = extractSalesHandoffReason(signal);
+      const rationale: ParsedSalesRationale = {
+        reason: "Routed by the brokered customer journey leg 'sales'.",
+        intent: 'sales:sales',
+        ...(handoff_reason ? { handoff_reason } : {}),
+      };
+      const hypothesis: HypothesisRecord = {
+        classification: 'HYPOTHESIS',
+        intent: 'sales:sales',
+        confidence: 1,
+        churn_risk_score: 0,
+        purchase_propensity: 0,
+        reasoning: rationale.reason,
+        derived_from_signals: [signal.signal_id],
+      };
+      this.retainedRationales.set(hypothesis, rationale);
+      return hypothesis;
+    }
+
     const text = extractMessageContent(signal);
     const priceRow = lookupRegistryRow(this.registry, 'skill.sales.check_price');
     const isPriceEnabled = priceRow?.enabled === true;
@@ -951,6 +990,11 @@ export interface SalesAgentRuntimeOptions {
       };
     }
 
+    const handoff_reason = extractSalesHandoffReason(signal);
+    if (handoff_reason) {
+      rationaleData = { ...rationaleData, handoff_reason };
+    }
+
     const derived_from_signals = [signal.signal_id];
     if (rationaleData.sku) {
       derived_from_signals.push(`sku:${rationaleData.sku}`);
@@ -979,6 +1023,13 @@ export interface SalesAgentRuntimeOptions {
     const intent = rationale?.intent ?? (hypothesis.intent as SalesIntent);
 
     switch (intent) {
+      case 'sales:sales':
+        return {
+          target_agent: 'SAL-02' as PlatformAgentId,
+          requires_clarification: false,
+          rationalization: hypothesis.reasoning,
+        };
+
       case 'customer_lookup':
         return {
           target_agent: 'SAL-01' as PlatformAgentId,
@@ -1170,7 +1221,74 @@ export interface SalesAgentRuntimeOptions {
     context: HydratedContext,
     hypothesis: HypothesisRecord,
   ): Promise<ExecutionPlan> {
+    const plan = await this.composePlan(routing, context, hypothesis);
+
+    return this.withHandoffIntent(plan, context, this.retainedRationales.get(hypothesis));
+  }
+
+  private async composePlan(
+    routing: RoutingDecision,
+    context: HydratedContext,
+    hypothesis: HypothesisRecord,
+  ): Promise<ExecutionPlan> {
     const plan_id = `plan_${randomUUID().slice(0, 8)}`;
+
+    const handoffRationale = this.retainedRationales.get(hypothesis);
+    const handoffIntent = handoffRationale?.intent ?? (hypothesis.intent as SalesIntent);
+    if (handoffIntent === 'sales:sales') {
+      const customerId = context.customer?.customer_id;
+      const customerRow = lookupRegistryRow(this.registry, 'skill.sales.retrieve_customer');
+      const recommendationRow = lookupRegistryRow(this.registry, 'skill.sales.recommend_product');
+      // sales → care requires source authority AUTH-1. retrieve_customer is AUTH-0, so it cannot
+      // be the sole step of this leg. Prefer the canonical AUTH-1 read that needs only the
+      // verified customer.
+      const action = customerId && this.isRowExecutable(recommendationRow, 'SAL-02')
+        && recommendationRow.effect_class === 'READ'
+        && recommendationRow.required_authority === 'AUTH-1'
+        ? {
+            row: recommendationRow,
+            input_parameters: {
+              tenant_id: context.tenant_id,
+              customer_id: customerId,
+              current_cart_skus: [],
+              recommendation_type: 'CROSS_SELL',
+            },
+          }
+        : customerId && this.isRowExecutable(customerRow, 'SAL-02')
+          && customerRow.effect_class === 'READ'
+          && customerRow.required_authority !== 'AUTH-0'
+          ? {
+              row: customerRow,
+              input_parameters: {
+                tenant_id: context.tenant_id,
+                customer_identifier: customerId,
+              },
+            }
+          : null;
+
+      if (!action) {
+        throw new OrchestratorError(
+          'SALES_HANDOFF_ITINERARY_UNBOUND',
+          'The brokered Sales leg has no canonical enabled SAL-02 action that can run from '
+            + 'verified Customer360 alone; it refuses rather than clarifying or inventing a '
+            + 'customer message, SKU, price, or quote.',
+        );
+      }
+
+      const step = this.buildPlannedStep(
+        1,
+        'SAL-02' as PlatformAgentId,
+        action.row,
+        action.input_parameters,
+        [],
+      );
+
+      return {
+        plan_id,
+        steps: [step],
+        fallback_strategy: 'FAIL_CLOSED',
+      };
+    }
 
     // Clarification-required routing always emits an empty plan
     if (routing.requires_clarification) {
@@ -1808,6 +1926,30 @@ export interface SalesAgentRuntimeOptions {
       steps: [],
       fallback_strategy: 'FAIL_CLOSED',
     };
+  }
+
+  private withHandoffIntent(
+    plan: ExecutionPlan,
+    context: HydratedContext,
+    rationale: ParsedSalesRationale | undefined,
+  ): ExecutionPlan {
+    if (
+      plan.steps.length === 0
+      || !context.customer?.customer_id
+      || !rationale?.handoff_reason
+      || rationale?.intent !== 'sales:sales'
+      || !plan.steps.every((step) => step.agent_id.startsWith('SAL-'))
+    ) {
+      return plan;
+    }
+
+    const handoff_intent: HandoffIntent = {
+      source_domain: 'sales',
+      target_domain: 'care',
+      target_agent: 'CS-01',
+      reason: rationale.handoff_reason,
+    };
+    return { ...plan, handoff_intent };
   }
 
   private buildPlannedStep(
