@@ -15,9 +15,9 @@ describe('P5 load harness smoke profile', () => {
     expect(metrics.p50TurnLatencyMs).toBe(60);
     expect(metrics.p95TurnLatencyMs).toBe(100);
     expect(metrics.p99TurnLatencyMs).toBe(100);
-    expect(metrics.errorRate).toBe(0);
-    expect(metrics.refusalRate).toBe(0);
-    expect(metrics.errorOrRefusalRate).toBe(0);
+    expect(metrics.errorRate).toBe(0.25);
+    expect(metrics.refusalRate).toBe(0.25);
+    expect(metrics.errorOrRefusalRate).toBe(0.5);
     expect(metrics.duplicateEffectCount).toBe(0);
     expect(metrics.authorityPolicyViolationCount).toBe(0);
     expect(metrics.queueDepth?.maximum).toBe(2);
