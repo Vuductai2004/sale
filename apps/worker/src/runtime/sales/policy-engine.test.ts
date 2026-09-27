@@ -1,5 +1,9 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { ActionDraft, Customer360Fact, HydratedContext } from '@agentos/core-engine/contracts';
+import type {
+  ActionDraft, Customer360Fact, HydratedContext, IAuditTrail, IAdapterDispatcher,
+  IContextAggregator, IAgentRuntime, IEffectGuard, IStatefulWorkflowEngine,
+  IEvidenceLogger, ISessionControl, DurableLeaseManager, IPolicyEngine,
+} from '@agentos/core-engine/contracts';
 import { OrchestratorError } from '@agentos/core-engine/contracts';
 import {
   SALES_ALLOWED_PAYLOAD_FIELDS,
@@ -1028,6 +1032,65 @@ describe('SalesPolicyEngine', () => {
         consent: consentPort,
       });
       expect(orchestratorFactory).toBeDefined();
+    });
+
+    it('preserves audit signing and autonomy admission in the assembled Sales policy', async () => {
+      const auditTrail: IAuditTrail = { append: vi.fn(async () => undefined) };
+      const admit = vi.fn(async () => ({ workflow: 'PARKED_DRAFT' as const, reason: 'not promoted' }));
+      const factory = createSalesOrchestratorFactory({
+        auditSecret: 'sales-factory-audit-secret',
+        autonomy: { admit },
+        resolve_grant: async () => 'AUTH-3',
+        contextAggregator: {} as IContextAggregator,
+        agentRuntime: {} as IAgentRuntime,
+        adapterDispatcher: {} as IAdapterDispatcher,
+        effectGuard: {} as IEffectGuard,
+        adapters: {
+          workflowEngine: {} as IStatefulWorkflowEngine,
+          evidenceLogger: {} as IEvidenceLogger,
+          auditTrail,
+          sessionControl: {} as ISessionControl,
+          leaseManager: {} as DurableLeaseManager,
+        },
+      });
+      const orchestrator = await factory(tenant_id);
+      // In-process factory construction keeps the injected policy private to the orchestrator.
+      const internals = orchestrator as unknown as { dependencies: { policyEngine: IPolicyEngine } };
+      const policyEngine = internals.dependencies.policyEngine;
+      const stock: ActionDraft = {
+        action_id: '00000000-0000-4000-8000-000000000050',
+        run_id: 'run-sales-factory',
+        tenant_id,
+        agent_id: 'SAL-02',
+        skill_id: 'skill.sales.check_stock',
+        adapter_target: 'API-001.Inventory',
+        step_index: 0,
+        mutating: false,
+        price_bearing: false,
+        request_id: 'req-sales-factory',
+        action_revision: 0,
+        effect_key: 'effect-sales-factory',
+        required_authority: 'AUTH-0',
+        payload: { tenant_id, sku_id: 'SKU-001' },
+      };
+      const stockDecision = await policyEngine.evaluateAuthority(stock, context);
+      expect(stockDecision.verdict).toBe('AUTO_APPROVED');
+      expect(stockDecision.autonomyWorkflow).toBe('PARKED_DRAFT');
+      expect(admit).toHaveBeenCalledWith(expect.objectContaining({
+        tenant_id,
+        skill_id: 'skill.sales.check_stock',
+      }));
+
+      const cartDecision = await policyEngine.evaluateAuthority({
+        ...stock,
+        skill_id: 'skill.sales.create_cart',
+        adapter_target: 'API-002.CommerceCartAPI',
+        mutating: true,
+        required_authority: 'AUTH-3',
+        payload: { tenant_id, effect_key: stock.effect_key },
+      }, context);
+      expect(cartDecision.verdict).toBe('AUTO_APPROVED');
+      expect(auditTrail.append).toHaveBeenCalledTimes(2);
     });
   });
 });

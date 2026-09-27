@@ -222,15 +222,11 @@ class Inventory:
 
 
 def sha256_file(rel: str) -> str:
-    """Deterministic content hash of a repository file, or 'missing' when absent."""
+    """Hash text inputs with canonical LF so Git checkouts agree across operating systems."""
     path = REPO / rel
     if not path.is_file():
         return "missing"
-    digest = hashlib.sha256()
-    with open(path, "rb") as handle:
-        for chunk in iter(lambda: handle.read(65536), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
+    return hashlib.sha256(path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
 
 
 def input_hashes() -> OrderedDict:
@@ -1459,7 +1455,7 @@ def render_manifest(
                         ("algorithm", "sha256"),
                         (
                             "note",
-                            "SHA-256 of every generator input at the time these documents were produced; "
+                            "SHA-256 of every generator input with CRLF normalized to LF; "
                             "--check re-reads them so a review can pin exactly which sources were rendered.",
                         ),
                         ("files", input_hashes()),

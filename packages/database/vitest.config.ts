@@ -18,6 +18,7 @@ export default defineConfig({
       '**/dist/**',
       'src/rls.test.ts',
       'src/rls.rehearsal.test.ts',
+      'src/p5.live.test.ts',
     ],
   },
 });

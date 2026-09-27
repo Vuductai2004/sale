@@ -119,3 +119,41 @@ export type {
   EnqueueCareHandoffInput,
   ReconcileCareHandoffInput,
 } from '../contracts/care-handoffs.js';
+export { P5AutonomyRepository, AutonomyRepository } from './p5-autonomy.js';
+export type {
+  AppendAutonomyPolicyEventInput,
+  AppendTokenCostRecordInput,
+  AutonomyPolicyEventRecord,
+  AutonomyPolicyRecord,
+  AutonomyPolicyState,
+  CommitAutonomyPolicyInput,
+  CommitTenantAutonomyControlInput,
+  TenantAutonomyControlRecord,
+  TokenCostRecord,
+} from './p5-autonomy.js';
+export { P5ProvisioningRepository, ProvisioningRepository } from './p5-provisioning.js';
+export type {
+  AppendOwnerInputInput,
+  AppendProvisioningEventInput,
+  AppendShopifyWebhookDeliveryInput,
+  CommitConnectorConfigurationInput,
+  CommitNamespaceBindingInput,
+  CommitResidencyConfigurationInput,
+  CommitShopifyInstallationInput,
+  CommitTenantCapabilityInput,
+  CommitTenantWorkspaceInput,
+  ConnectorConfigurationRecord,
+  ConnectorConfigurationStatus,
+  NamespaceBindingRecord,
+  OwnerInputRecord,
+  ProvisionTenantShellInput,
+  ProvisioningEventRecord,
+  ResidencyConfigurationRecord,
+  ResidencyStatus,
+  ShopifyInstallationRecord,
+  ShopifyInstallationStatus,
+  ShopifyWebhookDeliveryRecord,
+  TenantCapabilityRecord,
+  TenantRecord,
+  TenantWorkspaceRecord,
+} from './p5-provisioning.js';

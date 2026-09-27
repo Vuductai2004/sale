@@ -397,3 +397,59 @@ Remaining blockers: API-003 provider credentials and an audited provider contrac
 - Real API-001/API-002/API-003 provider credentials, real SoR receipts, owner-approved floor/knowledge policy and cross-functional sign-off remain absent. Gate P1, P2 and P3 remain open for the reasons recorded above them.
 
 `P4 ENGINEERING MERGE READY: YES` — the remaining engineering gaps named for this branch are implemented and executed: worker claim through `processClaimedTask` and the shared registry (`apps/worker/src/e2e/tc-e2e-001-worker-seam.e2e.test.ts`), durable park/re-claim with the same handoff identity (`scripts/p4-cross-domain-smoke.mjs` case 10, 12/12 live PostgreSQL), default Marketing `getProfile` binding, Care onboarding fail-closed at `CARE_ONBOARDING_ITINERARY_UNBOUND` after a real worker claim, retention routed to CS-02 `skill.care.analyze_churn_risk` with `skill.care.issue_retention_offer` still disabled, and `apps/worker` `test:e2e` required by CI. `FORMAL GATE P4 CLOSED: NO` — live provider credentials, SoR receipts, owner-approved floor/knowledge, the Care onboarding itinerary content, and cross-functional sign-off are still absent. Do not start P5.
+# P5 Controlled Autonomy & Global Scale — Engineering Status
+
+## Engineering complete
+
+The following P5 engineering paths are implemented on `feat/p5-controlled-autonomy`:
+
+- Durable tenant-scoped autonomy promotion, demotion, rollback, pause/resume, kill switch, policy drift handling, evidence/audit gates, and per-`tenant_id` + `skill_id` + `policy_version` admission.
+- PEP integration is additive and reuses the existing AUTH-0..AUTH-5, approval, EffectGuard, consent, floor-price, takeover, audit, and evidence paths. AUTH-4 remains approval-gated; AUTH-5 remains terminal deny.
+- Tenant provisioning shell with idempotency, RLS-scoped records, inactive AUTH-0 agent registry shell, unresolved owner inputs, unbound connectors, minimum autonomy rows, namespaces, and provisioning evidence.
+- Command Center tenant/autonomy status and operator controls with explicit `UNAVAILABLE`/`UNRESOLVED` states.
+- Shopify GTM-002 engineering seam with mock transport, OAuth state hashing, webhook verification/replay protection, tenant/shop binding, sync contracts, secret references, and fail-closed credentials. No App Store approval is claimed.
+- ADPT-GL-001 messaging, ADPT-GL-002 payment, and ADPT-GL-003 residency/compliance seams with local/mock tests and fail-closed unbound/ambiguous behavior.
+- Token/cost ledger, configurable budget guard, deterministic load smoke/high-load profile, and fail-closed disaster-recovery scenarios.
+- Generated P5 testcase source now promotes only read-only `skill.sales.check_stock`; outbound `skill.sales.send_message` remains explicitly non-promotable.
+
+## P5 requirement classification
+
+| Area | Classification | Boundary |
+|---|---|---|
+| Controlled autonomy and PEP integration | PARTIAL | Engineering implementation is present; live durable-provider evidence is not a formal gate result. |
+| Automatic demotion/rollback and operator controls | PARTIAL | Local and repository seams are implemented; live operational evidence is deferred. |
+| Dynamic tenant provisioning | PARTIAL | Transactional/idempotent engineering path is implemented; owner onboarding inputs remain unresolved. |
+| Admin workspace provisioning | PARTIAL | Status/readiness/autonomy controls are exposed; no fabricated KPI/provider health. |
+| Shopify package | PARTIAL | Engineering seam and mock transport only; marketplace approval/store credentials absent. |
+| Global adapters | PARTIAL | Contracts, validation, replay/idempotency, and fail-closed seams exist; real providers absent. |
+| Cost/token accounting | PARTIAL | Measurable ledger and `UNAVAILABLE` semantics exist; provider pricing is absent. |
+| Load harness | PARTIAL | Deterministic smoke and configurable high-load profile exist; production benchmark is absent. |
+| Disaster recovery | PARTIAL | Offline engineering simulation exists; production-like recovery evidence is absent. |
+| Formal Gate P5 closure | EXTERNAL BLOCKED | Mock/offline/local evidence cannot close the formal gate. |
+
+## Owner / provider / live / benchmark blocked
+
+- Shopify App Store/platform approval and a real Shopify store/credential set.
+- WhatsApp/global messaging provider credentials and approved account/scopes.
+- Payment-provider accounts, live payment receipts, and production reconciliation evidence.
+- Owner-approved residency decision and retention/DSAR policy.
+- ASM-001 connector approvals and ASM-002 benchmark/KPI baseline.
+- ASM-003/ASM-004 floor, refund, retention, frequency, and promotion-limit policies.
+- Real model/provider pricing and measured cost evidence; ECN-003 `< 1 TWD/dialogue` remains provisional.
+- Production-scale concurrency evidence; 10,000 sessions remains provisional.
+- Formal P5 sign-off and closure of prerequisite formal gates P1-P4.
+
+Local/mock/offline results are engineering evidence only and do not constitute formal Gate P5 closure.
+
+## Verification evidence and environment blocks
+
+- Baseline SHA `899aa05db944fbe1177d2593e23c0cda59df2246`, GitHub Actions run `36311117267`: job 1 static analysis **success**, job 2 unit/contract **failure** (six Care/Marketing policy tests: missing audit signing in the P5 factory composition), job 3 raw-SQL migration/RLS/P1–P4 database rehearsal **success**, jobs 4 adversarial/security and 5 Docker **skipped**. That run is not evidence for this correction.
+- First correction SHA `a78b5ffcb8740b646a8a06cf783853ae2364c464`, run `36312939847`: job 1 **failure** at generated testcase parity (`manifest.json` alone stale on Linux); jobs 2–5 **skipped**. The manifest hashed Windows CRLF working-tree bytes rather than canonical source text, so the local check passed and the Linux check did not. The generator now hashes normalized LF text and regenerates the manifest; this failed run is not green evidence.
+- Second correction SHA `7a9201a43fe4f0ee3923d0a4737c48a2959aedec`, run `36313053112`: job 1 **success** (generator check, lint, typecheck, build, P5 load smoke), job 2 **success** (unit/contract/pilots/E2E), job 3 **failure** at new live P5 provisioning setup (`42883`: unqualified `gen_random_bytes` unavailable inside the SECURITY DEFINER tenant-shell search path), jobs 4–5 **skipped**. The new append-only migration `0007_uuid_v7_search_path.sql` repairs the UUID v7 helper with PostgreSQL-core entropy under a pinned trusted search path; this failed run is not green evidence.
+- Correction: Care and Marketing factories pass `auditSecret` into the canonical PEP alongside autonomy, matching Sales. Combined factory regressions cover signed audit, read-only autonomy, AUTH-4 pause, and unchanged Sales behavior. PEP/orchestrator regressions park unavailable/paused/drifted autonomy without dispatch and preserve AUTH-4/5 precedence.
+- Local passing checks on the correction: `python testcases/_generate.py --check` (419 generated files match), `pnpm lint`, `pnpm typecheck`, `pnpm test:unit`, `pnpm test:contracts`, `pnpm test:adversarial`, `pnpm test:security`, `pnpm test:pilots`, `pnpm test:e2e`, production-mode `pnpm build`, and `git diff --check`. After rebuilding core-engine, the corrected deterministic P5 smoke measured four samples (two success/ok, one error, one refusal): error rate 0.25, refusal rate 0.25, zero duplicate effects, zero authority-policy violations, `benchmarkStatus: not-evaluated`. This is not a throughput/10,000-session or cost SLO result.
+- Local live-database attempt `pnpm test:p5-db` **blocked before setup**: PostgreSQL rejected the existing `agentos_app` credentials (`28P01`). The P5 suite has no skip path. Prior local `pnpm test:integration` and Docker failures remain environmental (same DB authentication; Docker Desktop daemon unavailable); they are not claimed passing locally.
+- Engineering SHA `db5735ea09040801826ba8aa1b351b7ebb9e6bba`, GitHub Actions run `36313310517` **success** in all five jobs; its evidence-ledger-only successor SHA `5cae1adebce526f79cc433ea88d0f92f99692a9b` also passed all five jobs in run `36313691673`. Both runs precede the restored error/refusal smoke samples and are historical, not current-branch verification.
+- Corrected engineering SHA `b6f13814c7b5968c53645f19d7f6abd6f706e722`, GitHub Actions run `36314150343` **success** in all five jobs: (1) static analysis/typecheck/build, generator parity, four-sample P5 safety smoke with original error/refusal outcomes; (2) unit/contract/pilots/offline E2E; (3) raw-SQL migration/replay, NOBYPASSRLS RLS policies, live P5 provisioning/autonomy/restart/rollback, and retained P1 Care/P2 Sales/P4 database smokes; (4) adversarial/security; (5) Docker named-image build/load/inspect/boot without publish. This is engineering evidence, not live-provider or 10,000-session acceptance. A subsequent evidence-ledger-only commit must pass its own current-HEAD CI before readiness is reported.
+
+`P5 ENGINEERING MERGE READY: YES` for the corrected engineering scope and executed CI, conditional on the evidence-ledger-only successor passing current-HEAD CI. `FORMAL GATE P5 CLOSED: NO`. Live provider approvals/credentials, owner policy, measured production-scale benchmark/cost evidence, prerequisite formal gates and sign-off remain unavailable; no offline or CI smoke substitutes for formal acceptance.

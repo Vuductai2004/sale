@@ -821,6 +821,17 @@ export class RevenueOrchestrator {
       let dispatchedReceipt: ExecutionReceipt | null = null;
 
       if (!replayed) {
+        const autonomyWorkflow = (authorization as typeof authorization & {
+          autonomyWorkflow?: 'UNCHANGED' | 'AUTO_EXECUTE' | 'PARKED_DRAFT';
+        }).autonomyWorkflow;
+        if (autonomyWorkflow === 'PARKED_DRAFT') {
+          const reason = 'PARKED_DRAFT: controlled-autonomy admission withheld external dispatch.';
+          await this.parkTask({
+            tenant_id, run_id, reason, plan, current_step: step.step_index,
+            pending_action: action, context, previous_evidence_hash: chain.previous, request_id,
+          });
+          return { lifecycle_state: 'waiting', ...outcomeFields({ message: reason }) };
+        }
         try {
           dispatchedReceipt = await this.dispatchWithDeadline(action, step);
           providerReceipt = dispatchedReceipt;

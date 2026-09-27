@@ -16,7 +16,7 @@ Membership below is **exact token set membership**, never substring matching: a 
 | `ASM-003` | assumption | 9 | `UNIT-AUTH-3`, `UNIT-AUTH-FREQ-CAP`, `UNIT-BR-002`, `UNIT-BR-002-POSITIVE`, `UNIT-BR-002-BOUNDARY`, `UNIT-BR-002-UNSET-POLICY`, `INT-SCR-003-MODIFY`, `GOV-ASM-003`, `GOV-ASM-INDEPENDENCE` |
 | `ASM-004` | assumption | 5 | `UNIT-BR-002-UNSET-POLICY`, `UNIT-BR-007`, `UNIT-BR-007-UNSET-THRESHOLD`, `GOV-ASM-004`, `GOV-ASM-INDEPENDENCE` |
 | `ASM-005` | assumption | 2 | `GOV-ASM-005`, `GOV-ASM-INDEPENDENCE` |
-| `AUTH-0` | authority | 2 | `UNIT-AUTH-0`, `UNIT-AUTH-VERDICT-MAP` |
+| `AUTH-0` | authority | 4 | `E2E-OFF-P5-AUTONOMY`, `E2E-LIVE-P5-AUTONOMY`, `UNIT-AUTH-0`, `UNIT-AUTH-VERDICT-MAP` |
 | `AUTH-1` | authority | 4 | `E2E-OFF-INJECT`, `E2E-LIVE-INJECT`, `UNIT-AUTH-1`, `GOV-DOD-02` |
 | `AUTH-2` | authority | 4 | `E2E-OFF-P5-AUTONOMY`, `E2E-LIVE-P5-AUTONOMY`, `UNIT-AUTH-2`, `UNIT-BR-008` |
 | `AUTH-3` | authority | 8 | `E2E-OFF-P5-AUTONOMY`, `E2E-LIVE-P5-AUTONOMY`, `UNIT-AUTH-3`, `UNIT-AUTH-UNKNOWN-SKILL`, `UNIT-AUTH-FREQ-CAP`, `UNIT-BR-008`, `GOV-NFR-001`, `GOV-DOD-05` |
@@ -116,7 +116,7 @@ Communication channels of the connector architecture. Token form: channel:<CHANN
 
 | Token | Requires | Cases | Case IDs |
 |---|---|---|---|
-| `EMAIL` | `API-003` | 27 | `UNIT-mkt.check_consent-HAPPY`, `UNIT-mkt.check_consent-DENY`, `UNIT-mkt.check_consent-TIMEOUT`, `UNIT-mkt.dispatch_campaign-HAPPY`, `UNIT-mkt.dispatch_campaign-DENY`, `UNIT-mkt.dispatch_campaign-TIMEOUT`, `UNIT-sales.send_message-HAPPY`, `UNIT-sales.send_message-DENY`, `UNIT-sales.send_message-TIMEOUT`, `INT-FR-CS-003-SUPPRESSION`, `E2E-OFF-001`, `E2E-LIVE-001`, `E2E-OFF-MKT`, `E2E-LIVE-MKT`, `E2E-OFF-CART`, `E2E-LIVE-CART`, `E2E-OFF-IDEM`, `E2E-LIVE-IDEM`, `E2E-OFF-P5-AUTONOMY`, `E2E-LIVE-P5-AUTONOMY`, `UNIT-AUTH-2`, `UNIT-BR-004`, `UNIT-BR-004-CHANNEL-SCOPE`, `GOV-APV-CONSENT-REVOKED`, `GOV-ASM-001`, `GOV-KPI-MKT-06`, `INT-API-003-EMAIL` |
+| `EMAIL` | `API-003` | 25 | `UNIT-mkt.check_consent-HAPPY`, `UNIT-mkt.check_consent-DENY`, `UNIT-mkt.check_consent-TIMEOUT`, `UNIT-mkt.dispatch_campaign-HAPPY`, `UNIT-mkt.dispatch_campaign-DENY`, `UNIT-mkt.dispatch_campaign-TIMEOUT`, `UNIT-sales.send_message-HAPPY`, `UNIT-sales.send_message-DENY`, `UNIT-sales.send_message-TIMEOUT`, `INT-FR-CS-003-SUPPRESSION`, `E2E-OFF-001`, `E2E-LIVE-001`, `E2E-OFF-MKT`, `E2E-LIVE-MKT`, `E2E-OFF-CART`, `E2E-LIVE-CART`, `E2E-OFF-IDEM`, `E2E-LIVE-IDEM`, `UNIT-AUTH-2`, `UNIT-BR-004`, `UNIT-BR-004-CHANNEL-SCOPE`, `GOV-APV-CONSENT-REVOKED`, `GOV-ASM-001`, `GOV-KPI-MKT-06`, `INT-API-003-EMAIL` |
 | `FACEBOOK` | `API-003` | 1 | `INT-API-003-MESSENGER` |
 | `SMS` | `API-003` | 2 | `UNIT-BR-004-CHANNEL-SCOPE`, `INT-API-003-SMS` |
 | `TIKTOK` | `API-003` | 1 | `INT-API-003-TIKTOK` |
@@ -290,7 +290,7 @@ Agent skills. Token form: skill:<full skill id> e.g. skill:skill.mkt.analyze_mar
 | `skill.mkt.generate_content` | `MKT-03` | 3 | `UNIT-mkt.generate_content-HAPPY`, `UNIT-mkt.generate_content-DENY`, `UNIT-mkt.generate_content-TIMEOUT` |
 | `skill.mkt.segment_audience` | `MKT-02` | 5 | `UNIT-mkt.segment_audience-HAPPY`, `UNIT-mkt.segment_audience-DENY`, `UNIT-mkt.segment_audience-TIMEOUT`, `E2E-OFF-MKT`, `E2E-LIVE-MKT` |
 | `skill.sales.check_price` | `SAL-02` | 10 | `UNIT-sales.check_price-HAPPY`, `UNIT-sales.check_price-DENY`, `UNIT-sales.check_price-TIMEOUT`, `INT-SAL-03`, `E2E-OFF-PRICE`, `E2E-LIVE-PRICE`, `E2E-OFF-CART`, `E2E-LIVE-CART`, `E2E-OFF-INJECT`, `E2E-LIVE-INJECT` |
-| `skill.sales.check_stock` | `SAL-02` | 4 | `UNIT-sales.check_stock-HAPPY`, `UNIT-sales.check_stock-DENY`, `UNIT-sales.check_stock-TIMEOUT`, `INT-SAL-03` |
+| `skill.sales.check_stock` | `SAL-02` | 6 | `UNIT-sales.check_stock-HAPPY`, `UNIT-sales.check_stock-DENY`, `UNIT-sales.check_stock-TIMEOUT`, `INT-SAL-03`, `E2E-OFF-P5-AUTONOMY`, `E2E-LIVE-P5-AUTONOMY` |
 | `skill.sales.create_cart` | `SAL-02` | 3 | `UNIT-sales.create_cart-HAPPY`, `UNIT-sales.create_cart-DENY`, `UNIT-sales.create_cart-TIMEOUT` |
 | `skill.sales.create_order` | `SAL-02` | 7 | `UNIT-sales.create_order-HAPPY`, `UNIT-sales.create_order-DENY`, `UNIT-sales.create_order-TIMEOUT`, `E2E-OFF-CONNFAIL`, `E2E-LIVE-CONNFAIL`, `E2E-OFF-TRACE`, `E2E-LIVE-TRACE` |
 | `skill.sales.recommend_product` | `SAL-03` | 8 | `UNIT-sales.recommend_product-HAPPY`, `UNIT-sales.recommend_product-DENY`, `UNIT-sales.recommend_product-TIMEOUT`, `INT-SAL-03`, `E2E-OFF-CART`, `E2E-LIVE-CART`, `E2E-OFF-P4-XDOMAIN`, `E2E-LIVE-P4-XDOMAIN` |

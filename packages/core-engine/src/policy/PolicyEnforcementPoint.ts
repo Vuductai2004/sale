@@ -48,6 +48,7 @@ import {
   isAuthorityLevel,
   strictestRequirement,
 } from './authority.js';
+import type { AutonomyAdmissionPort } from '../autonomy/types.js';
 
 /**
  * PEP-level spelling of a decision (implement/08 §1.2 `decisionCode`, mapped to the verdict
@@ -152,7 +153,10 @@ export interface PolicyDecision {
   readonly ruleId: PolicyRuleId | null;
   /** `null` for every permitted decision and for an approval route. */
   readonly errorCode: PolicyDenyCode | null;
+  /** Human-readable refusal/authorization explanation. */
   readonly reason: string;
+  /** Optional workflow admission; it can annotate a final decision but never replace its verdict. */
+  readonly autonomyWorkflow?: 'UNCHANGED' | 'AUTO_EXECUTE' | 'PARKED_DRAFT';
   readonly tenantId: string;
   readonly agentId: string;
   readonly skillId: string;
@@ -208,6 +212,8 @@ export interface PolicyRegistrySkill {
   readonly requires_verified_identity: boolean;
   /** Registry-declared hard deadline (§05 field 10). */
   readonly timeout_ms: number;
+  /** Server policy version used by the optional controlled-autonomy admission port. */
+  readonly policy_version?: string;
 }
 
 /** The agent row the PEP trusts: `agents.assigned_authority` only ever assigns `AUTH-0..3`. */
@@ -469,6 +475,8 @@ export interface PolicyEnforcementOptions {
    * fails closed when unset; the value is never echoed into a decision or an error.
    */
   readonly auditSecret?: string;
+  /** Optional durable autonomy admission; absent preserves every existing PEP path. */
+  readonly autonomy?: AutonomyAdmissionPort;
   /** Injected clock, so a decision is reproducible in a test. */
   readonly now?: () => Date;
 }
@@ -641,6 +649,7 @@ export class PolicyEnforcementPoint {
   private readonly injectionDetector: InjectionDetector | undefined;
   private readonly audit: PolicyAuditPort | undefined;
   private readonly auditSecret: string | undefined;
+  private readonly autonomy: AutonomyAdmissionPort | undefined;
   private readonly now: () => Date;
 
   constructor(options: PolicyEnforcementOptions) {
@@ -653,6 +662,7 @@ export class PolicyEnforcementPoint {
     this.injectionDetector = options.injectionDetector;
     this.audit = options.audit;
     this.auditSecret = options.auditSecret;
+    this.autonomy = options.autonomy;
     this.now = options.now ?? (() => new Date());
   }
 
@@ -1384,7 +1394,7 @@ export class PolicyEnforcementPoint {
     const auditStatus = await this.appendAudit(provisional);
 
     if (effective.kind !== 'DENY' && auditStatus === 'FAILED') {
-      return this.buildDecision(
+      const denied = this.buildDecision(
         base,
         authority,
         deny(
@@ -1397,9 +1407,32 @@ export class PolicyEnforcementPoint {
         null,
         'FAILED',
       );
+      return this.applyAutonomy(denied);
     }
 
-    return { ...provisional, auditStatus };
+    return this.applyAutonomy({ ...provisional, auditStatus });
+  }
+
+  /**
+   * Controlled autonomy is an annotation after the canonical PEP outcome is final. A port failure
+   * or an unexpected response can never turn a refusal into a permit or alter the verdict.
+   */
+  private async applyAutonomy(decision: PolicyDecision): Promise<PolicyDecision> {
+    if (this.autonomy === undefined) return decision;
+    try {
+      const skill = this.registry.getSkill(decision.skillId);
+      const admission = await this.autonomy.admit({
+        tenant_id: decision.tenantId,
+        skill_id: decision.skillId,
+        policy_version: skill?.policy_version?.trim() ?? '',
+        required_authority: skill?.required_authority?.trim() ?? '',
+      });
+      if (decision.verdict !== 'AUTO_APPROVED') return decision;
+      return { ...decision, autonomyWorkflow: admission.workflow };
+    } catch {
+      if (decision.verdict !== 'AUTO_APPROVED') return decision;
+      return { ...decision, autonomyWorkflow: 'PARKED_DRAFT' };
+    }
   }
 
   /**

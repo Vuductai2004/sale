@@ -352,6 +352,31 @@ describe('createCareOrchestratorFactory', () => {
       });
     });
 
+    it('keeps audit signing and autonomy admission together in the Care orchestrator policy', async () => {
+      const auditTrail: IAuditTrail = { append: vi.fn(async () => undefined) };
+      const admit = vi.fn(async () => ({ workflow: 'UNCHANGED' as const, reason: 'Care escalation is not promotable' }));
+      const factory = createCareOrchestratorFactory({
+        auditSecret: testAuditSecret,
+        autonomy: { admit },
+        resolve_grant: async () => 'AUTH-3',
+        contextAggregator: {} as IContextAggregator,
+        agentRuntime: {} as IAgentRuntime,
+        effectGuard: {} as IEffectGuard,
+        adapterDispatcher: mockDispatcher,
+        adapters: { ...mockAdapters, auditTrail },
+      });
+      const policyEngine = getOrchestratorPolicyEngine(await factory(tenant_id));
+      const result = await policyEngine.evaluateAuthority(createEscalateAction(), createHydratedContext());
+
+      expect(result.verdict).toBe('AUTO_APPROVED');
+      expect(result.autonomyWorkflow).toBe('UNCHANGED');
+      expect(admit).toHaveBeenCalledWith(expect.objectContaining({
+        tenant_id,
+        skill_id: 'skill.care.escalate_to_human',
+      }));
+      expect(auditTrail.append).toHaveBeenCalledTimes(1);
+    });
+
     it('proves a mutating escalation with missing audit sink still fails closed with EVIDENCE_REQUIRED', async () => {
       const mockAuditTrail: IAuditTrail = {
         append: vi.fn().mockResolvedValue(undefined),

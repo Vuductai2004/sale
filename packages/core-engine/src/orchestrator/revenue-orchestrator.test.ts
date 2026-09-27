@@ -16,6 +16,7 @@ import {
   type HydratedContext,
   type HypothesisRecord,
   type IEvidenceLogger,
+  type IPolicyEngine,
   type PlannedStep,
   type CrossDomainHandoffDraft,
   type HandoffIntent,
@@ -32,8 +33,10 @@ import {
 import { computeEffectKey } from '../effects/effect-key.js';
 import { MemoryEffectGuard } from '../effects/memory-effect-guard.js';
 import { MemoryEvidenceLogger } from '../evidence/evidence-logger.js';
+import { AutonomyService, MemoryAutonomyStore, type AutonomyAdmissionPort } from '../autonomy/index.js';
 import { assertValidTransition } from '../lifecycle/stages.js';
 import { evaluateAuthorityVerdict } from '../policy/authority.js';
+import { PolicyEnforcementPoint, type PolicyRegistrySkill } from '../policy/index.js';
 import { MemoryLeaseManager } from '../workflow/memory-lease.js';
 import { MemoryWorkflowEngine } from '../workflow/memory-workflow-engine.js';
 import { assertOrchestratorBrokered } from './agent-boundary.js';
@@ -128,6 +131,7 @@ interface HarnessOptions {
   readonly agents?: PlatformAgentId[];
   readonly hypothesisRecord?: HypothesisRecord;
   readonly dispatch?: (action?: ActionDraft) => Promise<ExecutionReceipt>;
+  readonly policyEngine?: IPolicyEngine;
   readonly effectGuard?: MemoryEffectGuard;
   /** Live SCR-005 lock state, so a case can hold the lock and release it mid-flight. */
   readonly isTakenOver?: () => Promise<boolean>;
@@ -183,7 +187,7 @@ function harness(options: HarnessOptions = {}) {
       : { crossDomainHandoff: options.crossDomainHandoff }),
     contextAggregator: { hydrateContext: hydrate },
     agentRuntime: { deriveHypothesis, resolveRouting, formulatePlan },
-    policyEngine: {
+    policyEngine: options.policyEngine ?? {
       validateAction: async (action) => action,
       evaluateAuthority: async (action) => {
         const verdict = evaluateAuthorityVerdict('AUTH-3', action.required_authority);
@@ -227,6 +231,61 @@ function getDispatchedAction(dispatch: { mock: { calls: unknown[] } }, index: nu
     throw new Error(`Expected dispatch call at index ${index}`);
   }
   return call[0] as ActionDraft;
+}
+
+function controlledStockPolicy(autonomy: AutonomyAdmissionPort): IPolicyEngine {
+  const stock: PolicyRegistrySkill = {
+    skill_id: 'skill.sales.check_stock',
+    required_authority: 'AUTH-0',
+    allowed_agents: ['SAL-01'],
+    mutating: false,
+    price_bearing: false,
+    idempotent: true,
+    epistemic_class: 'FACT',
+    write_target: 'HYPOTHESIS',
+    requires_consent: false,
+    requires_verified_identity: false,
+    timeout_ms: 5_000,
+    policy_version: 'v1',
+  };
+  const pep = new PolicyEnforcementPoint({
+    registry: {
+      getSkill: (skill_id) => skill_id === stock.skill_id ? stock : undefined,
+      getAgent: (agent_id) => agent_id === 'SAL-01'
+        ? { agent_id, assigned_authority: 'AUTH-3' }
+        : undefined,
+    },
+    approvals: { createOrReadPending: async () => ({ approval_id: 'approval-stock' }) },
+    audit: { append: async () => undefined },
+    auditSecret: 'test-stock-audit-secret',
+    autonomy,
+  });
+  return {
+    validateAction: async (action) => action,
+    evaluateAuthority: async (action, hydrated) => {
+      const decision = await pep.enforce({
+        tenant_id: hydrated.tenant_id,
+        agent_id: action.agent_id,
+        run_id: action.run_id,
+        request_id: action.request_id,
+        correlation_id: hydrated.correlation_id,
+        session_id: hydrated.working_memory.session_id,
+        takeover_active: hydrated.working_memory.takeover_active,
+      }, {
+        skill_id: action.skill_id,
+        tool_name: action.adapter_target,
+        required_authority: action.required_authority,
+        payload: action.payload,
+      });
+      return {
+        verdict: decision.verdict,
+        reason: decision.reason,
+        ...(decision.autonomyWorkflow === undefined
+          ? {}
+          : { autonomyWorkflow: decision.autonomyWorkflow }),
+      };
+    },
+  };
 }
 
 describe('RevenueOrchestrator', () => {
@@ -286,6 +345,98 @@ describe('RevenueOrchestrator', () => {
     expect(dispatch).not.toHaveBeenCalled();
     expect((await workflow.getTask(TENANT, result.run_id))?.state).toBe('stopped');
     expect(evaluateAuthorityVerdict('AUTH-3', 'AUTH-5').verdict).toBe('DENIED');
+  });
+
+  for (const condition of ['store unavailable', 'tenant paused', 'evidence drift'] as const) {
+    it(`parks the low-risk stock draft with zero dispatch when autonomy has ${condition}`, async () => {
+      const service = new AutonomyService(new MemoryAutonomyStore());
+      const promoted = await service.promote({
+        tenant_id: TENANT,
+        skill_id: 'skill.sales.check_stock',
+        policy_version: 'v1',
+        required_authority: 'AUTH-0',
+        evidence_window_ref: 'window-stock',
+        evidence_ref: 'evidence-stock',
+        audit_ref: 'audit-stock',
+        authority_violations: 0,
+        duplicate_effects: 0,
+        audit_complete: true,
+        evidence_complete: true,
+        approver_id: 'operator-stock',
+      });
+      expect(promoted.accepted).toBe(true);
+      if (condition === 'tenant paused') {
+        await service.pauseTenant({ tenant_id: TENANT, actor: 'operator-stock' });
+      } else if (condition === 'evidence drift') {
+        await service.admit({
+          tenant_id: TENANT,
+          skill_id: 'skill.sales.check_stock',
+          policy_version: 'v1',
+          evidence_complete: false,
+        });
+      }
+      const autonomy: AutonomyAdmissionPort = condition === 'store unavailable'
+        ? { admit: async () => { throw new Error('autonomy store unavailable'); } }
+        : service;
+      const { orchestrator, workflow, dispatch } = harness({
+        steps: [step({
+          skill_id: 'skill.sales.check_stock',
+          required_authority: 'AUTH-0',
+          mutating: false,
+          input_parameters: { sku_id: 'SKU-1' },
+        })],
+        policyEngine: controlledStockPolicy(autonomy),
+      });
+
+      const result = await orchestrator.processSignal(signal());
+      expect(result.lifecycle_state).toBe('waiting');
+      expect(result.message).toContain('PARKED_DRAFT');
+      const parked = await workflow.getTask(TENANT, result.run_id);
+      expect(parked?.state).toBe('waiting');
+      expect(parked?.state_payload).toMatchObject({
+        pending_action: { skill_id: 'skill.sales.check_stock', mutating: false },
+      });
+      expect(dispatch).not.toHaveBeenCalled();
+      expect(orchestrator.visitedStages).not.toContain('EXECUTION');
+    });
+  }
+
+  it('keeps AUTH-4 at approval and AUTH-5 prohibited even with promoted autonomy', async () => {
+    const service = new AutonomyService(new MemoryAutonomyStore());
+    const promoted = await service.promote({
+      tenant_id: TENANT,
+      skill_id: 'skill.sales.check_stock',
+      policy_version: 'v1',
+      required_authority: 'AUTH-0',
+      evidence_window_ref: 'window-stock',
+      evidence_ref: 'evidence-stock',
+      audit_ref: 'audit-stock',
+      authority_violations: 0,
+      duplicate_effects: 0,
+      audit_complete: true,
+      evidence_complete: true,
+      approver_id: 'operator-stock',
+    });
+    expect(promoted.accepted).toBe(true);
+    for (const [required_authority, expectedState] of [
+      ['AUTH-4', 'awaiting_human'],
+      ['AUTH-5', 'stopped'],
+    ] as const) {
+      const { orchestrator, workflow, dispatch } = harness({
+        steps: [step({
+          skill_id: 'skill.sales.check_stock',
+          required_authority,
+          mutating: false,
+          input_parameters: { sku_id: 'SKU-1' },
+        })],
+        policyEngine: controlledStockPolicy(service),
+      });
+      const result = await orchestrator.processSignal(signal());
+      expect(result.lifecycle_state).toBe(expectedState);
+      expect((await workflow.getTask(TENANT, result.run_id))?.state).toBe(expectedState);
+      expect(dispatch).not.toHaveBeenCalled();
+      expect(orchestrator.visitedStages).not.toContain('EXECUTION');
+    }
   });
 
   it('executes a cross-agent plan only through the orchestrator', async () => {

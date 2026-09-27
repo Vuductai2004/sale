@@ -18,6 +18,7 @@ import {
   EffectGuard,
   RevenueOrchestrator,
   type ApprovalQueuePort,
+  type AutonomyAdmissionPort,
   type PolicyAuditPort,
   type PolicyEnforcementOptions,
   type PolicyEnforcementPoint,
@@ -82,6 +83,7 @@ export interface CareOrchestratorFactoryOptions {
   readonly contextAggregator?: IContextAggregator | undefined;
   readonly agentRuntime?: IAgentRuntime | undefined;
   readonly policyEngine?: IPolicyEngine | undefined;
+  readonly autonomy?: AutonomyAdmissionPort | undefined;
   readonly workflowEngine?: IStatefulWorkflowEngine | undefined;
   readonly evidenceLogger?: IEvidenceLogger | undefined;
   readonly auditTrail?: IAuditTrail | undefined;
@@ -120,6 +122,7 @@ export interface CreateCarePolicyEngineOptions {
   readonly pep?: PolicyEnforcementPoint | undefined;
   readonly resolveGrant?: ((tenant_id: string, agent_id: string) => Promise<AssignableAuthority | null>) | undefined;
   readonly approvals?: ApprovalQueuePort | undefined;
+  readonly autonomy?: AutonomyAdmissionPort | undefined;
   readonly auditSecret?: string | undefined;
   readonly audit?: PolicyEnforcementOptions['audit'] | null | undefined;
   readonly auditTrail?: IAuditTrail | undefined;
@@ -148,8 +151,9 @@ export function createCarePolicyEngine(options: CreateCarePolicyEngineOptions = 
       return null;
     },
     ...(options.approvals ? { approvals: options.approvals } : {}),
-    ...(options.auditSecret ? { auditSecret: options.auditSecret } : {}),
+    ...(options.autonomy ? { autonomy: options.autonomy } : {}),
     ...(policyAuditSink ? { audit: policyAuditSink } : {}),
+    ...(options.auditSecret ? { auditSecret: options.auditSecret } : {}),
     ...(options.now ? { now: options.now } : {}),
   });
 }
@@ -328,6 +332,7 @@ export function createCareOrchestratorFactory(
     auditSecret,
     ...(options.now ? { now: options.now } : {}),
     resolveGrant,
+    ...(options.autonomy ? { autonomy: options.autonomy } : {}),
     audit: options.audit,
     auditTrail,
     auditRepository: options.auditRepository,

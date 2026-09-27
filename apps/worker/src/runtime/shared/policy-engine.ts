@@ -22,6 +22,7 @@ import { OrchestratorError } from '@agentos/core-engine/contracts';
 import {
   PolicyEnforcementPoint,
   type ApprovalQueuePort,
+  type AutonomyAdmissionPort,
   type ConsentSource,
   type PendingApprovalRequest,
   type PolicyActionProposal,
@@ -36,6 +37,7 @@ export interface DomainPolicyEngineOptions {
   readonly skills: Readonly<Record<string, PolicyRegistrySkill>>;
   readonly allowed_payload_fields: Readonly<Record<string, Readonly<Record<string, true>>>>;
   readonly pep?: PolicyEnforcementPoint | undefined;
+  readonly autonomy?: AutonomyAdmissionPort | undefined;
   readonly resolveGrant?: ((tenant_id: string, agent_id: string) => Promise<AssignableAuthority | null>) | undefined;
   readonly defaultGrant?: ((agent_id: string) => AssignableAuthority | null) | undefined;
   readonly approvals?: ApprovalQueuePort | undefined;
@@ -93,6 +95,7 @@ export class DomainPolicyEngine implements IPolicyEngine {
       this.pep = new PolicyEnforcementPoint({
         registry: registryPort,
         approvals: defaultApprovals,
+        ...(options.autonomy ? { autonomy: options.autonomy } : {}),
         ...(options.consent ? { consent: options.consent } : {}),
         ...(options.audit ? { audit: options.audit } : {}),
         ...(options.auditSecret ? { auditSecret: options.auditSecret } : {}),
@@ -222,6 +225,7 @@ export class DomainPolicyEngine implements IPolicyEngine {
         verdict: 'AUTO_APPROVED',
         reason: decision.reason,
         ...(action.approval_id === undefined ? {} : { approval_id: action.approval_id }),
+        ...(decision.autonomyWorkflow === undefined ? {} : { autonomyWorkflow: decision.autonomyWorkflow }),
       };
     }
 
