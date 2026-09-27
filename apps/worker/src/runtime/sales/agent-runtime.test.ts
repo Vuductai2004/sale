@@ -149,6 +149,44 @@ describe('SalesAgentRuntime', () => {
   });
 
   describe('Three Agents Routing Coverage', () => {
+    it('classifies a marketing_to_sales handoff as a brokered Sales leg', async () => {
+      const runtime = new SalesAgentRuntime({ registry: createRegistryPort() });
+      const signal: SignalEnvelope = {
+        signal_id: 'sig-marketing-sales-handoff',
+        tenant_id,
+        correlation_id: 'corr-sales-handoff',
+        source_channel: 'ORCHESTRATOR_HANDOFF',
+        event_type: 'handoff.marketing_to_sales',
+        timestamp: '2026-09-01T00:00:00Z',
+        subject: { session_id: 'sess-marketing-sales', channel_type: 'orchestrator' },
+        payload: {
+          module: 'sales',
+          handoff: { source_domain: 'marketing', target_domain: 'sales' },
+          handoff_reason: 'Marketing-qualified customer journey leg',
+        },
+      };
+
+      const hypothesis = await runtime.deriveHypothesis(signal, verifiedContext);
+      expect(hypothesis.classification).toBe('HYPOTHESIS');
+      expect(hypothesis.intent).toBe('sales:sales');
+      expect(hypothesis.confidence).toBe(1);
+
+      const routing = await runtime.resolveRouting(signal, verifiedContext, hypothesis);
+      expect(routing.target_agent).toBe('SAL-02');
+      expect(routing.requires_clarification).toBe(false);
+
+      const plan = await runtime.formulatePlan(routing, verifiedContext, hypothesis);
+      expect(plan.steps).toHaveLength(1);
+      expect(plan.steps[0]?.agent_id).toBe('SAL-02');
+      expect(plan.steps[0]?.skill_id).toBe('skill.sales.recommend_product');
+      expect(plan.handoff_intent).toEqual({
+        source_domain: 'sales',
+        target_domain: 'care',
+        target_agent: 'CS-01',
+        reason: 'Marketing-qualified customer journey leg',
+      });
+    });
+
     it('routes customer lookup inquiry to SAL-01 (Lead Qualification)', async () => {
       const runtime = new SalesAgentRuntime({ registry: createRegistryPort() });
       const signal: SignalEnvelope = {

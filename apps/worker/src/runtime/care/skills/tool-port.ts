@@ -457,6 +457,22 @@ export function createCareSkillToolPort(options: CareSkillOptions): SkillToolPor
         if (reconciled.state === 'COMMITTED') return reconciled.output as TOutput;
         throw uncommittedError(reconciled);
       }
+      if (binding === 'Customer360.AnalyticsLayer') {
+        if (!options.analytics_layer) {
+          throw new CareSkillToolError(
+            'AUTHORITATIVE_SOURCE_UNAVAILABLE',
+            'Customer360.AnalyticsLayer is not bound; declared refusal',
+          );
+        }
+
+        const input = invocation.input as {
+          readonly tenant_id: string;
+          readonly customer_id: string;
+          readonly recent_message_snippets?: string[];
+        };
+        return (await options.analytics_layer.analyzeChurnRisk(input, invocation.context)) as TOutput;
+      }
+
       if (binding === 'API-001.OrderConnector') {
         if (!options.erp_read) {
           throw new CareSkillToolError(

@@ -70,6 +70,7 @@ const SELECT_LIFECYCLE = `SELECT
     lifecycle_version AS version,
     hop_count,
     visited_domains AS domains,
+    source_run_id,
     created_at AS updated_at
   FROM ${HANDOFFS}
   WHERE tenant_id = $1 AND customer_id = $2
@@ -155,6 +156,7 @@ interface LifecycleRow extends QueryResultRow {
   version: number;
   hop_count: number;
   domains: readonly string[];
+  source_run_id: string;
   updated_at: Date | string;
 }
 
@@ -539,9 +541,10 @@ export async function readCrossDomainLifecycle(
           tenant_id: row.tenant_id,
           customer_id: row.customer_id,
           state: row.state,
-          version: row.version,
-          hop_count: row.hop_count,
+          version: Number(row.version),
+          hop_count: Number(row.hop_count),
           domains: row.domains,
+          source_run_id: row.source_run_id,
           updated_at: instant(row.updated_at),
         };
   });

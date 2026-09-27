@@ -1,6 +1,6 @@
 import type { AssignableAuthority, IAdapterDispatcher } from '@agentos/core-engine/contracts';
 import type { CareHandoffRepository, ServiceCasePriority, ServiceCaseRepository } from '@agentos/database';
-import type { PlatformSkillEnablement, SkillRegistry, SkillToolPort } from '@agentos/skills';
+import type { ExecutionContext, PlatformSkillEnablement, SkillRegistry, SkillToolPort } from '@agentos/skills';
 import type { ErpReadPort } from '../../connectors.js';
 
 export type { ErpReadPort } from '../../connectors.js';
@@ -24,6 +24,30 @@ export type CareCaseSlaTargetHoursResolver = (
   priority: ServiceCasePriority,
 ) => number | null | Promise<number | null>;
 
+/** Input accepted by the authoritative Customer360 churn analytics layer. */
+export interface CareAnalyzeChurnRiskInput {
+  readonly tenant_id: string;
+  readonly customer_id: string;
+  readonly recent_message_snippets?: string[];
+}
+
+/** HYPOTHESIS-only output returned by the authoritative Customer360 churn analytics layer. */
+export interface CareAnalyzeChurnRiskOutput {
+  readonly customer_id: string;
+  readonly churn_probability: number;
+  readonly risk_tier: 'LOW' | 'MODERATE' | 'HIGH' | 'CRITICAL';
+  readonly primary_risk_factors: string[];
+  readonly classification: 'HYPOTHESIS';
+}
+
+/** Authoritative analytics dependency for the churn analysis skill. */
+export interface CareAnalyticsLayer {
+  readonly analyzeChurnRisk: (
+    input: CareAnalyzeChurnRiskInput,
+    context: ExecutionContext,
+  ) => Promise<CareAnalyzeChurnRiskOutput>;
+}
+
 /** Dependencies injected into createCareSkillServices. */
 export interface CareSkillOptions {
   readonly erp_read: ErpReadPort | null;
@@ -39,6 +63,8 @@ export interface CareSkillOptions {
   readonly handoff_repository?: Pick<CareHandoffRepository, 'enqueue' | 'reconcile'>;
   /** Tenant-specific SLA policy. Missing values never receive an invented default. */
   readonly case_sla_target_hours?: CareCaseSlaTargetHoursResolver;
+  /** Optional authoritative churn analytics provider; absent providers refuse, never synthesize scores. */
+  readonly analytics_layer?: CareAnalyticsLayer | null;
   /** Explicit skill gate allowlist; omitted callers retain the platform's default P0 allowlist. */
   readonly skill_enablement?: PlatformSkillEnablement;
 }

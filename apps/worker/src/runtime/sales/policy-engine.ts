@@ -153,7 +153,7 @@ export const SALES_SKILLS: Readonly<Record<string, PolicyRegistrySkill>> = Objec
   },
   'skill.sales.recommend_product': {
     skill_id: 'skill.sales.recommend_product',
-    allowed_agents: Object.freeze(['SAL-03']),
+    allowed_agents: Object.freeze(['SAL-02', 'SAL-03']),
     required_authority: 'AUTH-1',
     mutating: false,
     price_bearing: false,

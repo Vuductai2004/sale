@@ -76,6 +76,15 @@ describe('CareAgentRuntime', () => {
           timeout_ms: 1000,
         };
       }
+      if (skill_id === 'skill.care.analyze_churn_risk') {
+        return {
+          skill_id: 'skill.care.analyze_churn_risk',
+          effect_class: 'READ',
+          guarded_dependency: 'Customer360.AnalyticsLayer',
+          required_authority: 'AUTH-1',
+          timeout_ms: 2500,
+        };
+      }
       return null;
     },
   };
@@ -116,12 +125,62 @@ describe('CareAgentRuntime', () => {
     expect(hypothesis.intent).toBe('care:care');
 
     const routing = await runtime.resolveRouting(signal, verifiedContext, hypothesis);
+    expect(routing.target_agent).toBe('CS-01');
+    expect(routing.requires_clarification).toBe(false);
+
 
     // An empty plan would complete with zero steps and report the leg as done, so the run refuses
     // with its own code until an itinerary is bound (blocked.md records that as open work).
     await expect(runtime.formulatePlan(routing, verifiedContext, hypothesis)).rejects.toThrow(
       'CARE_ONBOARDING_ITINERARY_UNBOUND',
     );
+  });
+
+  it('routes a handoff-admitted retention leg to CS-02 and plans churn analysis', async () => {
+    const signal: SignalEnvelope = {
+      signal_id: 'sig-handoff-retention-1',
+      tenant_id,
+      correlation_id: 'corr-1',
+      source_channel: 'ORCHESTRATOR_HANDOFF',
+      event_type: 'handoff.care_to_retention',
+      timestamp: '2026-09-01T00:00:00Z',
+      subject: {
+        session_id: 'sess-handoff-1',
+        channel_type: 'orchestrator',
+        verified_customer_id: 'cust-verified-42',
+      },
+      payload: {
+        module: 'support',
+        handoff: { target_domain: 'retention', reason: 'Care leg completed' },
+      },
+    };
+
+    const hypothesis = await runtime.deriveHypothesis(signal, verifiedContext);
+    expect(hypothesis.intent).toBe('care:retention');
+
+    const routing = await runtime.resolveRouting(signal, verifiedContext, hypothesis);
+    expect(routing.target_agent).toBe('CS-02');
+    expect(routing.requires_clarification).toBe(false);
+
+    const plan = await runtime.formulatePlan(routing, verifiedContext, hypothesis);
+    expect(plan.steps).toHaveLength(1);
+    expect(plan.steps[0]).toMatchObject({
+      step_index: 1,
+      agent_id: 'CS-02',
+      skill_id: 'skill.care.analyze_churn_risk',
+      adapter_target: 'Customer360.AnalyticsLayer',
+      required_authority: 'AUTH-1',
+      timeout_ms: 2500,
+      mutating: false,
+      idempotent: true,
+      price_bearing: false,
+      depends_on_steps: [],
+    });
+    expect(plan.steps[0]?.input_parameters).toEqual({
+      tenant_id,
+      customer_id: 'cust-verified-42',
+    });
+    expect(plan.fallback_strategy).toBe('FAIL_CLOSED');
   });
 
   it('yields lookup_order plan with server-resolved identity fields for verified order request', async () => {

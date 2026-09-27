@@ -403,6 +403,22 @@ export class CareAgentRuntime implements IAgentRuntime {
       };
     }
 
+    if (intent === 'care:care') {
+      return {
+        target_agent: 'CS-01',
+        requires_clarification: false,
+        rationalization: hypothesis.reasoning,
+      };
+    }
+
+    if (intent === 'care:retention') {
+      return {
+        target_agent: 'CS-02',
+        requires_clarification: false,
+        rationalization: hypothesis.reasoning,
+      };
+    }
+
     if (intent === 'order_status' && hypothesis.intent === 'order_lookup' && context.customer) {
       return {
         target_agent: 'CS-01',

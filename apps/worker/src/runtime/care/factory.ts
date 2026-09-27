@@ -299,8 +299,10 @@ export function createCareOrchestratorFactory(
   // the same canonical registry: without it every Care intent falls closed to an empty plan.
   let adapterDispatcher = options.adapterDispatcher ?? options.skillServices?.dispatcher;
   let registry = options.registry ?? options.skillServices?.registry;
-  if (!options.skillServices && !options.adapterDispatcher) {
-    const skillServices = createCareSkillServices({
+  // The planner reads step metadata from the canonical registry. An injected dispatcher does not
+  // replace that registry: without it every handoff intent falls closed to an empty plan.
+  if (!registry || !adapterDispatcher) {
+    const skillServices = options.skillServices ?? createCareSkillServices({
       erp_read: options.erp_read ?? null,
       env: options.env ?? {},
       ...(options.now ? { now: options.now } : {}),
@@ -310,7 +312,7 @@ export function createCareOrchestratorFactory(
       resolve_correlation_id: resolveCorrelationId,
       resolve_grant: resolveGrant,
     });
-    adapterDispatcher = skillServices.dispatcher;
+    adapterDispatcher ??= skillServices.dispatcher;
     registry ??= skillServices.registry;
   }
 

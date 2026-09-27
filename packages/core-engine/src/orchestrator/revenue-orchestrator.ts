@@ -309,8 +309,24 @@ export class RevenueOrchestrator {
             throw new OrchestratorError('CHECKPOINT_REQUIRES_RECONCILIATION', 'A restarted mutating step requires reconciliation by its effect key.');
           }
           if (checkpoint.current_step > checkpoint.plan.steps.length) {
+            const handoff = await this.brokerPlanHandoff({
+              tenant_id: signal.tenant_id,
+              run_id,
+              correlation_id: signal.correlation_id,
+              plan: checkpoint.plan,
+              context: checkpoint.context,
+              request_id: checkpoint.request_id,
+              previous_evidence_hash: checkpoint.previous_evidence_hash,
+            });
+            if (handoff.kind === 'PARKED') {
+              return handoff.result;
+            }
             await this.dependencies.workflowEngine.transitionTask(signal.tenant_id, run_id, 'completed', 'Recovered evidenced plan verified');
-            return { run_id, lifecycle_state: 'completed' as const };
+            return {
+              run_id,
+              lifecycle_state: 'completed',
+              ...(handoff.kind === 'ADMITTED' ? { handoff: handoff.admission } : {}),
+            };
           }
           this.replayCommittedStages(checkpoint);
           const outcome = await this.executeSteps({
@@ -320,7 +336,25 @@ export class RevenueOrchestrator {
             approved_action: null, approval_ref: null,
           });
           if (outcome.lifecycle_state === 'completed') {
+            const handoff = await this.brokerPlanHandoff({
+              tenant_id: signal.tenant_id,
+              run_id,
+              correlation_id: signal.correlation_id,
+              plan: checkpoint.plan,
+              context: checkpoint.context,
+              request_id: checkpoint.request_id,
+              previous_evidence_hash: outcome.evidence?.chain_hash ?? checkpoint.previous_evidence_hash,
+            });
+            if (handoff.kind === 'PARKED') {
+              return handoff.result;
+            }
             await this.dependencies.workflowEngine.transitionTask(signal.tenant_id, run_id, 'completed', 'Recovered plan steps verified');
+            return {
+              run_id,
+              lifecycle_state: 'completed',
+              ...outcomeFields(outcome),
+              ...(handoff.kind === 'ADMITTED' ? { handoff: handoff.admission } : {}),
+            };
           }
           return { run_id, lifecycle_state: outcome.lifecycle_state, ...outcomeFields(outcome) };
         },
@@ -1040,6 +1074,10 @@ export class RevenueOrchestrator {
         previous_evidence_hash: checkpoint.previous_evidence_hash,
         request_id: checkpoint.request_id,
       };
+      const stored = task?.state_payload;
+      const storedSignal = stored !== null && typeof stored === 'object' && !Array.isArray(stored) && 'signal' in stored
+        ? stored.signal
+        : undefined;
       const guard = hasDurableFence
         ? { expected_task_version: task!.task_version, lease_owner: this.workerId }
         : undefined;
@@ -1048,7 +1086,7 @@ export class RevenueOrchestrator {
         run_id,
         'waiting',
         reason,
-        resumeCheckpoint,
+        storedSignal === undefined ? resumeCheckpoint : { ...resumeCheckpoint, signal: storedSignal },
         guard,
       );
     };
@@ -1705,7 +1743,13 @@ export class RevenueOrchestrator {
     previous_evidence_hash: string;
     request_id: string;
   }): Promise<void> {
+    const current = await this.dependencies.workflowEngine.getTask(params.tenant_id, params.run_id);
+    const queued = current?.state_payload;
+    const queuedSignal = queued !== null && typeof queued === 'object' && !Array.isArray(queued) && 'signal' in queued
+      ? queued.signal
+      : undefined;
     await this.dependencies.workflowEngine.transitionTask(params.tenant_id, params.run_id, 'waiting', params.reason, {
+      ...(queuedSignal === undefined ? {} : { signal: queuedSignal }),
       plan: params.plan,
       current_step: params.current_step,
       pending_action: params.pending_action,

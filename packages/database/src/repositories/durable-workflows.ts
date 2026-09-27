@@ -825,11 +825,11 @@ export function assertLeaseHeld(
 ): void {
   if (lease_owner === undefined) return;
   if (lease_owner.trim().length === 0) throw new Error('TASK_LEASE_OWNER_REQUIRED: lease_owner must be a non-empty worker identity.');
-  const parkedResume =
-    (row.state === 'waiting' || row.state === 'awaiting_human') &&
-    isPlainObject(row.state_payload) &&
-    Object.prototype.hasOwnProperty.call(row.state_payload, 'resume_event');
-  const leaseState = row.state === 'running' || parkedResume;
+  // A claimed waiting/awaiting_human row may already have consumed `resume_event`. Claim
+  // selection still requires the event; release and fenced transition do not, or the worker that
+  // just consumed it cannot drop the lease it still holds.
+  const claimedPark = row.state === 'waiting' || row.state === 'awaiting_human';
+  const leaseState = row.state === 'running' || claimedPark;
   if (!leaseState || row.lease_owner !== lease_owner || row.lease_expires_at === null || Date.parse(row.lease_expires_at) <= now.getTime()) {
     throw new Error('TASK_LEASE_NOT_HELD: the worker does not hold a live lease for this run.');
   }

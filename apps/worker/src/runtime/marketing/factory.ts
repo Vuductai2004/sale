@@ -17,6 +17,7 @@ import type {
   ActionDraft,
   AssignableAuthority,
   AuthorityLevel,
+  Customer360Fact,
   HydratedContext,
   IAgentRuntime,
   IContextAggregator,
@@ -46,6 +47,8 @@ import {
   DurableWorkflowRepository,
   EffectReservationRepository,
   EvidenceRepository,
+  getProfile as dbGetProfile,
+  type CustomerProfileRow,
 } from '@agentos/database';
 
 import {
@@ -136,16 +139,47 @@ function skillId(signal: SignalEnvelope): string {
   return value;
 }
 
-class MarketingContextAggregator implements IContextAggregator {
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export class MarketingContextAggregator implements IContextAggregator {
   async hydrateContext(
     tenant_id: string,
     subject: SignalSubject,
     correlation_id: string,
   ): Promise<HydratedContext> {
+    let customer: Customer360Fact | null = null;
+    const customer_id = subject.verified_customer_id;
+
+    // The subject is gateway-resolved; reject malformed ids before consulting the authoritative
+    // projection, then require the returned row to bind both tenant and customer exactly.
+    if (typeof customer_id === 'string' && UUID.test(customer_id)) {
+      try {
+        const profile: CustomerProfileRow | null = await dbGetProfile(tenant_id, customer_id);
+        if (profile?.tenant_id === tenant_id && profile.customer_id === customer_id) {
+          customer = {
+            customer_id: profile.customer_id,
+            tenant_id: profile.tenant_id,
+            verified_phone: profile.verified_phone ?? null,
+            verified_email: profile.verified_email ?? null,
+            total_spent: Number(profile.total_spent),
+            order_count: profile.order_count,
+            rfm_segment_hypothesis: profile.rfm_segment_hypothesis,
+            consent_marketing: profile.consent_marketing,
+            consent_updated_at: profile.consent_updated_at?.toISOString() ?? null,
+            suppression_active: profile.suppression_active,
+            created_at: profile.created_at.toISOString(),
+          };
+        }
+      } catch {
+        // A failed or unavailable authoritative read does not produce partial customer context.
+        customer = null;
+      }
+    }
+
     return {
       tenant_id,
       correlation_id,
-      customer: null,
+      customer,
       working_memory: {
         session_id: subject.session_id,
         ...(subject.conversation_id === undefined ? {} : { conversation_id: subject.conversation_id }),

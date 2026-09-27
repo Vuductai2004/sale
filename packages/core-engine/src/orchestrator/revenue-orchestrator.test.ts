@@ -27,6 +27,7 @@ import {
   type DurableLeaseManager,
   type IStatefulWorkflowEngine,
   type DurableTaskGuard,
+  type DurableTaskCheckpoint,
 } from '../contracts/index.js';
 import { computeEffectKey } from '../effects/effect-key.js';
 import { MemoryEffectGuard } from '../effects/memory-effect-guard.js';
@@ -1462,6 +1463,107 @@ describe('brokered cross-domain handoff', () => {
     reason: 'Sales leg completed; Care onboarding is the next leg',
   };
 
+  const HANDOFF_CUSTOMER: NonNullable<HydratedContext['customer']> = {
+    customer_id: 'cust-1',
+    tenant_id: TENANT,
+    verified_phone: null,
+    verified_email: 'buyer@example.test',
+    total_spent: 0,
+    order_count: 0,
+    rfm_segment_hypothesis: 'NEW',
+    consent_marketing: false,
+    consent_updated_at: null,
+    suppression_active: false,
+    created_at: '2026-09-01T00:00:00.000Z',
+  };
+
+  function queuedRecoveryHarness(
+    checkpoint: DurableTaskCheckpoint,
+    crossDomainHandoff: ICrossDomainHandoffBroker,
+  ) {
+    const run_id = 'run-recovered-handoff';
+    const workflow = {
+      getTask: vi.fn(async () => ({
+        task_version: 4,
+        state: 'running' as const,
+        correlation_id: 'corr-1',
+        state_payload: { ...checkpoint, signal: signal() },
+        lease_owner: 'worker-test',
+        lease_expires_at: new Date(Date.now() + 30_000).toISOString(),
+      })),
+      updateTaskProgress: vi.fn(async () => undefined),
+      transitionTask: vi.fn(async () => undefined),
+      recordFailure: vi.fn(async () => ({ requeued: true })),
+    } as unknown as IStatefulWorkflowEngine;
+    const leaseManager: DurableLeaseManager = {
+      acquireLease: vi.fn(async () => true),
+      releaseLease: vi.fn(async () => undefined),
+    };
+    const bound = harness({ workflowEngine: workflow, crossDomainHandoff, leaseManager });
+    return { ...bound, workflow, leaseManager, run_id };
+  }
+
+  it('brokers a handoff when recovery finds the checkpoint already complete', async () => {
+    const admit = vi.fn(async (_draft: CrossDomainHandoffDraft) => ({
+      handoff_id: 'handoff-recovered-1',
+      target_run_id: 'run-care-recovered-1',
+      admitted: true,
+      lifecycle: { version: 1, state: 'HANDED_OFF' as const },
+    }));
+    const checkpoint: DurableTaskCheckpoint = {
+      plan: { ...plan([step({ mutating: false })]), handoff_intent: HANDOFF_INTENT },
+      context: { ...context(), customer: HANDOFF_CUSTOMER },
+      current_step: 2,
+      pending_action: null,
+      previous_evidence_hash: GENESIS_HASH,
+      request_id: SIGNAL_ID,
+    };
+    const { orchestrator, workflow, run_id } = queuedRecoveryHarness(checkpoint, { admit });
+
+    const result = await orchestrator.processQueuedSignal(run_id, signal(), { worker_id: 'worker-test' });
+
+    expect(result.lifecycle_state).toBe('completed');
+    expect(result.handoff).toMatchObject({
+      handoff_id: 'handoff-recovered-1',
+      target_run_id: 'run-care-recovered-1',
+      admitted: true,
+    });
+    expect(admit).toHaveBeenCalledTimes(1);
+    expect(workflow.transitionTask).toHaveBeenCalledWith(
+      TENANT,
+      run_id,
+      'completed',
+      'Recovered evidenced plan verified',
+    );
+  });
+
+  it('parks a recovered completed-step handoff when admission is unresolved', async () => {
+    const admit = vi.fn(async () => {
+      throw new OrchestratorError('HANDOFF_ADMISSION_UNRESOLVED', 'the ledger could not decide');
+    });
+    const checkpoint: DurableTaskCheckpoint = {
+      plan: { ...plan([step({ mutating: false })]), handoff_intent: HANDOFF_INTENT },
+      context: { ...context(), customer: HANDOFF_CUSTOMER },
+      current_step: 1,
+      pending_action: null,
+      previous_evidence_hash: GENESIS_HASH,
+      request_id: SIGNAL_ID,
+    };
+    const { orchestrator, workflow, run_id } = queuedRecoveryHarness(checkpoint, { admit });
+
+    const result = await orchestrator.processQueuedSignal(run_id, signal(), { worker_id: 'worker-test' });
+
+    expect(result.lifecycle_state).toBe('waiting');
+    expect(admit).toHaveBeenCalledTimes(1);
+    expect(workflow.transitionTask).toHaveBeenCalledWith(
+      TENANT,
+      run_id,
+      'waiting',
+      expect.stringContaining('HANDOFF_ADMISSION_UNRESOLVED'),
+      expect.objectContaining({ request_id: SIGNAL_ID, current_step: 2 }),
+    );
+    expect((workflow.transitionTask as ReturnType<typeof vi.fn>).mock.calls.filter((call: unknown[]) => call[2] === 'completed')).toHaveLength(0);
+  });
   it('brokers exactly one handoff for a completed run and reports the admission', async () => {
     const admit = vi.fn(async (_draft: CrossDomainHandoffDraft) => ({
       handoff_id: 'handoff-1',

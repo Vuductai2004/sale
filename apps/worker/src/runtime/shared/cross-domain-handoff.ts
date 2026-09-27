@@ -72,13 +72,18 @@ interface DurableJourneyFacts {
   readonly lifecycle: HandoffLifecycleRef | null;
   readonly visited_domains: readonly JourneyDomain[];
   readonly previous_hop_count: number;
+  readonly latest_hop_source_run_id: string | null;
 }
 
 function readDurableJourneyFacts(record: CrossDomainLifecycleRecord | null): DurableJourneyFacts {
   if (record === null) {
-    return { lifecycle: null, visited_domains: [], previous_hop_count: 0 };
+    return {
+      lifecycle: null,
+      visited_domains: [],
+      previous_hop_count: 0,
+      latest_hop_source_run_id: null,
+    };
   }
-
   if (!Number.isInteger(record.version) || record.version < 1) {
     throw new OrchestratorError(
       'HANDOFF_LIFECYCLE_INVALID',
@@ -109,8 +114,32 @@ function readDurableJourneyFacts(record: CrossDomainLifecycleRecord | null): Dur
     lifecycle: { version: record.version, state: lifecycleState(record.state) },
     visited_domains,
     previous_hop_count: record.hop_count,
+    latest_hop_source_run_id: record.source_run_id,
   };
 }
+function preHopJourneyFacts(
+  durable: DurableJourneyFacts,
+  source_run_id: string,
+): DurableJourneyFacts {
+  if (
+    durable.latest_hop_source_run_id !== source_run_id
+    || durable.previous_hop_count < 1
+    || durable.visited_domains.length < 1
+  ) {
+    return durable;
+  }
+
+  const previous_version = (durable.lifecycle?.version ?? 0) - 1;
+  return {
+    lifecycle: previous_version > 0 && durable.lifecycle !== null
+      ? { version: previous_version, state: durable.lifecycle.state }
+      : null,
+    visited_domains: durable.visited_domains.slice(0, -1),
+    previous_hop_count: durable.previous_hop_count - 1,
+    latest_hop_source_run_id: null,
+  };
+}
+
 
 function requestFingerprint(draft: CrossDomainHandoffDraft, pkg: CrossDomainHandoffPackage): string {
   return createHash('sha256')
@@ -190,7 +219,10 @@ export function createCrossDomainHandoffBroker(
 
   return {
     async admit(draft): Promise<ReturnType<ICrossDomainHandoffBroker['admit']> extends Promise<infer T> ? T : never> {
-      const durable = readDurableJourneyFacts(await readLifecycle(draft.tenant_id, draft.customer_id));
+      const durable = preHopJourneyFacts(
+        readDurableJourneyFacts(await readLifecycle(draft.tenant_id, draft.customer_id)),
+        draft.source_run_id,
+      );
       const pkg = createCrossDomainHandoffPackage({
         ...draft,
         previous_lifecycle: durable.lifecycle,

@@ -575,6 +575,8 @@ export interface CrossDomainLifecycleRecord {
   version: number;
   hop_count: number;
   domains: readonly string[];
+  /** Source run of the latest durable hop; used to recognize an exact admission retry. */
+  source_run_id: string;
   updated_at: string;
 }
 
