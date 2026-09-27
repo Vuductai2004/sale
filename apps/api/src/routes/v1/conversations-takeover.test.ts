@@ -1,0 +1,205 @@
+/**
+ * @file Conversation routes: takeover and durable handoff coordination.
+ *
+ * Split from `conversations.test.ts`; the sibling file holds the other group exactly once and
+ * every assertion body is unchanged.
+ */
+
+import Fastify from 'fastify';
+import { describe, expect, it, vi } from 'vitest';
+import { createCredentialStore } from '../../gateway/principal.js';
+import { GatewayRuntime } from '../../gateway/ports.js';
+import { registerConversationRoutes } from './conversations.js';
+
+const TENANT = 'tenant-a';
+
+const CONVERSATION_ID = '11111111-1111-4111-8111-111111111111';
+
+function buildTakeoverHarness() {
+  const conversation: {
+    conversation_id: string;
+    tenant_id: string;
+    customer_id: string | null;
+    channel: 'WEB_CHAT';
+    external_thread_id: string;
+    active_agent: string;
+    state: 'open' | 'paused_takeover' | 'closed';
+    takeover_operator_id: string | null;
+    last_message_at: string;
+    created_at: string;
+  } = {
+    conversation_id: CONVERSATION_ID,
+    tenant_id: TENANT,
+    customer_id: null,
+    channel: 'WEB_CHAT',
+    external_thread_id: 'thread-a',
+    active_agent: 'auto',
+    state: 'open',
+    takeover_operator_id: null,
+    last_message_at: '2026-09-23T00:00:00.000Z',
+    created_at: '2026-09-23T00:00:00.000Z',
+  };
+  const lease = { operator_id: 'operator-a', expires_at: '2026-09-23T00:01:00.000Z' };
+  const acquire = vi.fn(async (_input: unknown) => ({
+    outcome: 'ACQUIRED' as 'ACQUIRED' | 'RENEWED' | 'HELD_BY_ANOTHER_OPERATOR',
+    lease,
+  }));
+  const release = vi.fn(async (_input: unknown) => ({
+    outcome: 'EXPIRED' as 'EXPIRED' | 'NOT_HELD' | 'HELD_BY_ANOTHER_OPERATOR',
+    lease: null,
+  }));
+  const claim = vi.fn(async (_input: unknown): Promise<'CLAIMED' | 'NO_HANDOFF' | 'HELD_BY_ANOTHER_OPERATOR'> => 'CLAIMED');
+  const complete = vi.fn(async (_input: unknown): Promise<'COMPLETED' | 'NO_HANDOFF' | 'NOT_ASSIGNED' | 'HELD_BY_ANOTHER_OPERATOR'> => 'COMPLETED');
+  const setState = vi.fn(async (
+    _tenant_id: string,
+    _conversation_id: string,
+    state: 'open' | 'paused_takeover' | 'closed',
+    operator_id: string | null,
+  ) => {
+    conversation.state = state;
+    conversation.takeover_operator_id = operator_id;
+  });
+  const runtime = {
+    conversations: {
+      get: vi.fn(async () => conversation),
+      setState,
+    },
+    takeover: { acquire, release },
+    handoffs: { claim, complete },
+    audit: { record: vi.fn(async () => undefined) },
+    clock: () => new Date('2026-09-23T00:00:00.000Z'),
+    ids: () => 'corr-a',
+  } as unknown as GatewayRuntime;
+  const app = Fastify({ logger: false });
+  registerConversationRoutes(app, {
+    runtime,
+    credentials: createCredentialStore({
+      operators: [{
+        token: 'operator-token',
+        tenant_id: TENANT,
+        operator_id: 'operator-a',
+        permissions: ['conversation:takeover'],
+      }],
+      sessions: [],
+      widgets: [],
+    }),
+  });
+  return { app, acquire, claim, complete, conversation, release, setState };
+}
+
+describe('conversation takeover durable handoff coordination', () => {
+  it('claims a queued handoff without re-writing the conversation outside the claim transaction', async () => {
+    const { app, claim, setState } = buildTakeoverHarness();
+    const response = await app.inject({
+      method: 'POST',
+      url: '/conversations/' + CONVERSATION_ID + '/takeover',
+      headers: { authorization: 'Bearer operator-token' },
+      payload: { reason: 'customer requested a person', takeover_mode: 'FULL_CONTROL' },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(claim).toHaveBeenCalledWith({
+      tenant_id: TENANT,
+      conversation_id: CONVERSATION_ID,
+      operator_id: 'operator-a',
+    });
+    expect(setState).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it('uses the manual takeover path only when no durable handoff exists', async () => {
+    const { app, claim, setState } = buildTakeoverHarness();
+    claim.mockResolvedValue('NO_HANDOFF');
+    const response = await app.inject({
+      method: 'POST',
+      url: '/conversations/' + CONVERSATION_ID + '/takeover',
+      headers: { authorization: 'Bearer operator-token' },
+      payload: { reason: 'manual review', takeover_mode: 'FULL_CONTROL' },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(setState).toHaveBeenCalledWith(TENANT, CONVERSATION_ID, 'paused_takeover', 'operator-a');
+    await app.close();
+  });
+
+  it('releases only a newly acquired Redis lease when durable claim fails', async () => {
+    const acquired = buildTakeoverHarness();
+    acquired.claim.mockRejectedValue(new Error('database unavailable'));
+    await acquired.app.inject({
+      method: 'POST',
+      url: '/conversations/' + CONVERSATION_ID + '/takeover',
+      headers: { authorization: 'Bearer operator-token' },
+      payload: { reason: 'manual review', takeover_mode: 'FULL_CONTROL' },
+    });
+    expect(acquired.release).toHaveBeenCalledOnce();
+    await acquired.app.close();
+
+    const renewed = buildTakeoverHarness();
+    renewed.acquire.mockResolvedValue({
+      outcome: 'RENEWED',
+      lease: { operator_id: 'operator-a', expires_at: '2026-09-23T00:01:00.000Z' },
+    });
+    renewed.claim.mockRejectedValue(new Error('database unavailable'));
+    await renewed.app.inject({
+      method: 'POST',
+      url: '/conversations/' + CONVERSATION_ID + '/takeover',
+      headers: { authorization: 'Bearer operator-token' },
+      payload: { reason: 'manual review', takeover_mode: 'FULL_CONTROL' },
+    });
+    expect(renewed.release).not.toHaveBeenCalled();
+    await renewed.app.close();
+  });
+
+  it('returns bot control only through the assigned handoff completion transaction', async () => {
+    const { app, complete, conversation, release, setState } = buildTakeoverHarness();
+    conversation.state = 'paused_takeover';
+    conversation.takeover_operator_id = 'operator-a';
+    const response = await app.inject({
+      method: 'POST',
+      url: '/conversations/' + CONVERSATION_ID + '/resume',
+      headers: { authorization: 'Bearer operator-token' },
+      payload: { handoff_summary: 'resolved with the customer' },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(release.mock.invocationCallOrder[0]).toBeLessThan(complete.mock.invocationCallOrder[0]!);
+    expect(complete).toHaveBeenCalledWith({
+      tenant_id: TENANT,
+      conversation_id: CONVERSATION_ID,
+      operator_id: 'operator-a',
+      completion_summary: 'resolved with the customer',
+    });
+    expect(setState).not.toHaveBeenCalled();
+    await app.close();
+  });
+
+  it('uses the manual resume state path only when no durable handoff exists', async () => {
+    const { app, complete, conversation, setState } = buildTakeoverHarness();
+    conversation.state = 'paused_takeover';
+    conversation.takeover_operator_id = 'operator-a';
+    complete.mockResolvedValue('NO_HANDOFF');
+    const response = await app.inject({
+      method: 'POST',
+      url: '/conversations/' + CONVERSATION_ID + '/resume',
+      headers: { authorization: 'Bearer operator-token' },
+      payload: {},
+    });
+    expect(response.statusCode).toBe(200);
+    expect(setState).toHaveBeenCalledWith(TENANT, CONVERSATION_ID, 'open', null);
+    await app.close();
+  });
+
+  it('refuses to complete a queued handoff not assigned to the operator', async () => {
+    const { app, complete, conversation, setState } = buildTakeoverHarness();
+    conversation.state = 'paused_takeover';
+    conversation.takeover_operator_id = 'operator-a';
+    complete.mockResolvedValue('NOT_ASSIGNED');
+    const response = await app.inject({
+      method: 'POST',
+      url: '/conversations/' + CONVERSATION_ID + '/resume',
+      headers: { authorization: 'Bearer operator-token' },
+      payload: {},
+    });
+    expect(response.statusCode).toBe(409);
+    expect(response.json().error_code).toBe('TAKEOVER_LEASE_LOST');
+    expect(setState).not.toHaveBeenCalled();
+    await app.close();
+  });
+});

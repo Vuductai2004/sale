@@ -13,74 +13,76 @@ Hệ thống được thiết kế theo kiến trúc đa người dùng (Multi-t
 
 ---
 
-## Cấu Trúc Thư Mục Dự Án (Directory Tree)
+## Cấu Trúc Thư Mục Dự Án (Target Layout)
+
+Sơ đồ dưới đây mô tả cấu trúc đích đã được thống nhất. SRS, `implement/`, `plans/` và
+`testcases/` là các đường dẫn neo canonical; các mục `apps/`, `packages/` và harness
+trung tâm được triển khai theo từng giai đoạn của kế hoạch.
 
 ```text
 agent_solution/
 ├── README.md                                  # Trang chủ điều hướng tổng thể dự án
 ├── PLAN.md                                    # Chỉ mục chuyển tiếp kế hoạch gốc
-├── De_bai_Xay_dung_He_thong_AI_Agent_Marketing_Sales_CSKH_v0.1.md  # Đề bài gốc SRS v0.1 (AI-REV-SRS-001)
-├── AGENT_NGIEN_CUU_THI_TRUONG.md               # Chỉ dẫn nhiệm vụ agent nghiên cứu thị trường
-├── BAO_CAO_DE_AN_AI_ECOMMERCE_3_MODULE.pdf    # Báo cáo đề án tổng quan (bản PDF in 6 trang)
-├── DAC_TA_KY_THUAT_HE_THONG_AI_AGENT.pdf      # Bản đặc tả kỹ thuật chi tiết nền tảng (bản PDF 10 trang)
-├── presentation/                              # Mã nguồn và công cụ xuất bản thuyết trình
-│   ├── index.html                             # Giao diện HTML chuẩn A4 thiết kế báo cáo đề án
-│   ├── tech_spec.html                         # Giao diện HTML chuẩn A4 đặc tả kỹ thuật hệ thống
-│   ├── export_pdf.py                          # Script tự động biên dịch HTML thành 2 bản PDF
-│   └── check_pdf_overlap.py                   # Script đối soát tràn lề và chồng lấn trang khi xuất PDF
-├── implement/                                 # Bộ 10 tài liệu thi hành kỹ thuật triển khai từ đặc tả
-│   ├── README.md                              # Mục lục điều hướng và thứ tự thực thi bộ tài liệu
-│   ├── 01-tech-stack-and-environment.md       # Ngăn xếp công nghệ và dựng môi trường production
-│   ├── 02-project-structure.md                # Cấu trúc monorepo, giới hạn gói và quy ước mã nguồn
-│   ├── 03-database-and-memory-schema.md       # Lược đồ CSDL 28 thực thể, RLS và bộ nhớ AI
-│   ├── 04-core-engine-and-orchestrator.md     # Lõi điều phối 11 bước và workflow bền vững
-│   ├── 05-skill-system-specifications.md      # Hệ thống kỹ năng và hợp đồng 11 trường
-│   ├── 06-api-and-connectors-spec.md          # Hợp đồng API-001..003 và adapter cắm-rút
-│   ├── 07-human-command-center-ui.md          # Command Center SCR-001..005 và widget nhúng
-│   ├── 08-security-governance-nfr.md          # PEP, Authority, BR-001..010 và NFR-001..010
-│   └── 09-sprint-roadmap-and-pilots.md        # Lộ trình sprint, kịch bản pilot và CI/CD
-├── testcases/                                 # Đặc tả chấp nhận 383 ca (chưa có runtime; NOT_RUN)
-│   ├── README.md                              # Chiến lược pyramid, mock vs sandbox, cách sinh
-│   ├── TRACEABILITY.md                        # Ma trận ID ca → yêu cầu/facet
-│   ├── COVERAGE.md                            # Ma trận ngược yêu cầu/facet → ca, khoảng trống
-│   ├── manifest.json                          # Số lượng, hash nguồn, trạng thái NOT_RUN
-│   ├── _generate.py                           # Bộ sinh + kiểm tra stdlib
-│   ├── sources/                               # Nguồn ca viết tay (business/governance/platform)
-│   ├── fixtures/offline/                      # JSON SoR giả lập
-│   ├── fixtures/live/                         # env.example sandbox (ASM-001)
-│   ├── fixtures/scenarios/                    # Bản JSON từng ca
-│   ├── unit/                                  # Skills, AUTH, BR, KB, thực thể
-│   ├── integration/                           # API, C360, FSM, SCR, điều phối
-│   ├── e2e/                                   # Hành trình then chốt offline.md + live.md
-│   ├── governance/                            # NFR, ASM, KPI, cổng, DoD, phê duyệt
-│   └── platform/                              # Bản đồ phủ KB/memory và thực thể
-├── research/                                  # Tài liệu nghiên cứu thị trường và người dùng
-│   └── market_research.md                     # Khung chiến lược sản phẩm, phân tích thị trường chi tiết
-├── plans/                                     # Toàn bộ hồ sơ quy hoạch kiến trúc và kế hoạch nghiệp vụ
-│   ├── README.md                              # Mục lục chi tiết và nguyên tắc hợp nhất kế hoạch
-│   ├── plan-easy-read-flow.md                 # Luồng tổng quan nghiệp vụ dành cho người không chuyên
-│   ├── customer-lifecycle.md                  # Hành trình khách hàng từ tín hiệu đến mua lại
-│   ├── product-and-packaging.md               # Mô hình kinh doanh B2B SaaS, gói giải pháp và định giá
-│   ├── glossary.md                            # Bảng giải nghĩa thuật ngữ chuyên ngành
-│   ├── modules/                               # Đặc tả chi tiết 3 module trợ lý AI
-│   │   ├── marketing.md                       # Module Tiếp thị: Tín hiệu, tiếp nhận, nuôi dưỡng lead
-│   │   ├── sales.md                           # Module Bán hàng: Tư vấn, so sánh cấu hình, chốt đơn
-│   │   └── customer-support.md                # Module CSKH: Hỗ trợ, bảo hành, vòng lặp tích điểm
-│   ├── platform/                              # Hạ tầng kỹ thuật nền tảng
-│   │   ├── architecture.md                    # Kiến trúc lõi, ranh giới hệ thống và giao diện nhúng
-│   │   ├── data-and-knowledge.md              # Mô hình dữ liệu Customer360, RAG và tri thức sản phẩm
-│   │   ├── workflows-and-handoffs.md          # Luồng công việc, trạng thái bền vững và bàn giao người
-│   │   └── api-and-integrations.md            # Hợp đồng API, cổng kết nối và chính sách bảo mật
-│   └── delivery/                              # Kế hoạch bàn giao và kiểm chứng
-│       ├── mvp-and-roadmap.md                 # Lộ trình trục kép (Engineering P0-P5 & Commercial Phase 1-3), DoD 10 thành tố và bộ test TC-E2E-001..009
-│       └── analytics.md                       # Hệ thống KPI 5 nhóm theo SRS Mục 20, động lực kinh tế ECN-001..004, ngân sách AI mục tiêu 0,5-1 TWD (chờ baseline) và mục tiêu bảo toàn biên lãi
-└── reports/                                   # Nhật ký làm việc và báo cáo thẩm định định kỳ
-    ├── AUDIT_DE_BAI_VS_KE_HOACH.md            # Báo cáo thẩm định đối chiếu đề bài SRS và kế hoạch
-    ├── 09-09-2026/
-    │   └── daily-report.md                    # Báo cáo tiến độ và thống nhất định hướng ngày 09/09/2026
-    └── 10-09-2026/
-        └── .gitkeep                           # Thư mục lưu trữ báo cáo các phiên tiếp theo
+├── De_bai_Xay_dung_He_thong_AI_Agent_Marketing_Sales_CSKH_v0.1.md
+├── apps/
+│   ├── api/                                   # Core API gateway
+│   ├── worker/                                # Durable workflow worker
+│   ├── tenant-console/                        # SCR-001, SCR-003..005
+│   └── platform-admin/                       # SCR-002 and tenant workspace
+├── packages/
+│   ├── config/
+│   │   ├── eslint/                            # @agentos/eslint-config
+│   │   └── typescript/                        # @agentos/typescript-config
+│   ├── ui-foundation/                         # Browser-safe transport and shared UI types
+│   ├── core-engine/                           # Orchestrator, policy, and contracts
+│   ├── database/                              # SQL migrations, RLS, and repositories
+│   ├── skills/                                # Atomic skill contracts and registry
+│   ├── adapters/                              # External channel and enterprise connectors
+│   ├── second-brain/                          # Canonical knowledge base
+│   └── storefront-widget/                     # Embeddable browser widget
+├── docs/
+│   ├── product/README.md                      # Product navigation index
+│   ├── architecture/README.md                 # Architecture navigation index
+│   ├── specifications/README.md               # SRS/blueprint/specification map
+│   ├── operations/README.md                   # Docker, CI, and test operations
+│   ├── demo/                                  # Presentation source and PDF exports
+│   │   ├── presentation/
+│   │   └── exports/
+│   ├── decisions/                             # Audit and historical reports
+│   │   └── reports/
+│   └── reference/                             # Market research and reference notes
+├── implement/                                 # Canonical implementation blueprints
+├── plans/                                     # Canonical product/platform plans
+├── testcases/                                 # Generated acceptance specification and fixtures
+├── tests/README.md                            # Logical test ownership map
+├── docker/                                    # Container deployment manifests
+├── services/mock-erp/                         # Local/CI-only simulator
+├── docker-compose.yml                         # Local Compose topology
+├── package.json                               # Monorepo root configuration
+├── pnpm-workspace.yaml                        # Workspace definitions
+├── turbo.json                                 # Turborepo pipeline cache configuration
+└── tsconfig.json                              # Root TypeScript configuration
 ```
+
+## Local UI entry points (R2 target)
+
+The Human Command Center domain is split across two browser applications: the tenant-facing
+console on port `3000` and the platform-admin console on port `3001`. From the repository root,
+run each development server in its own terminal:
+
+```powershell
+pnpm --filter @agentos/tenant-console dev
+pnpm --filter @agentos/platform-admin dev
+```
+
+The corresponding liveness probes are:
+
+```powershell
+curl.exe http://localhost:3000/health
+curl.exe http://localhost:3001/health
+```
+
+These commands document the target entry points; they are not evidence that a check has run.
 
 ---
 
@@ -161,18 +163,18 @@ Hệ thống phân định rành mạch giữa 2 nhóm mã hiệu: Nhóm SRS (qu
 
 | Tài Liệu / Hạng Mục | Đường Dẫn Tương Đối | Định Dạng | Mô Tả Trọng Tâm |
 |---|---|---|---|
-| Báo Cáo Đề Án Thuyết Trình | [BAO_CAO_DE_AN_AI_ECOMMERCE_3_MODULE.pdf](BAO_CAO_DE_AN_AI_ECOMMERCE_3_MODULE.pdf) | PDF (6 Trang) | Đề án tóm lược trực quan dành cho ban lãnh đạo và đối tác |
-| Bản Đặc Tả Kỹ Thuật Nền Tảng | [DAC_TA_KY_THUAT_HE_THONG_AI_AGENT.pdf](DAC_TA_KY_THUAT_HE_THONG_AI_AGENT.pdf) | PDF (10 Trang) | Bản đặc tả kỹ thuật chi tiết theo đề bài SRS v0.1 (bản v0.1; còn giả định ASM-001..005 chờ khóa) |
-| Giao Diện Thuyết Trình | [presentation/index.html](presentation/index.html) | HTML5 / CSS A4 | Mã nguồn giao diện thiết kế báo cáo thuyết trình chuẩn A4 |
-| Giao Diện Đặc Tả Kỹ Thuật | [presentation/tech_spec.html](presentation/tech_spec.html) | HTML5 / CSS A4 | Mã nguồn giao diện thiết kế bản đặc tả kỹ thuật chuẩn A4 |
+| Báo Cáo Đề Án Thuyết Trình | [BAO_CAO_DE_AN_AI_ECOMMERCE_3_MODULE.pdf](docs/demo/exports/BAO_CAO_DE_AN_AI_ECOMMERCE_3_MODULE.pdf) | PDF (6 Trang) | Đề án tóm lược trực quan dành cho ban lãnh đạo và đối tác |
+| Bản Đặc Tả Kỹ Thuật Nền Tảng | [DAC_TA_KY_THUAT_HE_THONG_AI_AGENT.pdf](docs/demo/exports/DAC_TA_KY_THUAT_HE_THONG_AI_AGENT.pdf) | PDF (10 Trang) | Bản đặc tả kỹ thuật chi tiết theo đề bài SRS v0.1 (bản v0.1; còn giả định ASM-001..005 chờ khóa) |
+| Giao Diện Thuyết Trình | [docs/demo/presentation/index.html](docs/demo/presentation/index.html) | HTML5 / CSS A4 | Mã nguồn giao diện thiết kế báo cáo thuyết trình chuẩn A4 |
+| Giao Diện Đặc Tả Kỹ Thuật | [docs/demo/presentation/tech_spec.html](docs/demo/presentation/tech_spec.html) | HTML5 / CSS A4 | Mã nguồn giao diện thiết kế bản đặc tả kỹ thuật chuẩn A4 |
 | Bộ Kế Hoạch 3 Module | [plans/README.md](plans/README.md) | Markdown | Mục lục điều phối toàn bộ 11 tài liệu kế hoạch chi tiết |
 | Luồng Đọc Dễ Hiểu | [plans/plan-easy-read-flow.md](plans/plan-easy-read-flow.md) | Markdown | Bản tóm lược 5 phút dành cho người không chuyên kỹ thuật |
-| Nghiên Cứu Thị Trường | [research/market_research.md](research/market_research.md) | Markdown | 28 mục chiến lược sản phẩm, khách hàng mục tiêu và thị trường |
+| Nghiên Cứu Thị Trường | [docs/reference/market-research.md](docs/reference/market-research.md) | Markdown | Khung chiến lược sản phẩm, khách hàng mục tiêu và thị trường |
 | Gói Sản Phẩm & Định Giá | [plans/product-and-packaging.md](plans/product-and-packaging.md) | Markdown | Chiến lược B2B SaaS, gói GTM-001A/B, kênh phân phối GTM-002/003, Adapter |
 | Kiến Trúc Kỹ Thuật | [plans/platform/architecture.md](plans/platform/architecture.md) | Markdown | Thiết kế kiến trúc tổng thể, Orchestrator 11 bước, Command Center SCR-001..005 |
 | Lộ Trình & Tiêu Chí Nghiệm Thu | [plans/delivery/mvp-and-roadmap.md](plans/delivery/mvp-and-roadmap.md) | Markdown | Lộ trình trục kép (Engineering P0–P5 & Commercial Phase 1–3), DoD 10 thành tố, TC-E2E-001..009 |
 | Kinh Tế Đơn Vị & Đo Lường | [plans/delivery/analytics.md](plans/delivery/analytics.md) | Markdown | Hệ thống KPI SRS Mục 20 (mục tiêu chờ baseline ASM-002), động lực kinh tế ECN-001..004, P_floor như phép kiểm tra chính sách và mục tiêu chi phí AI |
-| Báo Cáo Thẩm Định Định Kỳ | [reports/09-09-2026/daily-report.md](reports/09-09-2026/daily-report.md) | Markdown | Nhật ký làm việc và báo cáo tiến độ định kỳ |
+| Báo Cáo Thẩm Định Định Kỳ | [docs/decisions/reports/09-09-2026/daily-report.md](docs/decisions/reports/09-09-2026/daily-report.md) | Markdown | Nhật ký làm việc và báo cáo tiến độ định kỳ |
 
 ---
 
@@ -194,14 +196,14 @@ Hệ thống phân định rành mạch giữa 2 nhóm mã hiệu: Nhóm SRS (qu
 ### 1. Dành Cho Ban Lãnh Đạo (Executive & Business Owners)
 - Mục tiêu: Nắm bắt tổng quan giá trị kinh doanh, mô hình vận hành và định hướng chiến lược.
 - Trình tự đọc đề xuất:
-  1. [Báo cáo đề án PDF](BAO_CAO_DE_AN_AI_ECOMMERCE_3_MODULE.pdf): Đọc lướt 6 trang đề án trực quan.
+  1. [Báo cáo đề án PDF](docs/demo/exports/BAO_CAO_DE_AN_AI_ECOMMERCE_3_MODULE.pdf): Đọc lướt 6 trang đề án trực quan.
   2. [plans/plan-easy-read-flow.md](plans/plan-easy-read-flow.md): Bản giải thích luồng hoạt động đơn giản trong 5 phút.
   3. [plans/product-and-packaging.md](plans/product-and-packaging.md): Xem mô hình thương mại B2B SaaS và chiến lược mở rộng quốc tế.
 
 ### 2. Dành Cho Khối Nghiệp Vụ (Product Owners, Marketing, Sales, CSKH)
 - Mục tiêu: Nắm vững quy trình nghiệp vụ, hành trình khách hàng và kịch bản tương tác của từng Agent.
 - Trình tự đọc đề xuất:
-  1. [research/market_research.md](research/market_research.md): Thấu hiểu chân dung khách hàng, vấn đề chưa giải quyết và cơ hội.
+  1. [docs/reference/market-research.md](docs/reference/market-research.md): Thấu hiểu chân dung khách hàng, vấn đề chưa giải quyết và cơ hội.
   2. [plans/customer-lifecycle.md](plans/customer-lifecycle.md): Nắm bắt vòng đời khách hàng qua 5 giai đoạn từ tín hiệu đến mua lại.
   3. [plans/modules/marketing.md](plans/modules/marketing.md): Nghiên cứu và tiếp nhận lead.
   4. [plans/modules/sales.md](plans/modules/sales.md): Quy trình tư vấn, so sánh thông số và cơ chế kiểm soát giá sàn.
@@ -210,7 +212,7 @@ Hệ thống phân định rành mạch giữa 2 nhóm mã hiệu: Nhóm SRS (qu
 ### 3. Dành Cho Đội Ngũ Kỹ Thuật (Architects, Tech Leads, Developers)
 - Mục tiêu: Triển khai hạ tầng, xây dựng API, cấu hình kho tri thức RAG và tích hợp hệ thống.
 - Trình tự đọc đề xuất:
-  1. [Bản đặc tả kỹ thuật PDF](DAC_TA_KY_THUAT_HE_THONG_AI_AGENT.pdf): Xem toàn bộ 10 trang đặc tả kỹ thuật kiến trúc, data model, skill contracts và kiểm toán.
+  1. [Bản đặc tả kỹ thuật PDF](docs/demo/exports/DAC_TA_KY_THUAT_HE_THONG_AI_AGENT.pdf): Xem toàn bộ 10 trang đặc tả kỹ thuật kiến trúc, data model, skill contracts và kiểm toán.
   2. [plans/platform/architecture.md](plans/platform/architecture.md): Ranh giới hệ thống, cơ chế Multi-tenant và Plug-and-Play Adapters.
   3. [plans/platform/data-and-knowledge.md](plans/platform/data-and-knowledge.md): Lược đồ dữ liệu Customer360, quyền riêng tư và RAG.
   4. [plans/platform/workflows-and-handoffs.md](plans/platform/workflows-and-handoffs.md): Quản lý phiên hội thoại, trạng thái và bàn giao nhân viên.
@@ -228,7 +230,8 @@ Hệ thống phân định rành mạch giữa 2 nhóm mã hiệu: Nhóm SRS (qu
 
 ## Hướng Dẫn Biên Dịch Báo Cáo PDF Từ Mã Nguồn
 
-Báo cáo đề án PDF được lưu trữ cùng mã nguồn giao diện HTML tại thư mục `presentation/`. Có thể tái biên dịch báo cáo sang tệp PDF chuẩn trang in A4 bất kỳ lúc nào bằng script tự động hóa.
+Các báo cáo PDF và mã nguồn giao diện được lưu trữ trong `docs/demo/`. Có thể tái biên dịch báo cáo
+sang tệp PDF chuẩn trang in A4 bằng script tự động hóa; bản xuất được ghi vào `docs/demo/exports/`.
 
 ### Yêu Cầu Môi Trường
 - Python 3.8 trở lên.
@@ -238,7 +241,8 @@ Báo cáo đề án PDF được lưu trữ cùng mã nguồn giao diện HTML t
 Chạy lệnh sau từ thư mục gốc của dự án:
 
 ```powershell
-python presentation/export_pdf.py
+python docs/demo/presentation/export_pdf.py
 ```
 
-Script sẽ tự động tìm kiếm trình duyệt tương thích, biên dịch tệp `presentation/index.html` và xuất bản trực tiếp vào `BAO_CAO_DE_AN_AI_ECOMMERCE_3_MODULE.pdf` tại thư mục gốc của dự án.
+Script sẽ tự động tìm kiếm trình duyệt tương thích, biên dịch các tệp HTML trong
+`docs/demo/presentation/` và xuất bản trực tiếp vào `docs/demo/exports/`.

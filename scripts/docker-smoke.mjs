@@ -1,17 +1,17 @@
 #!/usr/bin/env node
 /**
- * Docker Compose smoke for the three named application images
+ * Docker Compose smoke for the four named application images
  * (`implement/09` §10: build, load into the local daemon, inspect — never push).
  *
  * The script drives the repository's own `docker-compose.yml`, so what it
  * verifies is the shipped topology rather than a hand-written `docker build`
- * line: it builds `api`, `worker` and `command-center` through Compose, proves
- * each image is present in the local daemon, boots the default profile, and
- * waits until all three application services report healthy.
+ * line: it builds `api`, `worker`, `tenant-console`, and `platform-admin` through Compose,
+ * proves each image is present in the local daemon, boots the default profile, and
+ * waits until all four application services report healthy.
  *
  * Fail-closed rules:
  *   - missing `docker`, Compose v2, a reachable daemon, the compose file, the
- *     three Dockerfiles, or the environment file aborts before anything runs;
+ *     four Dockerfiles, or the environment file aborts before anything runs;
  *   - an image that Compose did not load locally aborts instead of being
  *     inspected as a stand-in;
  *   - a container that exits, or one that never becomes healthy inside the
@@ -33,7 +33,7 @@ import { fileURLToPath } from 'node:url';
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
 /** Services whose images this smoke builds, loads, and inspects. */
-const SERVICES = ['api', 'worker', 'command-center'];
+const SERVICES = ['api', 'worker', 'tenant-console', 'platform-admin'];
 
 /** Compose project owned by this script; never the developer's default project. */
 const DEFAULT_PROJECT = 'agentos-ci-smoke';
@@ -205,7 +205,7 @@ const isHealthy = (container) =>
 const hasFailed = (container) => container.State === 'exited' || container.State === 'dead';
 
 /**
- * Awaits the healthy state of the three application services, failing fast on a
+ * Awaits the healthy state of the four application services, failing fast on a
  * container that has exited.
  *
  * @param listContainers - Callback returning current project containers.
@@ -337,7 +337,7 @@ if (staleContainers.ok && staleContainers.stdout.trim().length > 0) {
 }
 
 // ---------------------------------------------------------------------------
-// 2. Build the three images through Compose (load into the local daemon).
+// 2. Build the four images through Compose (load into the local daemon).
 // ---------------------------------------------------------------------------
 
 const build = run('docker', compose('build', ...SERVICES), COMMAND_TIMEOUTS.build);
@@ -397,7 +397,7 @@ SERVICES.forEach((service, index) => {
 });
 
 // ---------------------------------------------------------------------------
-// 4. Boot the default profile and wait for the three services to be healthy.
+// 4. Boot the default profile and wait for the four services to be healthy.
 // ---------------------------------------------------------------------------
 
 const up = run('docker', compose('up', '--detach'), COMMAND_TIMEOUTS.up);

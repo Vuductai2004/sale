@@ -1,9 +1,9 @@
-# Build context for docker/Dockerfile.{api,worker,command-center}: the repository
-# root. Dependencies and build output are produced inside the builder stage, so the
-# host copies are never sent. Everything the builder copies stays included —
-# package.json, pnpm-lock.yaml, pnpm-workspace.yaml, turbo.json, .npmrc, the apps/
-# and packages/ sources — as does the Markdown under packages/second-brain that the
-# knowledge loader reads at runtime.
+# Build context for docker/Dockerfile.{api,worker,tenant-console,platform-admin}: the
+# repository root. Dependencies and build output are produced inside the builder
+# stage, so host copies are never sent. Everything the builder copies stays
+# included — package.json, pnpm-lock.yaml, pnpm-workspace.yaml, turbo.json, .npmrc,
+# apps/ and packages/ sources — as does the Markdown under packages/second-brain
+# that the knowledge loader reads at runtime.
 
 # Secrets and VCS metadata
 .env
@@ -26,11 +26,8 @@ logs
 **/*.log
 
 # Documents and planning material: no image reads these
-**/*.pdf
-reports
-presentation
+docs
 plans
-research
 scratch
 testcases
 implement

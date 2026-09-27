@@ -22,6 +22,7 @@
     "test:unit": "vitest run",
     "test:adversarial": "vitest run --config vitest.adversarial.config.ts",
     "test:security": "vitest run --config vitest.security.config.ts",
+    "test:rls-rehearsal": "vitest run --config vitest.rls.rehearsal.config.ts",
     "db:migrate:rehearse": "node scripts/rehearse-migrations.mjs"
   },
   "dependencies": {

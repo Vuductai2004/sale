@@ -35,7 +35,7 @@ name: Production Quality and Verification Pipeline
 # a workflow that only names `main` never validates the code that actually lands.
 on:
   push:
-    branches: [main, 'init/agent-solution', 'release/*', 'feat/**']
+    branches: [main, 'init/agent-solution', 'refactor/agent-solution', 'release/*', 'feat/**']
   pull_request:
     branches: [main, 'init/agent-solution']
 
@@ -77,12 +77,24 @@ jobs:
       - name: Type-check
         run: pnpm typecheck
       - name: Build every workspace package
-        run: pnpm build
+        run: NEXT_STANDALONE=1 pnpm build
       - name: Verify deterministic P5 load smoke safety counters
-        run: node scripts/p5-load-harness.mjs --profile smoke --assert-safe-smoke
+        run: node tests/load/p5-load-harness.mjs --profile smoke --assert-safe-smoke
+      - name: Upload built outputs and Turbo cache for downstream shards
+        uses: actions/upload-artifact@v4
+        with:
+          name: static-analysis-build
+          if-no-files-found: error
+          include-hidden-files: true
+          path: |
+            apps/**/dist/**
+            packages/**/dist/**
+            apps/tenant-console/.next/standalone/**
+            apps/platform-admin/.next/standalone/**
+            .turbo/**
 
-  unit-and-contract-tests:
-    name: 2. Unit and Contract Tests
+  unit-core:
+    name: 2. Core and Package Unit Tests
     needs: static-analysis
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -95,25 +107,164 @@ jobs:
           cache: pnpm
       - name: Install the frozen workspace
         run: pnpm install --frozen-lockfile
-      # `test:contracts` is implemented by packages/core-engine
-      # (`vitest.contracts.config.ts`): canonical JSON plus the SHA-256/HMAC
-      # primitives every durable digest is computed with, and the authority-rank
-      # vocabulary the policy boundary compares against. The guard fails this job
-      # if that implementer disappears, because reporting this job green would
-      # claim a suite that never ran.
-      - name: Require the unit and contract tasks to be implemented
-        run: node scripts/require-implemented-tasks.mjs test:unit test:contracts test:pilots test:e2e
-      - name: Unit tests
-        run: pnpm test:unit
+      - name: Download static build outputs and Turbo cache
+        uses: actions/download-artifact@v4
+        with:
+          name: static-analysis-build
+          path: .
+      - name: Require the core unit task to be implemented
+        run: node scripts/require-implemented-tasks.mjs test:unit
+      - name: Unit tests for every workspace except worker
+        run: pnpm turbo run test:unit --filter '!@agentos/worker'
+      - name: Offline mock-ERP service tests
+        run: node --test services/mock-erp/test/server.test.mjs
+
+  unit-worker:
+    name: 3. Worker Unit Tests
+    needs: static-analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - name: Install the frozen workspace
+        run: pnpm install --frozen-lockfile
+      - name: Download static build outputs and Turbo cache
+        uses: actions/download-artifact@v4
+        with:
+          name: static-analysis-build
+          path: .
+      - name: Require the worker unit task to be implemented
+        run: node scripts/require-implemented-tasks.mjs test:unit
+      - name: Worker unit tests
+        run: pnpm --filter @agentos/worker test:unit
+
+  contracts:
+    name: 4. Contract Tests
+    needs: static-analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - name: Install the frozen workspace
+        run: pnpm install --frozen-lockfile
+      - name: Download static build outputs and Turbo cache
+        uses: actions/download-artifact@v4
+        with:
+          name: static-analysis-build
+          path: .
+      - name: Require the contract task to be implemented
+        run: node scripts/require-implemented-tasks.mjs test:contracts
       - name: Contract tests
         run: pnpm test:contracts
-      - name: Offline P1 pilot harness
-        run: pnpm test:pilots
-      - name: Offline worker E2E regression suite
-        run: pnpm test:e2e
+
+  adversarial:
+    name: 5. Adversarial Tests
+    needs: static-analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - name: Install the frozen workspace
+        run: pnpm install --frozen-lockfile
+      - name: Download static build outputs and Turbo cache
+        uses: actions/download-artifact@v4
+        with:
+          name: static-analysis-build
+          path: .
+      - name: Require the adversarial task to be implemented
+        run: node scripts/require-implemented-tasks.mjs test:adversarial
+      - name: Adversarial tests
+        run: pnpm test:adversarial
+
+  security:
+    name: 6. Security Tests
+    needs: static-analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - name: Install the frozen workspace
+        run: pnpm install --frozen-lockfile
+      - name: Download static build outputs and Turbo cache
+        uses: actions/download-artifact@v4
+        with:
+          name: static-analysis-build
+          path: .
+      - name: Require the security task to be implemented
+        run: node scripts/require-implemented-tasks.mjs test:security
+      - name: Security tests
+        run: pnpm test:security
+
+  pilots:
+    name: 7. Pilot Tests
+    needs: static-analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - name: Install the frozen workspace
+        run: pnpm install --frozen-lockfile
+      - name: Download static build outputs and Turbo cache
+        uses: actions/download-artifact@v4
+        with:
+          name: static-analysis-build
+          path: .
+      - name: Require the pilot task to be implemented
+        run: node scripts/require-implemented-tasks.mjs test:pilots
+      - name: Offline pilot harness
+        run: pnpm --filter @agentos/worker test:pilots
+
+  e2e:
+    name: 8. Worker E2E Tests
+    needs: static-analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+      - name: Install the frozen workspace
+        run: pnpm install --frozen-lockfile
+      - name: Download static build outputs and Turbo cache
+        uses: actions/download-artifact@v4
+        with:
+          name: static-analysis-build
+          path: .
+      - name: Require the E2E task to be implemented
+        run: node scripts/require-implemented-tasks.mjs test:e2e
+      - name: Worker E2E regression suite
+        run: pnpm --filter @agentos/worker test:e2e
 
   database-migration-rehearsal:
-    name: 3. Raw SQL Migration and RLS Rehearsal
+    name: 9. Raw SQL Migration and RLS Rehearsal
     needs: static-analysis
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -142,6 +293,11 @@ jobs:
           cache: pnpm
       - name: Install the frozen workspace
         run: pnpm install --frozen-lockfile
+      - name: Download static build outputs and Turbo cache
+        uses: actions/download-artifact@v4
+        with:
+          name: static-analysis-build
+          path: .
       # The RLS suite connects as a NOBYPASSRLS role and the migration grants
       # privileges to it only when it already exists, so the repository's own
       # local/CI bootstrap (init.sql then init-roles.sh) runs first. The role
@@ -165,8 +321,15 @@ jobs:
         env:
           DATABASE_URL: postgresql://test_user:test_password@127.0.0.1:5432/agent_os_rehearsal
         run: pnpm db:migrate:rehearse
-      # The RLS suite has no skip path: a missing DATABASE_URL, an unmigrated
-      # schema, or a role that bypasses row security all fail it.
+      # These live database gates remain ordered because they share one
+      # PostgreSQL instance, tenant fixtures, and append-only audit/evidence rows.
+      # The rehearsal writes its synthetic fixtures with the privileged connecting role and then
+      # asserts every RLS denial through `SET LOCAL ROLE agentos_app`, so it is the one gate that
+      # needs the bootstrap URL; the policy, P5 and integration gates run as `agentos_app`.
+      - name: Verify the RLS rehearsal fixtures and app-role denials
+        env:
+          DATABASE_URL: postgresql://test_user:test_password@127.0.0.1:5432/agent_os_rehearsal
+        run: pnpm test:rls-rehearsal
       - name: Verify the RLS policies from the NOBYPASSRLS application role
         env:
           DATABASE_URL: postgresql://agentos_app:agentos_app_password@127.0.0.1:5432/agent_os_rehearsal
@@ -179,10 +342,6 @@ jobs:
       # The P1 Customer Care path has no skip path either: it drives the gateway,
       # the durable task store, the skill runtime and the evidence/audit writers
       # against the rehearsed schema, and fails when a prerequisite is missing.
-      # The host smokes it drives are built only implicit in job 1, so this job
-      # builds the workspaces it loads before running it.
-      - name: Build the workspaces the Care path smoke loads
-        run: pnpm build
       - name: Verify the P1 Customer Care and P2 Sales execution paths end to end
         env:
           APP_ENV: ci
@@ -202,48 +361,25 @@ jobs:
           MOCK_SECRET_KEY: ci-mock-erp-shared-secret
         run: pnpm test:integration
 
-  adversarial-and-security-tests:
-    name: 4. Adversarial Security and Governance Tests
-    needs: [unit-and-contract-tests, database-migration-rehearsal]
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: pnpm
-      - name: Install the frozen workspace
-        run: pnpm install --frozen-lockfile
-      # Both suites are implemented and offline, so this job needs no service:
-      # `test:adversarial` runs the durable effect guard (packages/core-engine)
-      # and the effect-reservation/workflow arbitration repositories
-      # (packages/database); `test:security` runs the policy enforcement point
-      # (packages/core-engine) and the approval queue plus the audit/evidence
-      # chains (packages/database). The guard fails this job if an implementer
-      # disappears, because an empty run would report a green security gate
-      # (implement/09 §4: a gate is closed only once executed). These offline
-      # cases cannot stand in for the real durable store; that evidence belongs
-      # to job 3 and to the gate-environment rehearsal.
-      - name: Require the adversarial and security tasks to be implemented
-        run: node scripts/require-implemented-tasks.mjs test:adversarial test:security
-      - name: Adversarial tests
-        run: pnpm test:adversarial
-      - name: Security tests
-        run: pnpm test:security
-
   docker-build-load-and-smoke:
-    name: 5. Named Image Build, Local Load, Inspect, and Boot (no publish)
-    needs: adversarial-and-security-tests
+    name: 10. Named Image Build, Local Load, Inspect, and Boot (no publish)
+    needs:
+      - unit-core
+      - unit-worker
+      - contracts
+      - adversarial
+      - security
+      - pilots
+      - e2e
+      - database-migration-rehearsal
     runs-on: ubuntu-latest
     timeout-minutes: 75
     steps:
       - uses: actions/checkout@v4
       # This job runs the repository's plain-Node smoke — `scripts/docker-smoke.mjs`,
       # the same file the root `pnpm docker:smoke` script wraps. It drives `docker`
-      # and `docker compose` directly and installs nothing into the workspace, so
-      # this job needs neither pnpm setup nor `pnpm install`.
+      # and `docker compose` directly and installs nothing into the workspace, so this
+      # job needs neither pnpm setup nor `pnpm install`.
       - uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -252,9 +388,9 @@ jobs:
       # gitignored (never committed) in the runner's workspace.
       - name: Provide the local/CI environment file Compose reads
         run: cp .env.example .env
-      # Builds api/worker/command-center from docker/Dockerfile.*, loads them into
-      # the local daemon, inspects each image, boots the default Compose profile,
-      # waits for the three services to report healthy, then tears down its own
-      # Compose project. No image is pushed, published, or tagged for a registry.
+      # Builds api/worker/tenant-console/platform-admin from docker/Dockerfile.*,
+      # loads and inspects each image, boots the default Compose profile, waits for all
+      # four application services to become healthy, then tears down its own Compose
+      # project. No image is pushed, published, or tagged for a registry.
       - name: Build, load, inspect, and boot the named images
         run: node scripts/docker-smoke.mjs --project agentos-ci-smoke --env-file .env --wait-seconds 600

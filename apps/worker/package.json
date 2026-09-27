@@ -10,7 +10,7 @@
     "lint": "node ../../scripts/eslint.mjs",
     "test:e2e": "vitest run --config vitest.e2e.config.ts",
     "test:unit": "vitest run --config vitest.config.ts",
-    "test:pilots": "vitest run src/runtime/care/pilot-04.test.ts src/runtime/sales/pilot-02.test.ts"
+    "test:pilots": "vitest run --config vitest.pilots.config.ts"
   },
   "dependencies": {
     "@agentos/adapters": "workspace:*",

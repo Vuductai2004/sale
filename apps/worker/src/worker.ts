@@ -1,23 +1,16 @@
 import { randomUUID } from 'node:crypto';
 import { packageName as adaptersPackageName } from '@agentos/adapters';
 import {
-  AutonomyService,
   packageName as coreEnginePackageName,
   RevenueOrchestrator,
   type AutonomyAdmissionPort,
-  type AutonomyAuditEvent,
-  type AutonomyPolicyRecord,
-  type AutonomyStore,
 } from '@agentos/core-engine';
 import {
   packageName as databasePackageName,
   DurableWorkflowRepository,
-  P5AutonomyRepository,
   assertCompleteCheckpoint,
   readCrossDomainLifecycle,
-  withTenantContext,
   type DurableTaskRecord,
-  type AutonomyPolicyRecord as DatabaseAutonomyPolicyRecord,
   type TenantTransactionRunner,
 } from '@agentos/database';
 import { packageName as skillsPackageName } from '@agentos/skills';
@@ -34,26 +27,25 @@ import { createWorkerConnectors, type WorkerConnectorEnv, type WorkerConnectorOp
 import { nodeHmacSha256Hex } from './runtime/hmac.js';
 
 import {
-  createCareOrchestratorFactory,
-  getUnboundCapabilities,
   type CareOrchestratorFactoryOptions,
 } from './runtime/care/index.js';
 import {
-  createSalesOrchestratorFactory,
-  getSalesUnboundCapabilities,
   type SalesOrchestratorFactoryOptions,
 } from './runtime/sales/index.js';
 import {
   createDomainRuntimeRegistry,
-  type DomainRuntimeBinding,
   type DomainRuntimeRegistry,
   type DomainSignalContract,
 } from './runtime/domain-registry.js';
 import {
-  createMarketingOrchestratorFactory,
   MARKETING_SIGNAL_CONTRACT_DEFAULTS,
   type MarketingOrchestratorFactoryOptions,
 } from './runtime/marketing/factory.js';
+import { createDatabaseAutonomy } from './worker-database-autonomy.js';
+import { createWorkerDomainBindings } from './worker-bindings.js';
+import { createWorkerPoller, type WorkerPollerHandle } from './worker-polling.js';
+
+export type { WorkerPollerHandle } from './worker-polling.js';
 
 export const VALID_AGENT_MODULES: readonly string[] = Object.freeze(['support', 'sales', 'marketing']);
 
@@ -130,105 +122,8 @@ function hasResumeEvent(value: unknown): boolean {
   const record = asRecord(value);
   return record !== null && asRecord(record['resume_event']) !== null;
 }
-function workerApprovedState(value: string, field: string): 'MINIMUM' | 'PROMOTED' {
-  if (value === 'MINIMUM' || value === 'PROMOTED') return value;
-  throw new Error(`P5_AUTONOMY_RECORD_INVALID: ${field} must be MINIMUM or PROMOTED.`);
-}
-
-function workerCoreAutonomyRecord(record: DatabaseAutonomyPolicyRecord): AutonomyPolicyRecord {
-  if (record.provenance['source'] !== 'SERVER_POLICY') {
-    throw new Error('P5_AUTONOMY_RECORD_INVALID: autonomy provenance is not server policy.');
-  }
-  return {
-    policy_id: record.policy_id,
-    policy_version: record.policy_version,
-    tenant_id: record.tenant_id,
-    skill_id: record.skill_id,
-    state: record.state,
-    previous_approved_state: workerApprovedState(record.previous_approved_state, 'previous_approved_state'),
-    evidence_window_ref: record.evidence_window_ref,
-    approver_id: record.approver_id,
-    reason: record.reason,
-    parameters: { ...record.parameters },
-    provenance: { source: 'SERVER_POLICY' },
-    effective_at: record.effective_at,
-    rollback: {
-      policy_version: record.rollback_policy_version,
-      state: workerApprovedState(record.rollback_state, 'rollback_state'),
-    },
-    audit_ref: record.audit_ref,
-    evidence_ref: record.evidence_ref,
-  };
-}
-
-function workerDatabaseAutonomyStore(repository: P5AutonomyRepository): AutonomyStore {
-  return {
-    async getCurrent(input) {
-      const record = await repository.get(input.tenant_id, input.skill_id, input.policy_version);
-      return record === null ? undefined : workerCoreAutonomyRecord(record);
-    },
-    async put(record) {
-      await repository.commitPolicy({
-        tenant_id: record.tenant_id,
-        skill_id: record.skill_id,
-        policy_version: record.policy_version,
-        policy_id: record.policy_id,
-        state: record.state,
-        previous_approved_state: record.previous_approved_state,
-        evidence_window_ref: record.evidence_window_ref,
-        approver_id: record.approver_id,
-        reason: record.reason,
-        parameters: { ...record.parameters },
-        provenance: { ...record.provenance },
-        effective_at: record.effective_at,
-        rollback_policy_version: record.rollback.policy_version,
-        rollback_state: record.rollback.state,
-        audit_ref: record.audit_ref,
-        evidence_ref: record.evidence_ref,
-      });
-    },
-    async listCurrent(tenant_id) {
-      const records = await repository.list(tenant_id);
-      return records.map(workerCoreAutonomyRecord);
-    },
-    async listHistory(tenant_id) {
-      const snapshots = await repository.listPolicySnapshots(tenant_id);
-      const records: AutonomyPolicyRecord[] = [];
-      for (const snapshot of snapshots) {
-        if (typeof snapshot !== 'object' || snapshot === null) continue;
-        const record = snapshot as Partial<AutonomyPolicyRecord>;
-        if (record.tenant_id !== tenant_id || record.provenance?.source !== 'SERVER_POLICY') continue;
-        if (typeof record.policy_id !== 'string' || typeof record.skill_id !== 'string') continue;
-        if (typeof record.policy_version !== 'string' || typeof record.state !== 'string') continue;
-        if (typeof record.effective_at !== 'string' || record.rollback === undefined) continue;
-        records.push(record as AutonomyPolicyRecord);
-      }
-      return records;
-    },
-    async isTenantPaused(tenant_id) {
-      const controls = await repository.getControls(tenant_id);
-      return controls?.paused ?? false;
-    },
-    async setTenantPaused(tenant_id, paused) {
-      const current = await repository.getControls(tenant_id);
-      await repository.commitControls({
-        tenant_id,
-        paused,
-        kill_switch: current?.kill_switch ?? false,
-        actor: current?.actor ?? null,
-        reason: current?.reason ?? null,
-        effective_at: new Date().toISOString(),
-      });
-    },
-  };
-}
 
 
-export interface WorkerPollerHandle {
-  readonly isRunning: boolean;
-  stop(): Promise<void>;
-  pollOnce(): Promise<number>;
-}
 
 export interface WorkerHandle {
   readonly dependencies: readonly string[];
@@ -577,62 +472,11 @@ export function startWorker(
   }
 
   const workflowRepository = options.workflowRepository ?? new DurableWorkflowRepository();
-  const hasDatabase = options.databaseRunner !== undefined
-    || (typeof env.DATABASE_URL === 'string' && env.DATABASE_URL.trim().length > 0);
-  const autonomyRepository = hasDatabase
-    ? new P5AutonomyRepository(options.databaseRunner ?? withTenantContext)
-    : undefined;
-  const autonomy: AutonomyAdmissionPort | undefined = options.autonomy
-    ?? (autonomyRepository === undefined
-      ? undefined
-      : new AutonomyService(workerDatabaseAutonomyStore(autonomyRepository), {
-          audit: {
-            async append(event: AutonomyAuditEvent): Promise<void> {
-              const actor = event.actor?.trim();
-              if (actor === undefined || actor.length === 0) {
-                throw new Error('P5_AUTONOMY_ACTOR_REQUIRED: an identified actor is required.');
-              }
-              if (event.event === 'KILL_SWITCH' || event.event === 'CALLER_ASSERTION_REJECTED') {
-                await autonomyRepository.appendControlEvent({
-                  tenant_id: event.tenant_id,
-                  event_type: event.event,
-                  actor,
-                  reason: event.reason,
-                  skill_id: event.skill_id ?? null,
-                  policy_version: event.policy_version ?? null,
-                  occurred_at: event.occurred_at,
-                });
-                if (event.event === 'KILL_SWITCH') {
-                  await autonomyRepository.commitControls({
-                    tenant_id: event.tenant_id,
-                    paused: true,
-                    kill_switch: true,
-                    actor,
-                    reason: event.reason,
-                    effective_at: event.occurred_at,
-                  });
-                }
-                return;
-              }
-              if (event.skill_id === undefined || event.policy_version === undefined || event.record === undefined) {
-                throw new Error('P5_AUTONOMY_EVENT_INCOMPLETE: skill, version, and record are required.');
-              }
-              await autonomyRepository.appendPolicyEvent({
-                tenant_id: event.tenant_id,
-                skill_id: event.skill_id,
-                policy_version: event.policy_version,
-                trigger: event.event,
-                from_state: event.record.previous_approved_state,
-                to_state: event.record.state,
-                actor,
-                reason: event.reason,
-                audit_ref: event.record.audit_ref,
-                snapshot: { ...event.record },
-                occurred_at: event.occurred_at,
-              });
-            },
-          },
-        }));
+  const autonomy = createDatabaseAutonomy({
+    databaseRunner: options.databaseRunner,
+    databaseUrl: env.DATABASE_URL,
+    autonomy: options.autonomy,
+  });
 
   // The brokered journey is opt-in and fail-closed: without an explicit `true` no broker is bound,
   // so a plan that declares a handoff refuses rather than admitting a cross-domain run.
@@ -668,208 +512,49 @@ export function startWorker(
       };
 
   const enabledModules = parseEnabledAgentModules(env.ENABLED_AGENT_MODULES);
-  const bindings: DomainRuntimeBinding[] = [];
-
-  let careOrchestratorFactory: ((tenant_id: string) => Promise<RevenueOrchestrator | null> | RevenueOrchestrator | null) | null = null;
-  if (enabledModules.includes('support')) {
-    const unboundCapabilities = getUnboundCapabilities(careFactoryOptions);
-    for (const cap of unboundCapabilities) {
-      blockers.push(`CARE_CAPABILITY_UNBOUND: ${cap}`);
-    }
-
-    const careFactory = unboundCapabilities.length === 0
-      ? createCareOrchestratorFactory(careFactoryOptions)
-      : null;
-
-    careOrchestratorFactory = options.orchestratorFactory ?? careFactory;
-
-    if (!careOrchestratorFactory) {
-      blockers.push('CARE_ORCHESTRATOR_UNBOUND: No authentic Customer Care RevenueOrchestrator factory provided (fail closed).');
-    } else {
-      bindings.push({
-        contract: CARE_SIGNAL_CONTRACT,
-        createOrchestrator: careOrchestratorFactory,
-      });
-    }
-  }
-
-  if (enabledModules.includes('sales')) {
-    const rawChannels = env.SALES_SIGNAL_SOURCE_CHANNELS;
-    const rawEventTypes = env.SALES_SIGNAL_EVENT_TYPES;
-    const salesChannels = rawChannels ? rawChannels.split(',').map((c) => c.trim()).filter(Boolean) : [];
-    const salesEventTypes = rawEventTypes ? rawEventTypes.split(',').map((e) => e.trim()).filter(Boolean) : [];
-
-    if (salesChannels.length === 0 || salesEventTypes.length === 0) {
-      blockers.push('SALES_CAPABILITY_UNBOUND: SALES_SIGNAL_SOURCE_CHANNELS and SALES_SIGNAL_EVENT_TYPES must be configured and non-empty');
-    } else {
-      const salesFactoryOptions: SalesOrchestratorFactoryOptions = options.salesFactoryOptions === undefined
-        ? {
-            workerId,
-            workflowRepository: workflowRepository as DurableWorkflowRepository,
-            erp_read: connectors.erp_read,
-            ...(crossDomainHandoff === undefined ? {} : { crossDomainHandoff }),
-            ...(autonomy === undefined ? {} : { autonomy }),
-          }
-        : {
-            ...options.salesFactoryOptions,
-            ...(options.salesFactoryOptions.crossDomainHandoff !== undefined || crossDomainHandoff === undefined
-              ? {}
-              : { crossDomainHandoff }),
-            ...(options.salesFactoryOptions.autonomy !== undefined || autonomy === undefined
-              ? {}
-              : { autonomy }),
-          };
-
-      // Reported, never used to suppress the domain: a deployment that binds only the read
-      // connectors still serves catalog/stock/customer reads and refuses each mutation at
-      // dispatch. The default factory is built only when no injected factory already covers it,
-      // so a supplied factory never forces construction of a graph the caller replaced.
-      const salesUnboundCapabilities = getSalesUnboundCapabilities(salesFactoryOptions);
-      for (const cap of salesUnboundCapabilities) {
-        blockers.push(`SALES_CAPABILITY_UNBOUND: ${cap}`);
-      }
-
-      const salesFactory = options.salesOrchestratorFactory
-        ? null
-        : createSalesOrchestratorFactory(salesFactoryOptions);
-      const salesOrchestratorFactory = options.salesOrchestratorFactory ?? salesFactory;
-
-      if (!salesOrchestratorFactory) {
-        blockers.push('SALES_ORCHESTRATOR_UNBOUND: No authentic Sales RevenueOrchestrator factory provided (fail closed).');
-      } else {
-        bindings.push({
-          contract: {
-            module: 'sales',
-            source_channels: Object.freeze([...salesChannels, CROSS_DOMAIN_HANDOFF_CHANNEL]),
-            event_types: Object.freeze([
-              ...salesEventTypes,
-              CROSS_DOMAIN_HANDOFF_EVENT_TYPES['marketing_to_sales'] as string,
-            ]),
-            signal_invalid_code: 'SALES_SIGNAL_INVALID',
-          },
-          createOrchestrator: salesOrchestratorFactory,
-        });
-      }
-    }
-  }
-
-  if (enabledModules.includes('marketing')) {
-    const marketingChannels = env.MARKETING_SIGNAL_SOURCE_CHANNELS
-      ? env.MARKETING_SIGNAL_SOURCE_CHANNELS.split(',').map((value) => value.trim()).filter(Boolean)
-      : [...MARKETING_SIGNAL_CONTRACT_DEFAULTS.source_channels];
-    const marketingEventTypes = env.MARKETING_SIGNAL_EVENT_TYPES
-      ? env.MARKETING_SIGNAL_EVENT_TYPES.split(',').map((value) => value.trim()).filter(Boolean)
-      : [...MARKETING_SIGNAL_CONTRACT_DEFAULTS.event_types];
-
-    let marketingFactory = options.marketingOrchestratorFactory;
-    if (!marketingFactory) {
-      try {
-        marketingFactory = createMarketingOrchestratorFactory({
-          ...(options.marketingFactoryOptions ?? {}),
-          workerId,
-          workflowRepository: options.marketingFactoryOptions?.workflowRepository ?? workflowRepository as DurableWorkflowRepository,
-          ...(env.AUDIT_HMAC_SECRET === undefined ? {} : { auditSecret: env.AUDIT_HMAC_SECRET }),
-          ...(options.marketingFactoryOptions?.crossDomainHandoff !== undefined
-            ? {}
-            : crossDomainHandoff === undefined ? {} : { crossDomainHandoff }),
-          ...(options.marketingFactoryOptions?.autonomy !== undefined || autonomy === undefined
-            ? {}
-            : { autonomy }),
-        });
-      } catch (error) {
-        blockers.push('MARKETING_ORCHESTRATOR_UNBOUND: ' + (error instanceof Error ? error.message : String(error)));
-      }
-    }
-
-    if (marketingFactory) {
-      bindings.push({
-        contract: {
-          module: 'marketing',
-          source_channels: Object.freeze(marketingChannels),
-          event_types: Object.freeze(marketingEventTypes),
-          signal_invalid_code: 'MARKETING_SIGNAL_INVALID',
-        },
-        createOrchestrator: marketingFactory,
-      });
-    }
-  }
-
+  const bindings = createWorkerDomainBindings({
+    env,
+    workerId,
+    workflowRepository,
+    connectors,
+    enabledModules,
+    blockers,
+    autonomy,
+    crossDomainHandoff,
+    careSignalContract: CARE_SIGNAL_CONTRACT,
+    crossDomainHandoffChannel: CROSS_DOMAIN_HANDOFF_CHANNEL,
+    crossDomainHandoffEventTypes: CROSS_DOMAIN_HANDOFF_EVENT_TYPES,
+    marketingSignalContractDefaults: MARKETING_SIGNAL_CONTRACT_DEFAULTS,
+    careFactoryOptions,
+    orchestratorFactory: options.orchestratorFactory,
+    salesOrchestratorFactory: options.salesOrchestratorFactory,
+    salesFactoryOptions: options.salesFactoryOptions,
+    marketingOrchestratorFactory: options.marketingOrchestratorFactory,
+    marketingFactoryOptions: options.marketingFactoryOptions,
+  });
   const registry = options.domainRegistry ?? createDomainRuntimeRegistry(bindings);
 
   if (tenantIds.length === 0) {
     blockers.push('CARE_TENANT_IDS_EMPTY: No tenants configured; background polling disabled (fail closed).');
   }
-  let running = false;
-  let pollTimer: NodeJS.Timeout | null = null;
-  let activePollCount = 0;
+  const poller = createWorkerPoller({
+    tenantIds,
+    registry,
+    workflowRepository,
+    workerId,
+    leaseDurationMs,
+    pollIntervalMs,
+    autoStartPolling: options.autoStartPolling ?? true,
+    onError: options.onError,
+    processTask: ({ taskRecord, tenant_id }) => processClaimedTask({
+      taskRecord,
+      tenant_id,
+      worker_id: workerId,
+      workflowRepository,
+      registry,
+    }),
+  });
 
-  const pollOnce = async (): Promise<number> => {
-    if (tenantIds.length === 0 || registry.modules().length === 0) return 0;
-    let claimedCount = 0;
-
-    for (const tenant_id of tenantIds) {
-      try {
-        const claimResult = await workflowRepository.claimNextQueuedTask({
-          tenant_id,
-          lease_owner: workerId,
-          lease_duration_ms: leaseDurationMs,
-        });
-
-        if (claimResult) {
-          claimedCount++;
-          await processClaimedTask({
-            taskRecord: claimResult.task,
-            tenant_id,
-            worker_id: workerId,
-            workflowRepository,
-            registry,
-          });
-        }
-      } catch (error) {
-        if (options.onError) options.onError(tenant_id, error);
-        else process.stderr.write(`care worker tenant ${tenant_id} failed: ${error instanceof Error ? error.message : String(error)}\n`);
-      }
-    }
-
-    return claimedCount;
-  };
-
-  const scheduleNext = () => {
-    if (!running) return;
-    pollTimer = setTimeout(() => {
-      activePollCount++;
-      void pollOnce().catch((error: unknown) => {
-        process.stderr.write(`care worker poll failed: ${error instanceof Error ? error.message : String(error)}\n`);
-      }).finally(() => {
-        activePollCount--;
-        scheduleNext();
-      });
-    }, pollIntervalMs);
-  };
-
-  const shouldAutoStart = options.autoStartPolling ?? true;
-  if (shouldAutoStart && tenantIds.length > 0 && registry.modules().length > 0) {
-    running = true;
-    scheduleNext();
-  }
-
-  const poller: WorkerPollerHandle = {
-    get isRunning() {
-      return running;
-    },
-    async stop() {
-      running = false;
-      if (pollTimer) {
-        clearTimeout(pollTimer);
-        pollTimer = null;
-      }
-      // Wait for any in-flight poll to finish
-      while (activePollCount > 0) {
-        await new Promise((resolve) => setTimeout(resolve, 50));
-      }
-    },
-    pollOnce,
-  };
 
   return {
     dependencies: [...DEPENDENCIES],

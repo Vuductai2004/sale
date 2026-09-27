@@ -621,10 +621,12 @@ jobs:
         run: docker build --load -f docker/Dockerfile.api -t agent-solution-api:target .
       - name: Build and load worker image from the named target Dockerfile
         run: docker build --load -f docker/Dockerfile.worker -t agent-solution-worker:target .
-      - name: Build and load Command Center image from the named target Dockerfile
-        run: docker build --load -f docker/Dockerfile.command-center -t agent-solution-command-center:target .
-      - name: Verify all three images are loaded locally before scanning
-        run: docker image inspect agent-solution-api:target agent-solution-worker:target agent-solution-command-center:target
+      - name: Build and load Tenant Console image from the named target Dockerfile
+        run: docker build --load -f docker/Dockerfile.tenant-console -t agent-solution-tenant-console:target .
+      - name: Build and load Platform Admin image from the named target Dockerfile
+        run: docker build --load -f docker/Dockerfile.platform-admin -t agent-solution-platform-admin:target .
+      - name: Verify all four images are loaded locally before scanning
+        run: docker image inspect agent-solution-api:target agent-solution-worker:target agent-solution-tenant-console:target agent-solution-platform-admin:target
       - name: Scan loaded API image
         uses: aquasecurity/trivy-action@master
         with:
@@ -641,10 +643,18 @@ jobs:
           exit-code: '1'
           ignore-unfixed: true
           severity: CRITICAL,HIGH
-      - name: Scan loaded Command Center image
+      - name: Scan loaded Tenant Console image
         uses: aquasecurity/trivy-action@master
         with:
-          image-ref: agent-solution-command-center:target
+          image-ref: agent-solution-tenant-console:target
+          format: table
+          exit-code: '1'
+          ignore-unfixed: true
+          severity: CRITICAL,HIGH
+      - name: Scan loaded Platform Admin image
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: agent-solution-platform-admin:target
           format: table
           exit-code: '1'
           ignore-unfixed: true
@@ -807,7 +817,7 @@ Only explicitly classified low-risk, read-only or bounded reversible action clas
 
 ## 10. CI/CD Target Consistency `[BLUEPRINT][SRS §24 / NFR-001..010]`
 
-The target pipeline uses `pnpm install --frozen-lockfile`, Turborepo task names, raw SQL migration rehearsal, `test:rls-policies`, contract/adversarial tests, `docker/Dockerfile.api`, `docker/Dockerfile.worker`, `docker/Dockerfile.command-center`, and image scanning. The image stage builds all three named images, **loads each into the local daemon before scanning** (`docker build --load`, verified with `docker image inspect`), scans each loaded image, and never pushes or publishes an image. The repository task names the pipeline invokes (`lint`, `typecheck`, `test:unit`, `test:contracts`, `test:adversarial`, `test:security`, `test:pilots`, `test:e2e`, `db:migrate:rehearse`, `test:rls-policies`) are the target scripts defined in `02` §3; it MUST NOT retain npm/Prisma/Flyway/an unnamed root `Dockerfile` as parallel alternatives. No pipeline has run in this documentation-only repository.
+The target pipeline uses `pnpm install --frozen-lockfile`, Turborepo task names, raw SQL migration rehearsal, `test:rls-policies`, contract/adversarial tests, `docker/Dockerfile.api`, `docker/Dockerfile.worker`, `docker/Dockerfile.tenant-console`, `docker/Dockerfile.platform-admin`, and image scanning. The image stage builds all four named images, **loads each into the local daemon before scanning** (`docker build --load`, verified with `docker image inspect`), scans each loaded image, and never pushes or publishes an image. The repository task names the pipeline invokes (`lint`, `typecheck`, `test:unit`, `test:contracts`, `test:adversarial`, `test:security`, `test:pilots`, `test:e2e`, `db:migrate:rehearse`, `test:rls-policies`) are the target scripts defined in `02` §3; it MUST NOT retain npm-only commands, Prisma/Drizzle/Flyway migration paths, an unnamed root Dockerfile, or other alternate toolchain commands. No pipeline has run in this documentation-only repository.
 
 ## 11. Definition of Done and Verification Scenarios `[BLUEPRINT][SRS §27, §28]`
 
