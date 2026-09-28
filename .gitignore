@@ -9,10 +9,12 @@ __pycache__/
 *$py.class
 *.env
 .env
+*.env.local
 .venv/
 !.env.example
 env/
 venv/
+inspect_patcher/
 
 # OS artifacts
 .DS_Store

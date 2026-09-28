@@ -1,0 +1,1230 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AgentOS E-Commerce Storefront — Tích Hợp Bộ 3 AI Agent</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --primary: #0284c7;
+      --primary-dark: #0369a1;
+      --primary-light: #e0f2fe;
+      --accent: #f59e0b;
+      --danger: #ef4444;
+      --success: #10b981;
+      --bg: #0b1120;
+      --surface: #1e293b;
+      --surface-light: #334155;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --border: #334155;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; font-family: 'Plus Jakarta Sans', sans-serif; }
+    body { background: var(--bg); color: var(--text); min-height: 100vh; overflow-x: hidden; }
+
+    /* Top Banner */
+    .top-banner {
+      background: linear-gradient(90deg, #0284c7, #6366f1, #a855f7);
+      color: #fff;
+      padding: 8px 16px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .top-banner-badge {
+      background: rgba(255,255,255,0.25);
+      padding: 2px 8px;
+      border-radius: 999px;
+      margin-right: 8px;
+    }
+
+    /* Navbar */
+    header {
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(12px);
+      position: sticky;
+      top: 0;
+      z-index: 50;
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      padding: 1rem 2rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+    }
+    .brand-logo {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, #38bdf8, #6366f1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.3rem;
+      font-weight: 800;
+      color: #fff;
+      box-shadow: 0 4px 15px rgba(56, 189, 248, 0.3);
+    }
+    .brand-text h2 { font-size: 1.15rem; font-weight: 800; color: #fff; line-height: 1.2; }
+    .brand-text span { font-size: 0.75rem; color: #38bdf8; font-weight: 600; letter-spacing: 0.5px; }
+
+    .nav-actions { display: flex; align-items: center; gap: 1rem; }
+    .user-pill {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      padding: 6px 14px;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text-muted);
+    }
+    .user-pill strong { color: #f8fafc; }
+    .vip-tag {
+      background: linear-gradient(135deg, #f59e0b, #d97706);
+      color: #fff;
+      font-size: 0.7rem;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-weight: 700;
+    }
+    .cart-btn {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      color: #fff;
+      padding: 8px 16px;
+      border-radius: 10px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      position: relative;
+      transition: all 0.2s;
+    }
+    .cart-btn:hover { background: var(--surface-light); border-color: #38bdf8; }
+    .cart-badge {
+      background: #ef4444;
+      color: #fff;
+      font-size: 0.75rem;
+      font-weight: 700;
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    /* Hero Section (Marketing Agent Campaign) */
+    .hero {
+      position: relative;
+      padding: 4.5rem 2rem 3.5rem;
+      background: radial-gradient(circle at 50% 0%, rgba(56, 189, 248, 0.15), transparent 70%),
+                  linear-gradient(180deg, #0b1120 0%, #0f172a 100%);
+      text-align: center;
+      border-bottom: 1px solid rgba(255,255,255,0.06);
+    }
+    .hero-agent-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(56, 189, 248, 0.1);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      color: #38bdf8;
+      padding: 6px 16px;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 1.5rem;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.7; }
+    }
+    .hero h1 {
+      font-size: 3rem;
+      font-weight: 800;
+      line-height: 1.15;
+      margin-bottom: 1rem;
+      background: linear-gradient(135deg, #fff 40%, #94a3b8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .hero p {
+      font-size: 1.15rem;
+      color: var(--text-muted);
+      max-width: 680px;
+      margin: 0 auto 2rem;
+      line-height: 1.6;
+    }
+
+    /* Feature Pillars Ribbon */
+    .pillars-ribbon {
+      max-width: 1200px;
+      margin: -2rem auto 2.5rem;
+      padding: 0 1.5rem;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1rem;
+      position: relative;
+      z-index: 10;
+    }
+    .pillar-card {
+      background: rgba(30, 41, 59, 0.9);
+      backdrop-filter: blur(10px);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 12px;
+      padding: 1.25rem;
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.3);
+      transition: transform 0.2s, border-color 0.2s;
+    }
+    .pillar-card:hover { transform: translateY(-3px); border-color: #38bdf8; }
+    .pillar-icon { font-size: 1.8rem; line-height: 1; }
+    .pillar-content h4 { font-size: 0.95rem; font-weight: 700; color: #fff; margin-bottom: 4px; }
+    .pillar-content p { font-size: 0.8rem; color: var(--text-muted); line-height: 1.4; }
+
+    /* Main Container */
+    .container { max-width: 1200px; margin: 0 auto; padding: 2rem 1.5rem 5rem; }
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      margin-bottom: 2rem;
+    }
+    .section-header h2 { font-size: 1.8rem; font-weight: 800; color: #fff; }
+    .section-header p { font-size: 0.95rem; color: var(--text-muted); margin-top: 4px; }
+
+    /* Product Grid */
+    .product-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(270px, 1fr));
+      gap: 1.75rem;
+    }
+    .product-card {
+      background: var(--surface);
+      border: 1px solid rgba(255,255,255,0.08);
+      border-radius: 16px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+      position: relative;
+    }
+    .product-card:hover {
+      transform: translateY(-6px);
+      border-color: rgba(56, 189, 248, 0.4);
+      box-shadow: 0 16px 32px rgba(0,0,0,0.4);
+    }
+    .product-badge-fixed {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      background: rgba(15, 23, 42, 0.85);
+      border: 1px solid rgba(56, 189, 248, 0.4);
+      color: #38bdf8;
+      font-size: 0.75rem;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-weight: 700;
+      backdrop-filter: blur(8px);
+      z-index: 2;
+    }
+    .product-thumb {
+      height: 200px;
+      background: linear-gradient(135deg, #1e293b, #0f172a);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 4.5rem;
+      border-bottom: 1px solid rgba(255,255,255,0.05);
+      user-select: none;
+    }
+    .product-body {
+      padding: 1.5rem;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+    }
+    .product-title { font-size: 1.15rem; font-weight: 700; color: #fff; margin-bottom: 0.5rem; }
+    .product-desc { font-size: 0.85rem; color: var(--text-muted); line-height: 1.5; margin-bottom: 1.25rem; flex: 1; }
+    .product-meta {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1rem;
+      padding-top: 0.75rem;
+      border-top: 1px solid rgba(255,255,255,0.06);
+    }
+    .product-price { font-size: 1.35rem; font-weight: 800; color: #38bdf8; }
+    .stock-badge { font-size: 0.75rem; color: #10b981; font-weight: 600; display: flex; align-items: center; gap: 4px; }
+    .stock-dot { width: 6px; height: 6px; border-radius: 50%; background: #10b981; }
+
+    .card-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .btn-cart {
+      background: #0284c7;
+      color: #fff;
+      border: none;
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .btn-cart:hover { background: #0369a1; }
+    .btn-ask-ai {
+      background: rgba(255,255,255,0.06);
+      color: #e2e8f0;
+      border: 1px solid rgba(255,255,255,0.12);
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+    .btn-ask-ai:hover { background: rgba(56, 189, 248, 0.15); border-color: #38bdf8; color: #38bdf8; }
+
+    /* Shopping Cart Drawer */
+    .cart-drawer {
+      position: fixed;
+      top: 0;
+      right: -420px;
+      width: 400px;
+      height: 100vh;
+      background: var(--surface);
+      border-left: 1px solid var(--border);
+      box-shadow: -10px 0 30px rgba(0,0,0,0.5);
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      transition: right 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .cart-drawer.open { right: 0; }
+    .cart-header {
+      padding: 1.25rem 1.5rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .cart-header h3 { font-size: 1.15rem; font-weight: 700; }
+    .close-cart { background: none; border: none; color: var(--text-muted); font-size: 1.5rem; cursor: pointer; }
+    .cart-items { flex: 1; overflow-y: auto; padding: 1.5rem; display: flex; flex-direction: column; gap: 1rem; }
+    .cart-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 12px;
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid rgba(255,255,255,0.06);
+      border-radius: 10px;
+    }
+    .cart-item-emoji { font-size: 2rem; }
+    .cart-item-details { flex: 1; }
+    .cart-item-title { font-size: 0.9rem; font-weight: 600; color: #fff; }
+    .cart-item-price { font-size: 0.85rem; color: #38bdf8; font-weight: 700; margin-top: 2px; }
+    .cart-footer { padding: 1.5rem; border-top: 1px solid var(--border); background: rgba(15, 23, 42, 0.8); }
+    .cart-total-row { display: flex; justify-content: space-between; font-size: 1.1rem; font-weight: 700; margin-bottom: 1rem; }
+    .btn-checkout {
+      width: 100%;
+      background: #10b981;
+      color: #fff;
+      border: none;
+      padding: 12px;
+      border-radius: 10px;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .btn-checkout:hover { background: #059669; }
+
+    /* Left Floating Inspector: Customer 360 & Policy Realtime Monitor */
+    .c360-inspector {
+      position: fixed;
+      bottom: 24px;
+      left: 24px;
+      z-index: 40;
+    }
+    .inspector-toggle-btn {
+      background: rgba(30, 41, 59, 0.95);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      color: #38bdf8;
+      padding: 10px 16px;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      cursor: pointer;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      backdrop-filter: blur(10px);
+      transition: all 0.2s;
+    }
+    .inspector-toggle-btn:hover { background: #0284c7; color: #fff; }
+    .inspector-panel {
+      display: none;
+      position: absolute;
+      bottom: 50px;
+      left: 0;
+      width: 360px;
+      background: rgba(15, 23, 42, 0.95);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      border-radius: 16px;
+      padding: 1.25rem;
+      box-shadow: 0 16px 36px rgba(0,0,0,0.6);
+      backdrop-filter: blur(16px);
+      color: #e2e8f0;
+      font-size: 0.85rem;
+    }
+    .inspector-panel.active { display: block; animation: fadeIn 0.2s ease-out; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    .inspector-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.08); font-weight: 700; color: #fff; }
+    .c360-row { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 0.8rem; }
+    .c360-label { color: var(--text-muted); }
+    .c360-val { font-weight: 600; }
+    .c360-tag { padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight: 700; }
+    .tag-ai { background: rgba(56, 189, 248, 0.2); color: #38bdf8; }
+    .tag-human { background: rgba(239, 68, 68, 0.2); color: #ef4444; }
+
+    /* Custom AI Agent Chat Window (Integrated & Interactive) */
+    .agent-chat-wrapper {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      z-index: 999;
+    }
+    .chat-bubble-launcher {
+      width: 60px;
+      height: 60px;
+      border-radius: 30px;
+      background: linear-gradient(135deg, #0284c7, #6366f1);
+      color: #fff;
+      border: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.75rem;
+      cursor: pointer;
+      box-shadow: 0 10px 25px rgba(2, 132, 199, 0.4);
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .chat-bubble-launcher:hover { transform: scale(1.08); box-shadow: 0 12px 30px rgba(2, 132, 199, 0.6); }
+
+    .chat-dialog {
+      display: none;
+      width: 400px;
+      height: 620px;
+      background: #0f172a;
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      border-radius: 20px;
+      box-shadow: 0 20px 45px rgba(0,0,0,0.6);
+      flex-direction: column;
+      overflow: hidden;
+      position: absolute;
+      bottom: 74px;
+      right: 0;
+      animation: popUp 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+    .chat-dialog.active { display: flex; }
+    @keyframes popUp {
+      from { opacity: 0; transform: translateY(20px) scale(0.95); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    .chat-topbar {
+      padding: 14px 16px;
+      background: linear-gradient(135deg, #1e293b, #0f172a);
+      border-bottom: 1px solid rgba(255,255,255,0.08);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .agent-id-info { display: flex; align-items: center; gap: 10px; }
+    .agent-avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, #38bdf8, #6366f1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.1rem;
+    }
+    .agent-text-info h4 { font-size: 0.9rem; font-weight: 700; color: #fff; display: flex; align-items: center; gap: 6px; }
+    .agent-text-info span { font-size: 0.75rem; color: #10b981; display: flex; align-items: center; gap: 4px; }
+    .agent-mode-badge {
+      font-size: 0.7rem;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-weight: 700;
+      background: rgba(56, 189, 248, 0.15);
+      color: #38bdf8;
+      border: 1px solid rgba(56, 189, 248, 0.3);
+    }
+    .agent-mode-badge.takeover {
+      background: rgba(239, 68, 68, 0.2);
+      color: #ef4444;
+      border-color: rgba(239, 68, 68, 0.4);
+    }
+
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .msg {
+      max-width: 82%;
+      padding: 10px 14px;
+      border-radius: 14px;
+      font-size: 0.875rem;
+      line-height: 1.5;
+      word-break: break-word;
+    }
+    .msg-agent {
+      align-self: flex-start;
+      background: #1e293b;
+      border: 1px solid rgba(255,255,255,0.08);
+      color: #f1f5f9;
+      border-bottom-left-radius: 4px;
+    }
+    .msg-user {
+      align-self: flex-end;
+      background: #0284c7;
+      color: #fff;
+      border-bottom-right-radius: 4px;
+    }
+    .msg-alert {
+      align-self: center;
+      max-width: 95%;
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.4);
+      color: #fca5a5;
+      font-size: 0.8rem;
+      text-align: center;
+      border-radius: 8px;
+      padding: 8px 12px;
+    }
+    .msg-time { font-size: 0.65rem; color: #94a3b8; margin-top: 4px; text-align: right; }
+
+    /* Quick Prompt Chips */
+    .quick-chips {
+      padding: 8px 14px;
+      background: rgba(15, 23, 42, 0.95);
+      border-top: 1px solid rgba(255,255,255,0.05);
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      white-space: nowrap;
+    }
+    .quick-chips::-webkit-scrollbar { height: 4px; }
+    .quick-chips::-webkit-scrollbar-thumb { background: #334155; border-radius: 2px; }
+    .chip {
+      background: #1e293b;
+      border: 1px solid rgba(255,255,255,0.1);
+      color: #cbd5e1;
+      font-size: 0.75rem;
+      padding: 4px 10px;
+      border-radius: 999px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+    .chip:hover { background: #0284c7; color: #fff; border-color: #38bdf8; }
+
+    /* Chat Input Area */
+    .chat-inputbar {
+      padding: 12px 14px;
+      background: #1e293b;
+      border-top: 1px solid rgba(255,255,255,0.08);
+      display: flex;
+      gap: 8px;
+    }
+    .chat-inputbar input {
+      flex: 1;
+      background: #0f172a;
+      border: 1px solid rgba(255,255,255,0.12);
+      color: #fff;
+      padding: 10px 14px;
+      border-radius: 10px;
+      font-size: 0.875rem;
+      outline: none;
+    }
+    .chat-inputbar input:focus { border-color: #38bdf8; }
+    .chat-inputbar button {
+      background: #0284c7;
+      color: #fff;
+      border: none;
+      padding: 0 16px;
+      border-radius: 10px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+    .chat-inputbar button:hover { background: #0369a1; }
+  </style>
+</head>
+<body>
+
+  <!-- Top Marketing Announcement -->
+  <div class="top-banner">
+    <div>
+      <span class="top-banner-badge">AI MARKETING FLYWHEEL</span>
+      Tự động nhận diện khách hàng quay lại • Ưu đãi đặc quyền thành viên Gold
+    </div>
+    <div>Tổng đài AI CSKH 24/7 Sẵn Sàng</div>
+  </div>
+
+  <!-- Navbar -->
+  <header>
+    <a href="#" class="brand">
+      <div class="brand-logo">A</div>
+      <div class="brand-text">
+        <h2>AgentOS Store</h2>
+        <span>ECOMMERCE AI AGENT SUITE</span>
+      </div>
+    </a>
+
+    <div class="nav-actions">
+      <div class="user-pill">
+        <span>👤 Khách hàng: <strong>Nguyễn Văn Tài</strong></span>
+        <span class="vip-tag">GOLD</span>
+      </div>
+      <button class="cart-btn" id="openCartBtn">
+        🛒 Giỏ hàng
+        <span class="cart-badge" id="cartBadge">0</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Hero Section -->
+  <section class="hero">
+    <div class="hero-agent-pill">
+      ✨ Đang được điều phối tự động bởi <strong>Marketing Agent (MKT-01)</strong>
+    </div>
+    <h1>Trải Nghiệm Mua Sắm Chuẩn AI Doanh Nghiệp</h1>
+    <p>
+      Khảo sát thực tế cơ chế <strong>Bảo vệ giá niêm yết ERP</strong>, gợi ý Combo gia tăng giỏ hàng, tự động cứu đơn bỏ quên và sẵn sàng bàn giao người thật (Takeover $\le 1.0$s) khi có sự cố.
+    </p>
+  </section>
+
+  <!-- 4 Pillars Ribbon (Tài's Proposal) -->
+  <div class="pillars-ribbon">
+    <div class="pillar-card">
+      <div class="pillar-icon">🔒</div>
+      <div class="pillar-content">
+        <h4>Bảo Vệ Giá Niêm Yết ERP</h4>
+        <p>Khóa cứng chuẩn giá niêm yết ERP, chỉ áp voucher/combo được duyệt, bảo toàn biên lãi ròng.</p>
+      </div>
+    </div>
+    <div class="pillar-card">
+      <div class="pillar-icon">🛒</div>
+      <div class="pillar-content">
+        <h4>Gợi Ý Combo & Upsell</h4>
+        <p>Phân tích giỏ hàng để tư vấn mua kèm thông minh, nâng cao giá trị trung bình đơn.</p>
+      </div>
+    </div>
+    <div class="pillar-card">
+      <div class="pillar-icon">⚡</div>
+      <div class="pillar-content">
+        <h4>Cứu Giỏ Hàng Bỏ Quên</h4>
+        <p>Khách thêm đồ rồi thoát $\rightarrow$ AI tự động kích hoạt thông điệp gỡ bỏ rào cản mua.</p>
+      </div>
+    </div>
+    <div class="pillar-card">
+      <div class="pillar-icon">🚨</div>
+      <div class="pillar-content">
+        <h4>Báo Động Đỏ & Takeover</h4>
+        <p>Phát hiện khiếu nại gay gắt $\rightarrow$ lập tức chuyển giao nhân viên xử lý $\le 1.0$ giây.</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Product Catalog -->
+  <main class="container">
+    <div class="section-header">
+      <div>
+        <h2>Sản Phẩm Đang Kinh Doanh (ERP Synchronized)</h2>
+        <p>Dữ liệu tồn kho và giá được khóa cứng theo thời gian thực từ System of Record.</p>
+      </div>
+    </div>
+
+    <div class="product-grid">
+      <!-- Product 1 -->
+      <div class="product-card">
+        <span class="product-badge-fixed">ERP FIX PRICE</span>
+        <div class="product-thumb">☕</div>
+        <div class="product-body">
+          <h3 class="product-title">Ly Sứ Giữ Nhiệt Aurora 350ml</h3>
+          <p class="product-desc">Men gốm cao cấp chịu nhiệt 120°C, lớp chân không giữ nhiệt 8h, nắp đậy chống tràn thông minh.</p>
+          <div class="product-meta">
+            <span class="product-price">250.000 ₫</span>
+            <span class="stock-badge"><span class="stock-dot"></span> Còn 12 cái</span>
+          </div>
+          <div class="card-actions">
+            <button class="btn-cart" onclick="addToCart('Ly Sứ Aurora 350ml', 250000, '☕')">+ Thêm giỏ</button>
+            <button class="btn-ask-ai" onclick="askAiAbout('Ly Sứ Aurora 350ml')">💬 Hỏi AI</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Product 2 -->
+      <div class="product-card">
+        <span class="product-badge-fixed">ERP FIX PRICE</span>
+        <div class="product-thumb">🎧</div>
+        <div class="product-body">
+          <h3 class="product-title">Tai Nghe Không Dây Pro ANC</h3>
+          <p class="product-desc">Chống ồn chủ động Hybrid ANC 42dB, driver mạ titan âm thanh Hi-Res, pin liên tục 32 giờ.</p>
+          <div class="product-meta">
+            <span class="product-price">1.490.000 ₫</span>
+            <span class="stock-badge"><span class="stock-dot"></span> Còn 28 cái</span>
+          </div>
+          <div class="card-actions">
+            <button class="btn-cart" onclick="addToCart('Tai Nghe Pro ANC', 1490000, '🎧')">+ Thêm giỏ</button>
+            <button class="btn-ask-ai" onclick="askAiAbout('Tai Nghe Pro ANC')">💬 Hỏi AI</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Product 3 -->
+      <div class="product-card">
+        <span class="product-badge-fixed">ERP FIX PRICE</span>
+        <div class="product-thumb">🛵</div>
+        <div class="product-body">
+          <h3 class="product-title">Xe Máy Điện Thông Minh EV-Pro</h3>
+          <p class="product-desc">Động cơ Bosch 3000W chống nước IP67, pin Lithium 72V-30Ah đi 120km/lần sạc, GPS chống trộm.</p>
+          <div class="product-meta">
+            <span class="product-price">34.900.000 ₫</span>
+            <span class="stock-badge"><span class="stock-dot"></span> Còn 4 xe</span>
+          </div>
+          <div class="card-actions">
+            <button class="btn-cart" onclick="addToCart('Xe Máy Điện EV-Pro', 34900000, '🛵')">+ Thêm giỏ</button>
+            <button class="btn-ask-ai" onclick="askAiAbout('Xe Máy Điện EV-Pro')">💬 Hỏi AI</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Product 4 -->
+      <div class="product-card">
+        <span class="product-badge-fixed">COMBO KHUYẾN NGHỊ</span>
+        <div class="product-thumb">⚡</div>
+        <div class="product-body">
+          <h3 class="product-title">Bộ Sạc Nhanh GaN 65W + Cáp</h3>
+          <p class="product-desc">Củ sạc công nghệ GaN 3 cổng siêu nhỏ gọn, tặng kèm cáp Type-C bọc dù chịu lực 100W.</p>
+          <div class="product-meta">
+            <span class="product-price">450.000 ₫</span>
+            <span class="stock-badge"><span class="stock-dot"></span> Còn 65 bộ</span>
+          </div>
+          <div class="card-actions">
+            <button class="btn-cart" onclick="addToCart('Sạc Nhanh GaN 65W', 450000, '⚡')">+ Thêm giỏ</button>
+            <button class="btn-ask-ai" onclick="askAiAbout('Sạc Nhanh GaN 65W')">💬 Hỏi AI</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Cart Drawer -->
+  <div class="cart-drawer" id="cartDrawer">
+    <div class="cart-header">
+      <h3>Giỏ Hàng Của Bạn</h3>
+      <button class="close-cart" id="closeCartBtn">&times;</button>
+    </div>
+    <div class="cart-items" id="cartItemsList">
+      <div style="text-align: center; color: #94a3b8; padding-top: 3rem;">Chưa có sản phẩm nào trong giỏ.</div>
+    </div>
+    <div class="cart-footer">
+      <div class="cart-total-row">
+        <span>Tổng thanh toán:</span>
+        <span id="cartTotalText">0 ₫</span>
+      </div>
+      <button class="btn-checkout" onclick="alert('Đã kích hoạt tạo đơn hàng chính thức qua API-001 (không cho phép sửa giá trái phép)!')">Tiến Hành Đặt Hàng</button>
+    </div>
+  </div>
+
+  <!-- Left Floating Inspector: Customer 360 Real-Time Monitor -->
+  <div class="c360-inspector">
+    <button class="inspector-toggle-btn" id="inspectorToggle">
+      📊 Monitor: Customer 360 & Policy Engine
+    </button>
+    <div class="inspector-panel" id="inspectorPanel">
+      <div class="inspector-header">
+        <span>TRẠNG THÁI HỆ THỐNG AGENTOS</span>
+        <span class="c360-tag tag-ai" id="activeModeTag">AI_CONTROLLED</span>
+      </div>
+      <div class="c360-row">
+        <span class="c360-label">Module Đang Chạy:</span>
+        <span class="c360-val" id="monitorModule">Customer Care & Sales</span>
+      </div>
+      <div class="c360-row">
+        <span class="c360-label">Quyền Hạn PEP:</span>
+        <span class="c360-val">AUTH-0 (Read-only Guard)</span>
+      </div>
+      <div class="c360-row">
+        <span class="c360-label">Chính Sách Giá:</span>
+        <span class="c360-val" style="color: #10b981;">Khóa Giá Sàn ERP (Zero Haggling)</span>
+      </div>
+      <div class="c360-row">
+        <span class="c360-label">Tầng FACT (C360):</span>
+        <span class="c360-val">Tài (Gold Member) • 1 Đơn</span>
+      </div>
+      <div class="c360-row">
+        <span class="c360-label">Tầng SIGNAL:</span>
+        <span class="c360-val" id="monitorSignal">Đang xem trang chủ</span>
+      </div>
+      <div class="c360-row">
+        <span class="c360-label">Thời Gian Takeover:</span>
+        <span class="c360-val" style="color: #38bdf8;">≤ 1.0 giây (Red Alert Ready)</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Interactive AI Agent Chat Widget -->
+  <div class="agent-chat-wrapper">
+    <div class="chat-dialog" id="chatDialog">
+      <div class="chat-topbar">
+        <div class="agent-id-info">
+          <div class="agent-avatar" id="agentAvatar">🤖</div>
+          <div class="agent-text-info">
+            <h4 id="agentName">Trợ Lý AI Doanh Nghiệp</h4>
+            <span id="apiStatusIndicator">● Sẵn sàng (Click ⚙️ để nhập API Key)</span>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <button id="apiKeyConfigBtn" onclick="toggleApiSettings()" title="Cài đặt API Key AI (Gemini / OpenAI)" style="background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: #fff; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center;">⚙️</button>
+          <div class="agent-mode-badge" id="modeBadge">AI_ACTIVE</div>
+        </div>
+      </div>
+
+      <!-- API Key Settings Modal inside Chat -->
+      <div id="apiSettingsBox" style="display: none; background: #1e293b; padding: 12px; border-bottom: 1px solid rgba(56,189,248,0.3); font-size: 0.8rem;">
+        <div style="font-weight: 700; color: #38bdf8; margin-bottom: 6px; display: flex; justify-content: space-between;">
+          <span>Cấu Hình API Key AI Thật</span>
+          <span onclick="toggleApiSettings()" style="cursor: pointer; color: #94a3b8;">✕</span>
+        </div>
+        <div style="display: flex; gap: 8px; margin-bottom: 6px;">
+          <select id="apiProviderSelect" style="background: #0f172a; color: #fff; border: 1px solid #334155; padding: 4px; border-radius: 4px; font-size: 0.75rem;">
+            <option value="gemini">Google Gemini</option>
+            <option value="openai">OpenAI (GPT-4o/mini)</option>
+          </select>
+          <input type="password" id="apiKeyInput" placeholder="Dán API Key (AIzaSy... hoặc sk-...)" style="flex: 1; background: #0f172a; color: #fff; border: 1px solid #334155; padding: 4px 8px; border-radius: 4px; font-size: 0.75rem;" />
+        </div>
+        <div style="display: flex; justify-content: flex-end; gap: 6px;">
+          <button onclick="saveApiKey()" style="background: #0284c7; color: #fff; border: none; padding: 4px 10px; border-radius: 4px; font-size: 0.75rem; font-weight: 600; cursor: pointer;">Lưu Key</button>
+        </div>
+      </div>
+
+      <div class="chat-messages" id="chatMessages">
+        <div class="msg msg-agent">
+          Xin chào anh <strong>Tài</strong>! Em là trợ lý AI được kết nối trực tiếp với hệ thống quản lý của shop. Em có thể giúp gì cho anh về thông số sản phẩm, gợi ý combo ưu đãi hoặc tra cứu đơn hàng ạ?
+          <div class="msg-time">Vừa xong</div>
+        </div>
+      </div>
+
+      <!-- Quick Test Chips -->
+      <div class="quick-chips">
+        <div class="chip" onclick="sendQuickPrompt('Tư vấn giúp tôi tai nghe Pro ANC')">🎧 Tư vấn Tai nghe</div>
+        <div class="chip" onclick="sendQuickPrompt('Tôi là thành viên Gold, tôi có những quyền lợi và ưu đãi gì?')">⭐ Đặc quyền Gold</div>
+        <div class="chip" onclick="sendQuickPrompt('Gợi ý cho tôi combo tiết kiệm nhất')">🎁 Gợi ý Combo</div>
+        <div class="chip" onclick="sendQuickPrompt('Tra cứu đơn hàng #ORD-8892 của tôi')">📦 Tra cứu vận đơn</div>
+        <div class="chip" onclick="sendQuickPrompt('Hàng giao bị nứt vỡ rồi, làm ăn lừa đảo à! Gọi quản lý ra đây!')">🚨 Báo động đỏ (Khiếu nại)</div>
+      </div>
+
+      <div class="chat-inputbar">
+        <input type="text" id="userInput" placeholder="Nhập câu hỏi cho trợ lý AI..." onkeydown="if(event.key === 'Enter') handleSend();" />
+        <button onclick="handleSend()">Gửi</button>
+      </div>
+    </div>
+
+    <button class="chat-bubble-launcher" id="chatLauncher" onclick="toggleChat()">
+      💬
+    </button>
+  </div>
+
+  <script>
+    // Shopping Cart State
+    let cart = [];
+    let cartTotal = 0;
+    let isHumanTakeover = false;
+    let abandonedCartTimer = null;
+
+    // Toggle Cart Drawer
+    const cartDrawer = document.getElementById('cartDrawer');
+    document.getElementById('openCartBtn').onclick = () => cartDrawer.classList.add('open');
+    document.getElementById('closeCartBtn').onclick = () => {
+      cartDrawer.classList.remove('open');
+      triggerAbandonedCartCheck();
+    };
+
+    function addToCart(title, price, emoji) {
+      cart.push({ title, price, emoji });
+      cartTotal += price;
+      updateCartUI();
+      cartDrawer.classList.add('open');
+      document.getElementById('monitorSignal').innerText = `Vừa thêm: ${title}`;
+    }
+
+    function updateCartUI() {
+      document.getElementById('cartBadge').innerText = cart.length;
+      document.getElementById('cartTotalText').innerText = cartTotal.toLocaleString('vi-VN') + ' ₫';
+      const list = document.getElementById('cartItemsList');
+      if (cart.length === 0) {
+        list.innerHTML = '<div style="text-align: center; color: #94a3b8; padding-top: 3rem;">Chưa có sản phẩm nào trong giỏ.</div>';
+        return;
+      }
+      list.innerHTML = cart.map(item => `
+        <div class="cart-item">
+          <div class="cart-item-emoji">${item.emoji}</div>
+          <div class="cart-item-details">
+            <div class="cart-item-title">${item.title}</div>
+            <div class="cart-item-price">${item.price.toLocaleString('vi-VN')} ₫</div>
+          </div>
+        </div>
+      `).join('');
+    }
+
+    // Trụ Cột: Cứu Giỏ Hàng Bỏ Quên (Cart Recovery - SAL-04)
+    function triggerAbandonedCartCheck() {
+      if (cart.length > 0) {
+        clearTimeout(abandonedCartTimer);
+        abandonedCartTimer = setTimeout(() => {
+          openChat();
+          appendAgentMessage(`
+            👋 <strong>[KÍCH HOẠT CỨU GIỎ HÀNG - SAL-04]</strong><br>
+            Em thấy anh Tài đang chọn <em>${cart[cart.length - 1].title}</em> nhưng chưa đặt đơn. 
+            Anh có đang băn khoăn về thông số kỹ thuật hay phí giao hàng không? 
+            Em có thể áp dụng mã miễn phí vận chuyển thành viên <strong>GOLD-SHIP0D</strong> để hỗ trợ anh ngay nhé!
+          `);
+          document.getElementById('monitorSignal').innerText = 'Phát hiện bỏ quên giỏ hàng';
+        }, 3500);
+      }
+    }
+
+    // Toggle Inspector
+    const inspectorPanel = document.getElementById('inspectorPanel');
+    document.getElementById('inspectorToggle').onclick = () => {
+      inspectorPanel.classList.toggle('active');
+    };
+
+    // Chat Window Logic
+    const chatDialog = document.getElementById('chatDialog');
+    function toggleChat() {
+      chatDialog.classList.toggle('active');
+    }
+    function openChat() {
+      chatDialog.classList.add('active');
+    }
+
+    function askAiAbout(productName) {
+      openChat();
+      sendQuickPrompt(`Tư vấn cho tôi về ${productName}`);
+    }
+
+    function sendQuickPrompt(text) {
+      document.getElementById('userInput').value = text;
+      handleSend();
+    }
+
+    function appendUserMessage(text) {
+      const box = document.getElementById('chatMessages');
+      box.innerHTML += `
+        <div class="msg msg-user">
+          ${text}
+          <div class="msg-time">${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+        </div>
+      `;
+      box.scrollTop = box.scrollHeight;
+    }
+
+    function appendAgentMessage(html) {
+      const box = document.getElementById('chatMessages');
+      box.innerHTML += `
+        <div class="msg msg-agent">
+          ${html}
+          <div class="msg-time">${new Date().toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</div>
+        </div>
+      `;
+      box.scrollTop = box.scrollHeight;
+    }
+
+    function appendAlertMessage(text) {
+      const box = document.getElementById('chatMessages');
+      box.innerHTML += `<div class="msg msg-alert">${text}</div>`;
+      box.scrollTop = box.scrollHeight;
+    }
+
+    // API Key State Management (Loaded from localStorage or entered via settings UI)
+    let configuredApiKey = localStorage.getItem('agentos_user_api_key') || '';
+    let configuredProvider = localStorage.getItem('agentos_user_api_provider') || 'gemini';
+
+    function initApiState() {
+      if (configuredApiKey) {
+        document.getElementById('apiStatusIndicator').innerText = `● Đã kết nối ${configuredProvider.toUpperCase()} API (Gemini 2.5 Flash)`;
+        document.getElementById('apiStatusIndicator').style.color = '#38bdf8';
+        document.getElementById('apiKeyInput').value = configuredApiKey;
+        document.getElementById('apiProviderSelect').value = configuredProvider;
+      }
+    }
+    initApiState();
+
+    function toggleApiSettings() {
+      const box = document.getElementById('apiSettingsBox');
+      box.style.display = box.style.display === 'none' ? 'block' : 'none';
+    }
+
+    function saveApiKey() {
+      const key = document.getElementById('apiKeyInput').value.trim();
+      const provider = document.getElementById('apiProviderSelect').value;
+      if (!key) {
+        localStorage.removeItem('agentos_user_api_key');
+        configuredApiKey = '';
+        document.getElementById('apiStatusIndicator').innerText = '● Sẵn sàng (Chế độ mô phỏng offline)';
+        document.getElementById('apiStatusIndicator').style.color = '#10b981';
+        alert('Đã xóa API Key. Hệ thống quay về chế độ luật nghiệp vụ offline!');
+      } else {
+        localStorage.setItem('agentos_user_api_key', key);
+        localStorage.setItem('agentos_user_api_provider', provider);
+        configuredApiKey = key;
+        configuredProvider = provider;
+        document.getElementById('apiStatusIndicator').innerText = `● Đã kết nối ${provider.toUpperCase()} API (Gemini 2.5 Flash)`;
+        document.getElementById('apiStatusIndicator').style.color = '#38bdf8';
+        alert(`Đã lưu ${provider.toUpperCase()} API Key thành công! Tin nhắn sẽ được trả lời bởi Model AI thật.`);
+      }
+      toggleApiSettings();
+    }
+
+    // Call Real AI LLM (Gemini or OpenAI) with Tai's Rules
+    async function callLiveAiApi(userText) {
+      const SYSTEM_PROMPT = `Bạn là Trợ lý AI Bán hàng & CSKH của AgentOS E-Commerce Store (khách hàng tên Nguyễn Văn Tài, thành viên Gold).
+Quy tắc hoạt động sống còn:
+1. BẢO VỆ GIÁ NIÊM YẾT ERP (ZERO HAGGLING POLICY): Giá sản phẩm là chuẩn ERP: Ly sứ Aurora: 250.000đ; Tai nghe Pro ANC: 1.490.000đ; Xe điện EV-Pro: 34.900.000đ; Sạc GaN 65W: 450.000đ. Tuyệt đối không hạ giá sản phẩm. Luôn khẳng định giá niêm yết ERP được áp dụng đồng bộ toàn hệ thống để đảm bảo bảo hành chính hãng và chất lượng cao cấp nhất. Hướng dẫn khách áp dụng mã đặc quyền GOLD-100K hoặc gợi ý mua Combo tối ưu chi phí.
+2. GỢI Ý COMBO & UPSELL: Khách hỏi tai nghe hoặc ly sứ, chủ động gợi ý mua kèm sạc GaN 65W (450.000đ) để được freeship và giảm combo 150k.
+3. TRA CỨU ĐƠN HÀNG: Đơn #ORD-8892 là Xe máy điện EV-Pro, Viettel Post đang giao, dự kiến trước 17:30 chiều nay.
+4. BÁO ĐỘNG ĐỎ: Nếu khách chửi bới, báo hàng hỏng vỡ, khiếu nại gay gắt, đòi gặp quản lý -> Phải bắt đầu câu trả lời bằng chuỗi "[RED_ALERT]" để hệ thống kích hoạt Human Takeover cho Quản lý CSKH Vũ Đức Tài.
+Trả lời bằng tiếng Việt lịch sự, súc tích, chuẩn phong thái trợ lý AI doanh nghiệp cao cấp.`;
+
+      if (configuredProvider === 'gemini') {
+        const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${configuredApiKey}`;
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            contents: [
+              {
+                role: 'user',
+                parts: [{ text: `${SYSTEM_PROMPT}\n\nKhách hàng hỏi: "${userText}"` }]
+              }
+            ]
+          })
+        });
+        if (!res.ok) {
+          const errData = await res.json();
+          throw new Error(errData.error?.message || `Lỗi Gemini API: ${res.status}`);
+        }
+        const data = await res.json();
+        return data.candidates?.[0]?.content?.parts?.[0]?.text || 'Không có phản hồi từ Gemini.';
+      } else {
+        // OpenAI
+        const res = await fetch('https://api.openai.com/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${configuredApiKey}`
+          },
+          body: JSON.stringify({
+            model: 'gpt-4o-mini',
+            messages: [
+              { role: 'system', content: SYSTEM_PROMPT },
+              { role: 'user', content: userText }
+            ],
+            temperature: 0.7
+          })
+        });
+        if (!res.ok) {
+          const errData = await res.json();
+          throw new Error(errData.error?.message || `Lỗi OpenAI API: ${res.status}`);
+        }
+        const data = await res.json();
+        return data.choices?.[0]?.message?.content || 'Không có phản hồi từ OpenAI.';
+      }
+    }
+
+    // Core AI Reasoning Engine (With Live API Support & Fallback)
+    async function handleSend() {
+      const input = document.getElementById('userInput');
+      const text = input.value.trim();
+      if (!text) return;
+      input.value = '';
+
+      appendUserMessage(text);
+      document.getElementById('monitorSignal').innerText = `Khách chat: "${text.slice(0, 25)}..."`;
+
+      // 1. Kiểm tra nếu đang ở chế độ Human Takeover
+      if (isHumanTakeover) {
+        setTimeout(() => {
+          appendAgentMessage(`[Nhân viên Tài]: Em đã ghi nhận phản hồi của anh và đang trực tiếp xử lý với bộ phận kho vận.`);
+        }, 700);
+        return;
+      }
+
+      // 2. Nếu có API Key AI thật được cấu hình -> Gọi trực tiếp LLM
+      if (configuredApiKey) {
+        const loadingId = 'loading-' + Date.now();
+        const box = document.getElementById('chatMessages');
+        box.innerHTML += `<div class="msg msg-agent" id="${loadingId}" style="color: #38bdf8;">⚡ Trợ lý AI đang suy luận từ ${configuredProvider.toUpperCase()}...</div>`;
+        box.scrollTop = box.scrollHeight;
+
+        try {
+          const aiResponse = await callLiveAiApi(text);
+          const loadingEl = document.getElementById(loadingId);
+          if (loadingEl) loadingEl.remove();
+
+          // Kiểm tra nếu AI kích hoạt Red Alert
+          if (aiResponse.includes('[RED_ALERT]')) {
+            appendAlertMessage('🚨 BÁO ĐỘNG ĐỎ: AI nhận diện sự cố gay gắt. Kích hoạt Human Takeover ≤ 1.0s...');
+            isHumanTakeover = true;
+            document.getElementById('modeBadge').className = 'agent-mode-badge takeover';
+            document.getElementById('modeBadge').innerText = 'HUMAN_TAKEOVER';
+            document.getElementById('agentAvatar').innerText = '👨‍💼';
+            document.getElementById('agentName').innerText = 'Vũ Đức Tài (Quản Lý CSKH)';
+            document.getElementById('activeModeTag').className = 'c360-tag tag-human';
+            document.getElementById('activeModeTag').innerText = 'HUMAN_TAKEOVER';
+            document.getElementById('monitorModule').innerText = 'Customer Care (Human Assigned)';
+          }
+
+          const cleanedResponse = aiResponse.replace('[RED_ALERT]', '').trim();
+          appendAgentMessage(`
+            <div style="font-size: 0.7rem; color: #38bdf8; margin-bottom: 4px; font-weight: 700;">✨ Phản hồi từ Live ${configuredProvider.toUpperCase()}:</div>
+            ${cleanedResponse.replace(/\n/g, '<br>')}
+          `);
+          return;
+        } catch (apiErr) {
+          const loadingEl = document.getElementById(loadingId);
+          if (loadingEl) loadingEl.remove();
+          appendAlertMessage(`⚠️ Gọi ${configuredProvider.toUpperCase()} thất bại (${apiErr.message}). Tự động kích hoạt cơ chế an toàn Fallback về bộ luật nội bộ!`);
+          // Tiếp tục chạy xuống logic fallback bên dưới
+        }
+      }
+
+      // 3. LOGIC NỘI BỘ (FALLBACK & OFFLINE DETERMINISTIC RULES)
+      // Kịch bản khiếu nại gay gắt
+      if (text.includes('lừa đảo') || text.includes('nứt vỡ') || text.includes('gọi quản lý') || text.includes('lỗi')) {
+        setTimeout(() => {
+          appendAlertMessage('🚨 BÁO ĐỘNG ĐỎ: Nhận diện cảm xúc tiêu cực gay gắt. Kích hoạt Human Takeover ≤ 1.0s...');
+          isHumanTakeover = true;
+          document.getElementById('modeBadge').className = 'agent-mode-badge takeover';
+          document.getElementById('modeBadge').innerText = 'HUMAN_TAKEOVER';
+          document.getElementById('agentAvatar').innerText = '👨‍💼';
+          document.getElementById('agentName').innerText = 'Vũ Đức Tài (Quản Lý CSKH)';
+          document.getElementById('activeModeTag').className = 'c360-tag tag-human';
+          document.getElementById('activeModeTag').innerText = 'HUMAN_TAKEOVER';
+          document.getElementById('monitorModule').innerText = 'Customer Care (Human Assigned)';
+
+          setTimeout(() => {
+            appendAgentMessage(`
+              <strong>[NHÂN VIÊN TIẾP QUẢN]</strong><br>
+              Chào anh Tài, em là <strong>Vũ Đức Tài - Quản lý CSKH</strong> đã nhận bàn giao cuộc trò chuyện ngay lập tức. Em chân thành xin lỗi vì sự cố giao hàng không như ý. Em đã mở mã khiếu nại <strong>#CASE-9921</strong> trên ERP và cho nhân viên giao lại ngay trong hôm nay mà không tính bất kỳ chi phí nào. Anh giữ máy giúp em nhé!
+            `);
+          }, 800);
+        }, 400);
+        return;
+      }
+
+      // Kịch bản chặn mặc cả
+      if (text.includes('bớt') || text.includes('giảm') || text.includes('mặc cả') || text.includes('hạ giá') || text.includes('chiết khấu')) {
+        setTimeout(() => {
+          appendAgentMessage(`
+            🛡️ <strong>[CHÍNH SÁCH GIÁ NIÊM YẾT ERP - ZERO HAGGLING]</strong><br>
+            Dạ anh Tài ơi, mức giá sản phẩm tại cửa hàng được <strong>đồng bộ cố định trực tiếp từ ERP</strong> để đảm bảo 100% quyền lợi bảo hành chính hãng và chính sách công bằng cho mọi khách hàng, nên em không thể tự ý hạ giá sản phẩm được ạ.<br><br>
+            Tuy nhiên, vì anh là <strong>Hội viên Gold</strong>, em có thể hỗ trợ anh:
+            <ul>
+              <li>Áp dụng mã <strong>VIP-100K</strong> (giảm 100.000đ cho đơn từ 1.000.000đ do hệ thống cấp).</li>
+              <li>Hoặc tư vấn mua theo <strong>Combo</strong> để được miễn phí vận chuyển toàn quốc ạ!</li>
+            </ul>
+          `);
+      }
+
+      // Kịch bản đặc quyền Gold Member
+      if (text.includes('quyền lợi') || text.includes('đặc quyền') || text.includes('thành viên gold')) {
+        setTimeout(() => {
+          appendAgentMessage(`
+            ⭐ <strong>[ĐẶC QUYỀN HỘI VIÊN GOLD DÀNH CHO ANH TÀI]</strong><br>
+            Chúc mừng anh Nguyễn Văn Tài đang sở hữu hạng thành viên <strong>GOLD</strong> tại hệ thống! Các đặc quyền hiện có của anh gồm:<br>
+            • <strong>Voucher độc quyền:</strong> Mã <code>GOLD-100K</code> giảm ngay 100.000đ cho đơn hàng bất kỳ.<br>
+            • <strong>Miễn phí vận chuyển:</strong> 100% Freeship toàn quốc cho mọi gói Combo.<br>
+            • <strong>Bảo hành ưu tiên:</strong> 1 đổi 1 trong 48h và đường dây CSKH riêng giải quyết trong $\le 1.0$s.<br>
+            Anh có muốn em kích hoạt mã <code>GOLD-100K</code> vào giỏ hàng ngay bây giờ không ạ?
+          `);
+        }, 600);
+        return;
+      }
+
+      // Kịch bản tra cứu vận đơn
+      if (text.includes('ORD-8892') || text.includes('vận đơn') || text.includes('tra cứu đơn')) {
+        setTimeout(() => {
+          appendAgentMessage(`
+            📦 <strong>[KẾT QUẢ TRA CỨU ĐƠN HÀNG #ORD-8892]</strong><br>
+            • Sản phẩm: <strong>01 Xe Máy Điện EV-Pro (Xanh Navy)</strong><br>
+            • Đơn vị vận chuyển: <strong>Viettel Post Chuyển Phát Nhanh</strong><br>
+            • Trạng thái hiện tại: <em>Đang trên xe trung chuyển đến Bưu cục Hoàn Kiếm, Hà Nội</em>.<br>
+            • Dự kiến giao: <strong>Chiều nay trước 17:30</strong>.<br>
+            Tài xế sẽ gọi trước khi giao 15 phút, anh chú ý điện thoại giúp em nhé!
+          `);
+        }, 600);
+        return;
+      }
+
+      // Kịch bản gợi ý combo
+      if (text.includes('combo') || text.includes('tiết kiệm') || text.includes('gợi ý')) {
+        setTimeout(() => {
+          appendAgentMessage(`
+            🎁 <strong>[GỢI Ý COMBO THÔNG MINH TỪ SALES AGENT]</strong><br>
+            Em đề xuất cho anh Combo công nghệ tối ưu:<br>
+            • <strong>Tai Nghe Không Dây Pro ANC</strong> (1.490.000đ)<br>
+            • Đi kèm <strong>Bộ Sạc Nhanh GaN 65W</strong> (450.000đ)<br>
+            👉 Mua cùng nhau giá trọn gói chỉ <strong>1.790.000 ₫</strong> (tiết kiệm ngay 150.000đ và được tặng kèm cáp C-to-C bọc dù chịu lực). Anh có muốn em thêm combo này vào giỏ giúp anh không?
+          `);
+        }, 600);
+        return;
+      }
+
+      // Tư vấn sản phẩm mặc định
+      setTimeout(() => {
+        appendAgentMessage(`
+          Dạ, về sản phẩm này bên em đang có sẵn hàng trong kho với chế độ bảo hành chính hãng 12 tháng. Thông số chi tiết đã được đối chiếu chuẩn xác theo danh mục ERP. Anh có muốn em gửi thêm hướng dẫn sử dụng hay thêm vào giỏ hàng giúp anh không ạ?
+        `);
+      }, 500);
+    }
+  </script>
+
+</body>
+</html>

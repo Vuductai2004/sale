@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "lib": ["ES2022"],
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "paths": {
+      "@agentos/core-engine": ["./src/core/index.ts"],
+      "@agentos/core-engine/*": ["./src/core/*"],
+      "@agentos/skills": ["./src/skills/index.ts"],
+      "@agentos/skills/*": ["./src/skills/*"],
+      "@agentos/adapters": ["./src/adapters/index.ts"],
+      "@agentos/adapters/*": ["./src/adapters/*"],
+      "@agentos/second-brain": ["./src/knowledge/index.ts"],
+      "@agentos/second-brain/*": ["./src/knowledge/*"],
+      "@agentos/database": ["./src/database/index.ts"],
+      "@agentos/database/*": ["./src/database/*"]
+    }
+  },
+  "include": ["src/**/*"]
+}
