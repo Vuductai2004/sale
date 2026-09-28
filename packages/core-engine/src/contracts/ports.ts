@@ -12,6 +12,8 @@ import type {
   CrossDomainHandoffDraft,
   HandoffAdmission,
 } from './cross-domain-handoff.js';
+import type { LifecycleStage } from '../lifecycle/stages.js';
+
 import type {
   ActionDraft,
   AgentRunLogRecord,
@@ -20,11 +22,15 @@ import type {
   DurableTaskSnapshot,
   ExecutionPlan,
   ExecutionReceipt,
+  FinalResponse,
   HydratedContext,
   HypothesisRecord,
   ImmutableEvidenceRecord,
   IStatefulWorkflowEngine,
+  PlannedStep,
+  PreviousStepReceipts,
   ResolvedSubject,
+  ResponseFinalizationInput,
   RoutingDecision,
   SignalEnvelope,
   SignalSubject,
@@ -117,6 +123,68 @@ export interface IAgentRuntime {
   formulatePlan(routing: RoutingDecision, context: HydratedContext, hypothesis: HypothesisRecord): Promise<ExecutionPlan>;
 }
 
+/**
+ * Builds a customer-facing response from server-trusted context and successful immutable receipts.
+ * The input deliberately contains no caller-authored message or raw provider output.
+ */
+export interface IResponseFinalizer {
+  finalize(input: ResponseFinalizationInput): Promise<FinalResponse>;
+}
+
+/**
+ * Tenant-scoped durable response persistence. `save` MUST be idempotent for `(tenant_id, run_id)`
+ * and MUST reject a replay that supplies content different from the immutable stored response.
+ */
+export interface IRunResponseStore {
+  read(input: {
+    tenant_id: string;
+    run_id: string;
+  }): Promise<FinalResponse | null>;
+  save(input: {
+    tenant_id: string;
+    run_id: string;
+    conversation_id?: string;
+    sender_id: string;
+    response: FinalResponse;
+  }): Promise<void>;
+}
+
+/**
+ * Durable append-only lifecycle stage trace. The orchestrator performs the synchronous
+ * `StageJournal` transition guard first, then awaits this port before any external side effect.
+ * Implementations should make `(tenant_id, run_id, attempt_ordinal, step_index, stage)` idempotent
+ * for recovery/replay.
+ */
+export interface IRunStageRecorder {
+  nextAttemptOrdinal(tenant_id: string, run_id: string): Promise<number>;
+  append(input: {
+    tenant_id: string;
+    run_id: string;
+    attempt_ordinal: number;
+    step_index: number;
+    stage: LifecycleStage;
+    entered_at: string;
+    detail?: unknown;
+    evidence_refs?: unknown;
+  }): Promise<void>;
+}
+
+
+/**
+ * Resolves server-authored receipt bindings for one downstream step. `previous_receipts` is
+ * assembled from immutable evidence by the orchestrator on every attempt; a resolver must not
+ * obtain receipts from caller input, a provider body, or an in-memory-only cache.
+ */
+export interface IPlanInputResolver {
+  resolve(input: {
+    tenant_id: string;
+    run_id: string;
+    step: PlannedStep;
+    previous_receipts: PreviousStepReceipts;
+    context: HydratedContext;
+  }): Promise<Record<string, unknown>>;
+}
+
 export interface IPolicyEngine {
   /** Normalize with the registered skill schema; reject unknown fields, bind tenant/subject,
    * and resolve price/floor metadata from trusted sources. Plan/delta policy fields are not proof. */
@@ -139,6 +207,12 @@ export interface IEvidenceLogger {
     payload: Record<string, unknown>;
   }): Promise<ImmutableEvidenceRecord>;
   findImmutableRecord?(params: { tenant_id: string; run_id: string; effect_key: string; step_index: number }): Promise<ImmutableEvidenceRecord | null>;
+  /** Durable lookup used when a predecessor's action revision is not derivable from the plan. */
+  findImmutableRecordByStep?(params: {
+    tenant_id: string;
+    run_id: string;
+    step_index: number;
+  }): Promise<ImmutableEvidenceRecord | null>;
   initializeOutcomeWatch(params: { tenant_id: string; run_id: string; effect_key: string; skill_id: string }): Promise<void>;
   logAgentRun(runLog: AgentRunLogRecord): Promise<void>;
 }

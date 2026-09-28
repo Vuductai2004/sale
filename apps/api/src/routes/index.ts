@@ -2,15 +2,21 @@ import type { FastifyInstance } from 'fastify';
 
 import type { CredentialStore } from '../gateway/principal.js';
 import type { GatewayRuntime } from '../gateway/ports.js';
+import type { DemoCredentialStore } from '../runtime/demo-auth.js';
+import type { TurnIntentPort } from '../runtime/bindings/turn-intent.js';
 import { registerAnalyticsRoutes } from './v1/analytics.js';
 import { registerApprovalRoutes } from './v1/approvals.js';
 import { registerCampaignRoutes } from './v1/campaigns.js';
 import { registerChatRoutes } from './v1/chat.js';
 import { registerConversationRoutes } from './v1/conversations.js';
+import { registerOperatorConversationRoutes } from './v1/operator-conversations.js';
+import { registerDemoWidgetRoutes } from './v1/demo-widget.js';
+import { registerDemoAuthRoutes } from './v1/demo-auth.js';
 import { registerEventRoutes } from './v1/events.js';
 import { registerAutonomyAdminRoutes, type AutonomyAdminPort } from './v1/autonomy-admin.js';
 import { registerOperationRoutes } from './v1/operations.js';
 import { registerProvisioningRoutes, type ProvisioningRoutePort } from './v1/provisioning.js';
+import { registerDemoReadinessRoutes, type DemoReadinessPort, type RunTracePort } from './v1/demo-readiness.js';
 import { registerStorefrontRoutes } from './v1/storefront.js';
 import { registerTelemetryRoutes } from './v1/telemetry.js';
 import { registerWebhookRoutes } from './v1/webhooks.js';
@@ -22,6 +28,12 @@ export const API_PREFIX = '/api/v1';
 export interface RouteDependencies {
   readonly runtime: GatewayRuntime;
   readonly credentials: CredentialStore;
+  /** Present only for a local/CI DEMO_MODE composition. */
+  readonly demoAuth?: DemoCredentialStore;
+  readonly intentProposer?: TurnIntentPort;
+  readonly demoMode?: boolean;
+  readonly readiness?: DemoReadinessPort;
+  readonly trace?: RunTracePort;
   /**
    * The API-002 canonical derivation (`06` §3.0). The gateway never derives a canonical event
    * itself, so the normaliser is injected and its absence is a refusal rather than a guess.
@@ -58,7 +70,18 @@ export interface RouteDependencies {
 export function registerRoutes(app: FastifyInstance, deps: RouteDependencies): void {
   void app.register(
     (scope, _options, done) => {
+      if (deps.demoAuth !== undefined) {
+        registerDemoAuthRoutes(scope, {
+          demoAuth: deps.demoAuth,
+          runtime: deps.runtime,
+        });
+        registerDemoWidgetRoutes(scope, {
+          demoAuth: deps.demoAuth,
+          runtime: deps.runtime,
+        });
+      }
       registerConversationRoutes(scope, deps);
+      registerOperatorConversationRoutes(scope, deps);
       registerChatRoutes(scope);
       registerEventRoutes(scope, deps);
       registerApprovalRoutes(scope, deps);
@@ -66,7 +89,16 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDependencies): v
       registerTelemetryRoutes(scope, deps);
       registerAnalyticsRoutes(scope, deps);
       registerStorefrontRoutes(scope, deps);
-      registerCampaignRoutes(scope);
+      registerCampaignRoutes(scope, deps);
+      if (deps.demoMode !== undefined && deps.readiness !== undefined && deps.trace !== undefined) {
+        registerDemoReadinessRoutes(scope, {
+          runtime: deps.runtime,
+          credentials: deps.credentials,
+          demoMode: deps.demoMode,
+          readiness: deps.readiness,
+          trace: deps.trace,
+        });
+      }
       registerWebhookRoutes(scope);
       if (deps.provisioning !== undefined) {
         registerProvisioningRoutes(scope, {

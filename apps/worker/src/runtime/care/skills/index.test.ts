@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -19,6 +20,10 @@ import { createCareSkillServices, CareSkillToolError } from './index.js';
 import type { ErpReadPort } from '../../connectors.js';
 
 const TENANT_ID = '11111111-1111-1111-1111-111111111111';
+const NOVAMART_TENANT_ID = '99999999-9999-4999-8999-999999999999';
+const NOVAMART_KNOWLEDGE_ROOT = fileURLToPath(
+  new URL('../../../../../../packages/second-brain/demo/novamart', import.meta.url),
+);
 const CUSTOMER_ID = 'aaaaaaaa-0000-4000-8000-00000000000a';
 const FOREIGN_CUSTOMER_ID = 'bbbbbbbb-0000-4000-8000-00000000000b';
 const VERIFICATION_REF = 'ver-ref-1';
@@ -308,6 +313,60 @@ describe('CareSkillServices', () => {
         }),
       ).rejects.toThrowError(/CORPUS_UNAVAILABLE/);
     });
+    it('reads approved FAQ from the tenant-bound NovaMart root and refuses another tenant', async () => {
+      const services = createCareSkillServices(createMockOptions({
+        env: {
+          CARE_KNOWLEDGE_ROOT: NOVAMART_KNOWLEDGE_ROOT,
+          CARE_TENANT_IDS: NOVAMART_TENANT_ID,
+        },
+      }));
+      const novamartContext = { ...DUMMY_CONTEXT, tenant_id: NOVAMART_TENANT_ID };
+
+      const result = await services.tool_port.invoke<
+        { tenant_id: string; query_text: string },
+        {
+          answers: Array<{
+            faq_id: string;
+            approved_answer: string;
+            source_file: string;
+          }>;
+          match_confidence: number;
+          source_version: string;
+        }
+      >({
+        skill_id: 'skill.care.search_faq',
+        tool_binding: 'SecondBrain.FAQEngine',
+        input: { tenant_id: NOVAMART_TENANT_ID, query_text: 'What is your return policy?' },
+        context: novamartContext,
+      });
+      const faq = result.answers.find((answer) => answer.faq_id === 'FAQ-1');
+      expect(faq).toBeDefined();
+      expect(faq?.source_file).toBe('customer-care/faq.md');
+      expect(faq?.approved_answer).toContain('14-day unopened return policy');
+      expect(result.match_confidence).toBeGreaterThan(0);
+      expect(result.source_version).toMatch(/^[a-f0-9]{64}$/);
+
+      await expect(services.tool_port.invoke({
+        skill_id: 'skill.care.search_faq',
+        tool_binding: 'SecondBrain.FAQEngine',
+        input: { tenant_id: TENANT_ID, query_text: 'return policy' },
+        context: DUMMY_CONTEXT,
+      })).rejects.toMatchObject({ code: 'KNOWLEDGE_ROOT_TENANT_MISMATCH' });
+    });
+    it('refuses a configured Care root without a tenant allowlist', async () => {
+      const services = createCareSkillServices(createMockOptions({
+        env: { CARE_KNOWLEDGE_ROOT: NOVAMART_KNOWLEDGE_ROOT },
+      }));
+
+      await expect(services.tool_port.invoke({
+        skill_id: 'skill.care.search_faq',
+        tool_binding: 'SecondBrain.FAQEngine',
+        input: { tenant_id: NOVAMART_TENANT_ID, query_text: 'return policy' },
+        context: { ...DUMMY_CONTEXT, tenant_id: NOVAMART_TENANT_ID },
+      })).rejects.toMatchObject({ code: 'KNOWLEDGE_ROOT_TENANT_BINDING_REQUIRED' });
+    });
+
+
 
     it('draft/unapproved corpus in custom root ⇒ CORPUS_UNAVAILABLE', async () => {
       const tempRoot = await mkdtemp(join(tmpdir(), 'kb-draft-'));
@@ -319,7 +378,7 @@ describe('CareSkillServices', () => {
         );
 
         const options = createMockOptions({
-          env: { CARE_KNOWLEDGE_ROOT: tempRoot },
+          env: { CARE_KNOWLEDGE_ROOT: tempRoot, CARE_TENANT_IDS: TENANT_ID },
         });
         const services = createCareSkillServices(options);
 
@@ -365,7 +424,7 @@ describe('CareSkillServices', () => {
         }
 
         const options = createMockOptions({
-          env: { CARE_KNOWLEDGE_ROOT: tempRoot },
+          env: { CARE_KNOWLEDGE_ROOT: tempRoot, CARE_TENANT_IDS: TENANT_ID },
         });
         const services = createCareSkillServices(options);
 
@@ -486,6 +545,27 @@ describe('CareSkillServices', () => {
         }),
       ).rejects.toThrowError(/IDENTITY_UNVERIFIED/);
       expect(wrongCustomerOptions.erp_read!.read).toHaveBeenCalledTimes(0);
+    });
+
+    it('rejects an order payload tenant mismatch before identity or ERP access', async () => {
+      const options = createMockOptions();
+      const services = createCareSkillServices(options);
+
+      await expect(services.tool_port.invoke({
+        skill_id: 'skill.care.lookup_order',
+        tool_binding: 'API-001.OrderConnector',
+        input: {
+          tenant_id: '22222222-2222-4222-8222-222222222222',
+          order_identifier: 'ORD-A-1',
+          customer_id: CUSTOMER_ID,
+          verification_reference: VERIFICATION_REF,
+          verification_status: 'VERIFIED',
+        },
+        context: DUMMY_CONTEXT,
+      })).rejects.toMatchObject({ code: 'TENANT_SCOPE_MISMATCH' });
+
+      expect(options.find_verified_identity).not.toHaveBeenCalled();
+      expect(options.erp_read!.read).not.toHaveBeenCalled();
     });
 
     it('foreign order ⇒ ORDER_OWNER_MISMATCH / ORDER_NOT_FOUND with no existence disclosure', async () => {

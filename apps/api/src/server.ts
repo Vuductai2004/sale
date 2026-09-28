@@ -18,6 +18,7 @@ import {
 } from './gateway/http.js';
 import type { GatewayFailure } from './gateway/contracts.js';
 import { installRawBodyPreservation } from './gateway/raw-body.js';
+import { installCors } from './gateway/cors.js';
 import { registerWebSocketStream } from './gateway/websocket.js';
 
 export const DEFAULT_PORT = 4000;
@@ -81,6 +82,10 @@ export function buildServer(deps: RouteDependencies): FastifyInstance {
     service: 'api',
     dependencies: [...DEPENDENCIES],
   }));
+
+  // The embedded demo widget calls this gateway from its approved console origin with its own
+  // scoped credential; the policy answers that origin only and never a wildcard caller.
+  installCors(app, process.env.CORS_ALLOWED_ORIGINS);
 
   // R04 verifies the signature over the bytes the caller actually sent, so the preserving parser is
   // installed by the composition root before any route can read a delivery (`06` §8.1.1).

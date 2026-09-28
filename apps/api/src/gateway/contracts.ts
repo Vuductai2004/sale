@@ -153,12 +153,14 @@ export type PrincipalKind = 'OPERATOR' | 'CHANNEL_SESSION' | 'WIDGET_SESSION' | 
 export type OperatorPermission =
   | 'approval:decide'
   | 'approval:read'
+  | 'campaign:draft'
   | 'conversation:takeover'
   | 'run:read'
   | 'run:retry'
   | 'run:reconcile'
   | 'customer:read'
-  | 'telemetry:read';
+  | 'telemetry:read'
+  | 'platform:admin';
 
 export interface GatewayPrincipal {
   readonly kind: PrincipalKind;
@@ -214,6 +216,13 @@ export type ChannelId =
   | 'SMS'
   | 'LINE'
   | 'WHATSAPP';
+
+/**
+ * The source channel a run is admitted under. It is a customer channel (see {@link ChannelId}) or
+ * the operator-command channel the Marketing domain contract binds as
+ * `MARKETING_SIGNAL_SOURCE_CHANNELS`, which no provider or browser turn can present.
+ */
+export type RunSourceChannel = ChannelId | 'MARKETING_CAMPAIGN';
 
 /** The six SRS API-003 baseline channels; all other members are `[OPTIONAL-EXTENSION][ASM-001]`. */
 export const BASELINE_CHANNELS: readonly ChannelId[] = Object.freeze([

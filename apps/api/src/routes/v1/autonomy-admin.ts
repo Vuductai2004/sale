@@ -66,7 +66,7 @@ export function registerAutonomyAdminRoutes(
   app.post('/admin/autonomy/pause', { preHandler }, async (request, reply) => {
     const runtime = deps.runtime;
     try {
-      const principal = requireOperator(request);
+      const principal = requireOperator(request, 'platform:admin');
       const result = await deps.autonomyAdmin.pauseTenant(
         commandOf(request.body, principal.tenant_id, principal.operator_id, false),
       );
@@ -79,7 +79,7 @@ export function registerAutonomyAdminRoutes(
   app.post('/admin/autonomy/resume', { preHandler }, async (request, reply) => {
     const runtime = deps.runtime;
     try {
-      const principal = requireOperator(request);
+      const principal = requireOperator(request, 'platform:admin');
       const result = await deps.autonomyAdmin.resumeTenant(
         commandOf(request.body, principal.tenant_id, principal.operator_id, false),
       );
@@ -92,7 +92,7 @@ export function registerAutonomyAdminRoutes(
   app.post('/admin/autonomy/demote', { preHandler }, async (request, reply) => {
     const runtime = deps.runtime;
     try {
-      const principal = requireOperator(request);
+      const principal = requireOperator(request, 'platform:admin');
       const result = await deps.autonomyAdmin.demote(
         commandOf(request.body, principal.tenant_id, principal.operator_id, true),
       );
@@ -105,7 +105,7 @@ export function registerAutonomyAdminRoutes(
   app.get('/admin/autonomy', { preHandler }, async (request, reply) => {
     const runtime = deps.runtime;
     try {
-      const principal = requireOperator(request);
+      const principal = requireOperator(request, 'platform:admin');
       const result = await deps.autonomyAdmin.inspect({ tenant_id: principal.tenant_id });
       return reply.code(200).send(result);
     } catch (error) {

@@ -34,7 +34,11 @@ import type {
   IContextAggregator,
   IEffectGuard,
   IEvidenceLogger,
+  IPlanInputResolver,
   IPolicyEngine,
+  IResponseFinalizer,
+  IRunResponseStore,
+  IRunStageRecorder,
   ISessionControl,
   IStatefulWorkflowEngine,
   ICrossDomainHandoffBroker,
@@ -46,6 +50,8 @@ import {
   DurableWorkflowRepository,
   EffectReservationRepository,
   EvidenceRepository,
+  RunResponseRepository,
+  RunStageEventsRepository,
   withTenantContext,
   type TenantTransactionRunner,
 } from '@agentos/database';
@@ -53,7 +59,6 @@ import {
   createSkillRuntimeEngine,
   type SkillRegistry,
 } from '@agentos/skills';
-
 import {
   SalesAgentRuntime,
   type SalesPurchaseEvidencePort,
@@ -64,10 +69,23 @@ import {
   type SalesContextAggregatorRepositories,
   type SalesSessionControlPort,
 } from './context-aggregator.js';
-import { createDurableAdapters, type DurableAdapters } from '../shared/adapters.js';
+import {
+  createDurableAdapters,
+  DEFAULT_PLAN_INPUT_RESOLVER,
+  type DurableAdapters,
+} from '../shared/adapters.js';
+import {
+  createResponseFinalizer,
+  createRunResponseStore,
+} from '../shared/response.js';
+import { DurableRunStageRecorder } from '../shared/stage-recorder.js';
 import { createSkillAdapterDispatcher } from '../shared/skill-dispatcher.js';
 import { createSalesPolicyEngine } from './policy-engine.js';
 import { createSalesSkillServices } from './skills/index.js';
+import {
+  createSalesErpPriceFloorPort,
+  SalesAdvisorExecutionState,
+} from './advisor-adapters.js';
 import type {
   ErpReadPort,
   SalesCartPort,
@@ -94,6 +112,12 @@ export interface SalesOrchestratorFactoryOptions {
   readonly autonomy?: AutonomyAdmissionPort | undefined;
   readonly workflowEngine?: IStatefulWorkflowEngine | undefined;
   readonly evidenceLogger?: IEvidenceLogger | undefined;
+  readonly planInputResolver?: IPlanInputResolver | undefined;
+  readonly responseFinalizer?: IResponseFinalizer | undefined;
+  readonly responseStore?: IRunResponseStore | undefined;
+  /** Durable response repository; when supplied, grounded defaults are installed. */
+  readonly runResponseRepository?: RunResponseRepository | undefined;
+  readonly runStageRecorder?: IRunStageRecorder | undefined;
   readonly auditTrail?: IAuditTrail | undefined;
   readonly sessionControl?: ISessionControl | undefined;
   readonly leaseManager?: DurableLeaseManager | undefined;
@@ -116,6 +140,8 @@ export interface SalesOrchestratorFactoryOptions {
   readonly auditRepository?: AuditRepository | undefined;
   readonly conversationRepository?: ConversationRepository | undefined;
   readonly auditSecret?: string | undefined;
+  readonly quote_signing_secret?: string | undefined;
+  readonly advisor_state?: SalesAdvisorExecutionState | undefined;
   readonly erp_read?: ErpReadPort | null | undefined;
   readonly revenue_evidence?: SalesRecommendationRevenueEvidencePort | undefined;
   readonly price_floor?: SalesPriceFloorPort | null | undefined;
@@ -187,7 +213,7 @@ export function getSalesUnboundCapabilities(options: SalesOrchestratorFactoryOpt
     if (options.erp_read === null || options.erp_read === undefined) {
       unbound.push('API-001 (unbound ERP read: no ERP read connector is bound)');
     }
-    const priceFloor = options.price_floor;
+    const priceFloor = options.price_floor ?? createSalesErpPriceFloorPort(options.erp_read ?? null);
     if (!priceFloor) {
       unbound.push('API-001.PricingEngine (unbound price/floor: no pricing engine port is bound; skill.sales.check_price refuses)');
     }
@@ -245,6 +271,12 @@ export function createSalesOrchestratorFactory(
 ): (tenant_id: string) => Promise<RevenueOrchestrator> {
   const workerId = options.workerId ?? `sales_worker_${randomUUID().slice(0, 8)}`;
   const now = options.now ?? (() => new Date());
+  const ownsDurableWorkflow = options.workflowRepository === undefined
+    || options.workflowRepository instanceof DurableWorkflowRepository;
+  const runResponseRepository = ownsDurableWorkflow ? options.runResponseRepository ?? new RunResponseRepository() : options.runResponseRepository;
+  const responseFinalizer = options.responseFinalizer ?? (ownsDurableWorkflow ? createResponseFinalizer(now) : undefined);
+  const responseStore = options.responseStore ?? (runResponseRepository === undefined ? undefined : createRunResponseStore(runResponseRepository));
+  const runStageRecorder = options.runStageRecorder ?? (ownsDurableWorkflow ? new DurableRunStageRecorder(new RunStageEventsRepository()) : undefined);
 
   const auditSecret = options.auditSecret ?? process.env.AUDIT_HMAC_SECRET;
   if (!auditSecret || auditSecret.trim().length === 0) {
@@ -254,6 +286,7 @@ export function createSalesOrchestratorFactory(
   // 1. Adapters from createDurableAdapters if not supplied directly
   let workflowEngine = options.workflowEngine ?? options.adapters?.workflowEngine;
   let evidenceLogger = options.evidenceLogger ?? options.adapters?.evidenceLogger;
+  let planInputResolver = options.planInputResolver ?? options.adapters?.planInputResolver;
   let auditTrail = options.auditTrail ?? options.adapters?.auditTrail;
   let sessionControl = options.sessionControl ?? options.adapters?.sessionControl;
   let leaseManager = options.leaseManager ?? options.adapters?.leaseManager;
@@ -266,26 +299,30 @@ export function createSalesOrchestratorFactory(
       auditRepository: options.auditRepository ?? new AuditRepository(),
       conversationRepository: options.conversationRepository ?? new ConversationRepository(),
       auditSecret,
+      ...(options.planInputResolver === undefined ? {} : { planInputResolver: options.planInputResolver }),
       now,
     });
 
     workflowEngine ??= generatedAdapters.workflowEngine;
     evidenceLogger ??= generatedAdapters.evidenceLogger;
+    planInputResolver ??= generatedAdapters.planInputResolver;
     auditTrail ??= generatedAdapters.auditTrail;
     sessionControl ??= generatedAdapters.sessionControl;
     leaseManager ??= generatedAdapters.leaseManager;
   }
+
+  planInputResolver ??= DEFAULT_PLAN_INPUT_RESOLVER;
 
   // 2. EffectGuard over EffectReservationRepository
   const effectGuard: IEffectGuard = options.effectGuard ?? new EffectGuard({
     repository: options.effectReservationRepository ?? new EffectReservationRepository(),
   });
 
-  // 3. Context aggregator with session control port so takeover is real
-  const sessionControlPort: SalesSessionControlPort | undefined = sessionControl
+  const sessionControlBinding = sessionControl;
+  const sessionControlPort: SalesSessionControlPort | undefined = sessionControlBinding
     ? {
         isTakenOver: async (tenant_id: string, session_id: string) =>
-          sessionControl.isTakenOver(tenant_id, session_id),
+          sessionControlBinding.isTakenOver(tenant_id, session_id),
       }
     : undefined;
 
@@ -304,7 +341,8 @@ export function createSalesOrchestratorFactory(
     ((tid, runId) => defaultResolveCorrelationId(tid, runId, options.workflowRepository));
 
   // 4. Skills services and adapter dispatcher
-  const priceFloorPort = options.price_floor ?? null;
+  const advisorState = options.advisor_state ?? new SalesAdvisorExecutionState();
+  const priceFloorPort = options.price_floor ?? createSalesErpPriceFloorPort(options.erp_read ?? null);
   const cartPort = options.cart ?? null;
   const orderPort = options.order ?? null;
   const commPort = options.communication ?? null;
@@ -326,6 +364,7 @@ export function createSalesOrchestratorFactory(
     skillServices = createSalesSkillServices({
       erp_read: options.erp_read ?? null,
       context: skillContext,
+      advisor_state: advisorState,
       ...(options.revenue_evidence ? { revenue_evidence: options.revenue_evidence } : {}),
       price_floor: priceFloorPort,
       cart: cartPort,
@@ -334,6 +373,7 @@ export function createSalesOrchestratorFactory(
       consent: consentPort,
       frequency_cap: freqCapPort,
       replenishment_policy: replenishmentPort,
+      ...(options.quote_signing_secret === undefined ? {} : { quote_signing_secret: options.quote_signing_secret }),
       resolve_correlation_id: resolveCorrelationId,
       resolve_grant: resolveGrant,
       now,
@@ -375,12 +415,15 @@ export function createSalesOrchestratorFactory(
     }
   }
 
-  // 5. Agent runtime wired with registry, replenishment_policy, and purchase_evidence
+  // 5. Agent runtime wired with registry, replenishment_policy, purchase_evidence, and advisor reads
   const agentRuntime: IAgentRuntime = options.agentRuntime ?? new SalesAgentRuntime({
     ...(options.now ? { now: options.now } : {}),
     ...(registry ? { registry } : {}),
     ...(replenishmentPort ? { replenishment_policy: replenishmentPort } : {}),
     ...(purchaseEvidencePort ? { purchase_evidence: purchaseEvidencePort } : {}),
+    advisor_state: advisorState,
+    advisor_price_floor_bound: priceFloorPort !== null,
+    advisor_quote_signing_bound: typeof options.quote_signing_secret === 'string' && options.quote_signing_secret.trim().length > 0,
   });
 
   // 6. Policy engine adapter
@@ -410,11 +453,15 @@ export function createSalesOrchestratorFactory(
       policyEngine,
       workflowEngine,
       evidenceLogger,
+      planInputResolver,
       auditTrail,
       adapterDispatcher,
       effectGuard,
       sessionControl,
       leaseManager,
+      ...(responseFinalizer === undefined ? {} : { responseFinalizer }),
+      ...(responseStore === undefined ? {} : { responseStore }),
+      ...(runStageRecorder === undefined ? {} : { runStageRecorder }),
       workerId,
       ...(options.crossDomainHandoff === undefined
         ? {}

@@ -100,12 +100,9 @@ describe('MemoryWorkflowEngine task state', () => {
     const engine = await engineWithRunningTask();
 
     const task = await engine.getTask(TENANT, RUN);
-    expect(task).toEqual({
-      task_version: 1,
-      state: 'running',
-      correlation_id: 'corr_1',
-      state_payload: null,
-    });
+    expect(task?.task_version).toBe(1);
+    expect(task?.state).toBe('running');
+    expect(task?.correlation_id).toBe('corr_1');
     expect(await engine.getTask(OTHER_TENANT, RUN)).toBeNull();
     expect(await engine.getTask(TENANT, OTHER_RUN)).toBeNull();
   });

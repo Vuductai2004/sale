@@ -17,7 +17,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import type { CredentialStore } from '../../gateway/principal.js';
-import { authenticate, requirePrincipal } from '../../gateway/principal.js';
+import { authenticate, requireOperator, requirePrincipal } from '../../gateway/principal.js';
 import type { GatewayRuntime } from '../../gateway/ports.js';
 import {
   IDEMPOTENCY_KEY_MAX_LENGTH,
@@ -37,6 +37,8 @@ import {
   validateAdmissionEventType,
 } from './care-turn.js';
 import { registerConversationTakeoverRoutes } from './conversations-takeover.js';
+import type { TurnIntentPort } from '../../runtime/bindings/turn-intent.js';
+import { classifyTurnModule } from './turn-classifier.js';
 /** `06` §8.3 C-8: the wire vocabulary differs from the stored one in exactly one value. */
 export function toWireStatus(state: TaskStoredState): TaskWireStatus {
   return state === 'queued' ? 'accepted' : state;
@@ -71,6 +73,7 @@ export interface ConversationRouteDeps {
   readonly enabledModules?: readonly string[];
   readonly salesSignalEventTypes?: readonly string[];
   readonly marketingSignalEventTypes?: readonly string[];
+  readonly intentProposer?: TurnIntentPort;
 }
 
 /**
@@ -170,10 +173,10 @@ export function registerConversationRoutes(
         const message = requiredString(body, 'message', MESSAGE_MAX_LENGTH);
         const idempotency_key = requiredString(body, 'idempotency_key', IDEMPOTENCY_KEY_MAX_LENGTH);
         const rawModule = body?.module;
-        const normalizedModule = rawModule === undefined || rawModule === 'auto' ? 'support' : rawModule;
+        const normalizedModule = classifyTurnModule(message, rawModule as AgentModule | undefined);
         const enabledModules = deps.enabledModules ?? parseEnabledAgentModules(process.env.ENABLED_AGENT_MODULES);
-        if (!enabledModules.includes(normalizedModule as never)) {
-          fail('CAPABILITY_NOT_ENABLED', 'only Customer Care support turns are enabled');
+        if (!enabledModules.includes(normalizedModule)) {
+          fail('CAPABILITY_NOT_ENABLED', 'the selected agent module is not enabled');
         }
 
         const rawEventType = (body as Record<string, unknown> | undefined)?.['event_type'];
@@ -208,6 +211,7 @@ export function registerConversationRoutes(
           module: normalizedModule as AgentModule,
           event_type,
           ...(body?.attachments === undefined ? {} : { attachments: body.attachments }),
+          ...(deps.intentProposer === undefined ? {} : { intentProposer: deps.intentProposer }),
           operation: 'conversations.messages',
         });
 
@@ -232,6 +236,16 @@ export function registerConversationRoutes(
 
       if (task === null) {
         fail('TASK_NOT_FOUND', 'this tenant holds no durable task with that identifier');
+      }
+      if (principal.kind === 'OPERATOR') {
+        requireOperator(request, 'run:read');
+      } else if (
+        (principal.kind === 'CHANNEL_SESSION' &&
+          (task.conversation_id !== principal.conversation_id || task.session_id !== principal.session_id)) ||
+        (principal.kind === 'WIDGET_SESSION' && task.session_id !== principal.session_id) ||
+        task.session_id === undefined
+      ) {
+        fail('TASK_NOT_FOUND', 'this session does not own the requested task');
       }
 
       const response: TaskStateResponse = {

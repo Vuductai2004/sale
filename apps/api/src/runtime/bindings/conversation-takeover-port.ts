@@ -149,21 +149,29 @@ export function createConversationPort(
       };
     },
 
+    list: async (tenant_id, limit) => {
+      const rows = await repository.list(tenant_id, limit);
+      return rows.map((row) => ({
+        ...row, channel: row.channel as ChannelId, bound: true,
+      }));
+    },
+
+    listMessages: (input) => repository.listMessages(input),
+
     setState: async (tenant_id, conversation_id, state, takeover_operator_id) => {
       await repository.setState(tenant_id, conversation_id, state, takeover_operator_id);
     },
 
-    appendMessage: async (input) => {
-      await repository.appendMessage({
-        tenant_id: input.tenant_id,
-        conversation_id: input.conversation_id,
-        sender_type: input.sender_type,
-        sender_id: input.sender_id,
-        content: input.content,
-        ...(input.content_type === undefined ? {} : { content_type: input.content_type }),
-        ...(input.metadata === undefined ? {} : { metadata: input.metadata }),
-      });
-    },
+    appendMessage: (input) => repository.appendMessage({
+      tenant_id: input.tenant_id,
+      conversation_id: input.conversation_id,
+      sender_type: input.sender_type,
+      sender_id: input.sender_id,
+      content: input.content,
+      ...(input.content_type === undefined ? {} : { content_type: input.content_type }),
+      ...(input.metadata === undefined ? {} : { metadata: input.metadata }),
+      ...(input.request_id === undefined ? {} : { request_id: input.request_id }),
+    }),
 
     issueSessionToken: async (input) => {
       // The token is the binding itself, signed. It carries no authority of its own: the gateway

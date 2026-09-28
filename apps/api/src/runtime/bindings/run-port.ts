@@ -10,16 +10,18 @@ import {
   type DurableWorkflowRepository,
   type EffectReservationRepository,
   type EvidenceRepository,
+  type RunResponseRepository,
   type TenantTransactionRunner,
 } from '@agentos/database';
 
-import { fail } from '../../gateway/http.js';
 import type {
   RetryableFailureClass,
   RunProjection,
   RunStepProjection,
+  TaskSourceRef,
 } from '../../gateway/contracts.js';
 import type { RunPort, StartedRun } from '../../gateway/ports.js';
+import { fail } from '../../gateway/http.js';
 
 /** Identifier source for the composition root: every gateway-issued id is a real UUID. */
 export const systemIdentifiers: () => string = () => randomUUID();
@@ -34,6 +36,9 @@ export const systemClock: () => Date = () => new Date();
 export interface ProjectionTransactionRunner {
   readonly run: TenantTransactionRunner;
 }
+
+/** Repository surface needed to project a persisted terminal response onto R03. */
+type DurableResponseRepository = Pick<RunResponseRepository, 'read'>;
 
 /** Repository surface needed by the truthful durable run projection. */
 type DurableRunRepository = Pick<
@@ -54,6 +59,89 @@ function plainRecord(value: unknown): value is Record<string, unknown> {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
   const prototype: unknown = Object.getPrototypeOf(value);
   return prototype === Object.prototype || prototype === null;
+}
+
+/** Malformed or unrelated admission signals grant no session ownership. */
+function runOwner(task: DurableTaskRecord): { conversation_id?: string; session_id?: string } {
+  if (!plainRecord(task.state_payload) || !plainRecord(task.state_payload['signal'])) return {};
+  const signal = task.state_payload['signal'];
+  if (!plainRecord(signal['subject']) || !plainRecord(signal['payload'])) return {};
+  const conversation_id = signal['subject']['conversation_id'];
+  const payloadConversation = signal['payload']['conversation_id'];
+  const session_id = signal['subject']['session_id'];
+  if (
+    typeof conversation_id !== 'string' ||
+    conversation_id.length === 0 ||
+    conversation_id !== payloadConversation ||
+    typeof session_id !== 'string' ||
+    session_id.length === 0
+  ) return {};
+  return { conversation_id, session_id };
+}
+
+const TASK_SOURCE_KEYS = ['source_record_id', 'source_version', 'source_file'] as const;
+
+function invalidResponseProjection(detail: string): never {
+  throw new Error(`RUN_RESPONSE_PROJECTION_INVALID: ${detail}`);
+}
+
+/**
+ * Rebuilds the closed wire source shape instead of returning JSONB objects directly. This prevents
+ * an accidentally persisted private field from crossing the R03 boundary.
+ */
+function taskSourcesOf(value: unknown): readonly TaskSourceRef[] {
+  if (!Array.isArray(value)) {
+    return invalidResponseProjection('sources must be an array');
+  }
+
+  return value.map((item, index): TaskSourceRef => {
+    if (!plainRecord(item)) {
+      return invalidResponseProjection(`sources[${index}] must be an object`);
+    }
+
+    const keys = Object.keys(item);
+    if (
+      keys.length !== TASK_SOURCE_KEYS.length ||
+      keys.some((key) => !(TASK_SOURCE_KEYS as readonly string[]).includes(key))
+    ) {
+      return invalidResponseProjection(`sources[${index}] has an invalid shape`);
+    }
+
+    const source_record_id = item['source_record_id'];
+    const source_version = item['source_version'];
+    const source_file = item['source_file'];
+    if (
+      typeof source_record_id !== 'string' ||
+      source_record_id.length === 0 ||
+      typeof source_version !== 'string' ||
+      source_version.length === 0 ||
+      typeof source_file !== 'string' ||
+      source_file.length === 0
+    ) {
+      return invalidResponseProjection(`sources[${index}] has an invalid field`);
+    }
+
+    return { source_record_id, source_version, source_file };
+  });
+}
+
+function projectPersistedResponse(
+  response: {
+    readonly tenant_id: string;
+    readonly run_id: string;
+    readonly answer: unknown;
+    readonly sources: unknown;
+  },
+  tenant_id: string,
+  run_id: string,
+): { readonly answer: string; readonly sources: readonly TaskSourceRef[] } {
+  if (response.tenant_id !== tenant_id || response.run_id !== run_id) {
+    return invalidResponseProjection('stored response identity does not match the requested run');
+  }
+  if (typeof response.answer !== 'string') {
+    return invalidResponseProjection('answer must be text');
+  }
+  return { answer: response.answer, sources: taskSourcesOf(response.sources) };
 }
 
 /** Reads the persisted error code without trusting a free-text message. */
@@ -185,13 +273,26 @@ async function toRunProjection(
  * Binds the durable run projection, safe requeue path and INTERNAL reconciliation event queue.
  * Provider-confirmed settlement remains fail-closed in the orchestrator until a provider query is
  * available; this binding records the authenticated operator event without settling a reservation.
+ * When a response reader is bound, its answer and closed source references are projected only for a
+ * completed task; all non-completed states remain receipt/status-only.
  */
+
 export function createDurableRunPort(
   repository: DurableRunRepository,
   evidence: RunEvidenceRepository,
   reservations: RunReservationRepository,
-  reconciliation?: DurableReconciliationRepository,
+  reconciliationOrResponse?: DurableReconciliationRepository | DurableResponseRepository,
+  responseRepository?: DurableResponseRepository,
 ): Pick<RunPort, 'read' | 'classifyRetry' | 'retry' | 'reconcile' | 'list'> {
+  const reconciliation =
+    reconciliationOrResponse !== undefined && 'queueReconciliation' in reconciliationOrResponse
+      ? reconciliationOrResponse
+      : undefined;
+  const responseReader =
+    responseRepository ??
+    (reconciliationOrResponse !== undefined && 'read' in reconciliationOrResponse
+      ? reconciliationOrResponse
+      : undefined);
   const classifyRetry: RunPort['classifyRetry'] = async (tenant_id, run_id) => {
     const task = await repository.getTask(tenant_id, run_id);
     if (task === null) return { retryable: false, reason: 'NOT_FOUND' };
@@ -233,9 +334,13 @@ export function createDurableRunPort(
     read: async ({ tenant_id, run_id }) => {
       const task = await repository.getTask(tenant_id, run_id);
       if (task === null) return null;
-      const [logs, chain] = await Promise.all([
+      if (task.tenant_id !== tenant_id || task.run_id !== run_id) return null;
+      const [logs, chain, response] = await Promise.all([
         evidence.readRunLogs(tenant_id, run_id),
         evidence.readEvidenceChain(tenant_id, run_id),
+        task.state === 'completed' && responseReader !== undefined
+          ? responseReader.read(tenant_id, run_id)
+          : Promise.resolve(null),
       ]);
       const lastEvidence = chain.at(-1);
       const actions = logs.flatMap((log) => {
@@ -245,11 +350,15 @@ export function createDurableRunPort(
           ? [{ operation: log.skill, status: log.execution_status, provider_reference }]
           : [];
       });
+      const persistedResponse =
+        response === null ? {} : projectPersistedResponse(response, tenant_id, run_id);
       return {
         run_id: task.run_id,
         task_version: task.task_version,
         lifecycle_state: task.state,
         correlation_id: task.correlation_id,
+        ...runOwner(task),
+        ...persistedResponse,
         ...(lastEvidence === undefined ? {} : { evidence_reference: lastEvidence.evidence_id }),
         ...(actions.length === 0 ? {} : { actions }),
       };
@@ -350,7 +459,8 @@ export function createStartRunPort(
     async start(input): Promise<StartedRun> {
       const rawModule = input.payload['module'];
       const module = rawModule === undefined || rawModule === 'auto' ? 'support' : rawModule;
-      const canonicalPayload = {
+      const campaignDraft = input.admission_skill_id === 'campaign.draft';
+      const canonicalPayload = campaignDraft ? input.payload : {
         message: input.payload['message'],
         conversation_id: input.payload['conversation_id'],
         module,
@@ -359,7 +469,7 @@ export function createStartRunPort(
 
       const effect_key = guard.computeEffectKey({
         tenant_id: input.tenant_id,
-        skill_id: CONVERSATION_TURN_SKILL,
+        skill_id: input.admission_skill_id ?? CONVERSATION_TURN_SKILL,
         step_index: 0,
         action_revision: 0,
         request_id: input.request_id,
@@ -400,7 +510,7 @@ export function createStartRunPort(
           run_id,
           correlation_id: input.correlation_id,
           signal,
-          skill_id: CONVERSATION_TURN_SKILL,
+          skill_id: input.admission_skill_id ?? CONVERSATION_TURN_SKILL,
           step_index: 0,
           // The window is the effect guard's own constant, so the row admission writes and the row
           // the guard later reads share one number instead of two that could drift apart.

@@ -108,6 +108,7 @@ services:
       MOCK_SECRET_KEY: ${MOCK_SECRET_KEY:?MOCK_SECRET_KEY is required}
       SIMULATE_LATENCY_MS: ${SIMULATE_LATENCY_MS:-50}
       SIMULATE_FAILURE_RATE: ${SIMULATE_FAILURE_RATE:-0.0}
+      MOCK_ERP_DEMO_PACK: ${MOCK_ERP_DEMO_PACK:-}
     healthcheck:
       test:
         - CMD
@@ -182,6 +183,17 @@ services:
       # check in the env validator sees one key instead of two.
       QDRANT__SERVICE__API_KEY: *qdrant-api-key
       MOCK_ERP_ENABLED: ${MOCK_ERP_ENABLED:-true}
+      ENABLED_AGENT_MODULES: ${ENABLED_AGENT_MODULES:-}
+      SALES_SIGNAL_SOURCE_CHANNELS: ${SALES_SIGNAL_SOURCE_CHANNELS:-}
+      SALES_SIGNAL_EVENT_TYPES: ${SALES_SIGNAL_EVENT_TYPES:-}
+      MARKETING_SIGNAL_SOURCE_CHANNELS: ${MARKETING_SIGNAL_SOURCE_CHANNELS:-}
+      MARKETING_SIGNAL_EVENT_TYPES: ${MARKETING_SIGNAL_EVENT_TYPES:-}
+      DEMO_MODE: ${DEMO_MODE:-false}
+      DEMO_TENANT_ID: ${DEMO_TENANT_ID:-99999999-9999-4999-8999-999999999999}
+      DEMO_TENANT_OPERATOR_PASSWORD: ${DEMO_TENANT_OPERATOR_PASSWORD:-}
+      DEMO_MARKETING_APPROVER_PASSWORD: ${DEMO_MARKETING_APPROVER_PASSWORD:-}
+      DEMO_PLATFORM_ADMIN_PASSWORD: ${DEMO_PLATFORM_ADMIN_PASSWORD:-}
+      DEMO_WIDGET_ORIGINS: ${DEMO_WIDGET_ORIGINS:-http://localhost:3000}
       ERP_API_BASE_URL: http://mock-erp:8081/api/v1
       # The shared secret the platform signs API-001 calls with; the mock-erp container verifies
       # the same value. Required only while MOCK_ERP_ENABLED is true.
@@ -194,6 +206,14 @@ services:
       AUDIT_HMAC_SECRET: ${AUDIT_HMAC_SECRET:?AUDIT_HMAC_SECRET is required}
       ENCRYPTION_KEY_AES256: ${ENCRYPTION_KEY_AES256:?ENCRYPTION_KEY_AES256 is required}
       OPENAI_API_KEY: ${OPENAI_API_KEY:?OPENAI_API_KEY is required}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      DEFAULT_LLM_PROVIDER: ${DEFAULT_LLM_PROVIDER:-openai-compatible}
+      PRIMARY_REASONING_MODEL: ${PRIMARY_REASONING_MODEL:-gpt-4o}
+      FAST_COMPLETION_MODEL: ${FAST_COMPLETION_MODEL:-gpt-4o-mini}
+      OPENAI_STRUCTURED_OUTPUT_MODE: ${OPENAI_STRUCTURED_OUTPUT_MODE:-json_object}
+      LLM_REQUEST_TIMEOUT_MS: ${LLM_REQUEST_TIMEOUT_MS:-30000}
+      MAX_TOKENS_PER_RUN: ${MAX_TOKENS_PER_RUN:-4096}
+
     depends_on:
       postgres:
         condition: service_healthy
@@ -243,10 +263,19 @@ services:
       # check in the env validator sees one key instead of two.
       QDRANT__SERVICE__API_KEY: *qdrant-api-key
       MOCK_ERP_ENABLED: ${MOCK_ERP_ENABLED:-true}
+      ENABLED_AGENT_MODULES: ${ENABLED_AGENT_MODULES:-}
+      SALES_SIGNAL_SOURCE_CHANNELS: ${SALES_SIGNAL_SOURCE_CHANNELS:-}
+      SALES_SIGNAL_EVENT_TYPES: ${SALES_SIGNAL_EVENT_TYPES:-}
+      MARKETING_SIGNAL_SOURCE_CHANNELS: ${MARKETING_SIGNAL_SOURCE_CHANNELS:-}
+      MARKETING_SIGNAL_EVENT_TYPES: ${MARKETING_SIGNAL_EVENT_TYPES:-}
+      # Approved Second Brain root. It must be an absolute path: the container's WORKDIR is /repo,
+      # so the image ships the corpus at /repo/packages/second-brain/demo/novamart.
+      CARE_KNOWLEDGE_ROOT: ${CARE_KNOWLEDGE_ROOT:-/repo/packages/second-brain/demo/novamart}
       ERP_API_BASE_URL: http://mock-erp:8081/api/v1
       # The shared secret the platform signs API-001 calls with; the mock-erp container verifies
       # the same value. Required only while MOCK_ERP_ENABLED is true.
       MOCK_SECRET_KEY: ${MOCK_SECRET_KEY:?MOCK_SECRET_KEY is required}
+      QUOTE_SIGNING_SECRET: ${QUOTE_SIGNING_SECRET:-}
       EVENT_INGESTION_BASE_URL: http://mock-erp:8081/events/v1
       EVENT_INGESTION_HMAC_SECRET: ${EVENT_INGESTION_HMAC_SECRET:?EVENT_INGESTION_HMAC_SECRET is required}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
@@ -255,6 +284,14 @@ services:
       AUDIT_HMAC_SECRET: ${AUDIT_HMAC_SECRET:?AUDIT_HMAC_SECRET is required}
       ENCRYPTION_KEY_AES256: ${ENCRYPTION_KEY_AES256:?ENCRYPTION_KEY_AES256 is required}
       OPENAI_API_KEY: ${OPENAI_API_KEY:?OPENAI_API_KEY is required}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      DEFAULT_LLM_PROVIDER: ${DEFAULT_LLM_PROVIDER:-openai-compatible}
+      PRIMARY_REASONING_MODEL: ${PRIMARY_REASONING_MODEL:-gpt-4o}
+      FAST_COMPLETION_MODEL: ${FAST_COMPLETION_MODEL:-gpt-4o-mini}
+      OPENAI_STRUCTURED_OUTPUT_MODE: ${OPENAI_STRUCTURED_OUTPUT_MODE:-json_object}
+      LLM_REQUEST_TIMEOUT_MS: ${LLM_REQUEST_TIMEOUT_MS:-30000}
+      MAX_TOKENS_PER_RUN: ${MAX_TOKENS_PER_RUN:-4096}
+
       # Empty keeps Temporal out of the readiness gate. Set only with --profile workflows.
       TEMPORAL_ADDRESS: ${TEMPORAL_ADDRESS:-}
     depends_on:
@@ -293,8 +330,11 @@ services:
       NODE_ENV: ${NODE_ENV:?NODE_ENV is required}
       APP_ENV: ${APP_ENV:?APP_ENV is required}
       PORT: 3000
+      DEMO_MODE: ${DEMO_MODE:-false}
+      API_BASE_URL: http://api:4000
       NEXTAUTH_URL: ${NEXTAUTH_URL:?NEXTAUTH_URL is required}
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?NEXTAUTH_SECRET is required}
+      DEMO_COOKIE_HMAC_KEY: ${NEXTAUTH_SECRET:?NEXTAUTH_SECRET is required}
       # Origin only. Browser clients append /api/v1 themselves.
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL is required}
       PLATFORM_ADMIN_URL: ${PLATFORM_ADMIN_URL:?PLATFORM_ADMIN_URL is required}
@@ -327,8 +367,11 @@ services:
       NODE_ENV: ${NODE_ENV:?NODE_ENV is required}
       APP_ENV: ${APP_ENV:?APP_ENV is required}
       PORT: 3001
+      DEMO_MODE: ${DEMO_MODE:-false}
+      API_BASE_URL: http://api:4000
       NEXTAUTH_URL: ${PLATFORM_ADMIN_URL:?PLATFORM_ADMIN_URL is required}
       NEXTAUTH_SECRET: ${NEXTAUTH_SECRET:?NEXTAUTH_SECRET is required}
+      DEMO_COOKIE_HMAC_KEY: ${NEXTAUTH_SECRET:?NEXTAUTH_SECRET is required}
       NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL is required}
     depends_on:
       api:

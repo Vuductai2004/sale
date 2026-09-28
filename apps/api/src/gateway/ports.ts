@@ -32,6 +32,7 @@ import type {
   ReconciliationResolution,
   RetryableFailureClass,
   RunProjection,
+  RunSourceChannel,
   TaskSourceRef,
   TaskStoredState,
   TelemetryFrame,
@@ -68,6 +69,8 @@ export interface ConversationMessageInput {
   readonly content: string;
   readonly content_type?: string;
   readonly metadata?: Record<string, unknown>;
+  /** Bounded caller request key; a replay returns the original message instead of a second one. */
+  readonly request_id?: string;
 }
 
 export interface ConversationPort {
@@ -83,6 +86,10 @@ export interface ConversationPort {
     active_agent?: string;
   }): Promise<ConversationRecord>;
   get(tenant_id: string, conversation_id: string): Promise<ConversationRecord | null>;
+  list(tenant_id: string, limit?: number): Promise<readonly ConversationRecord[]>;
+  listMessages(input: { tenant_id: string; conversation_id: string; limit?: number }): Promise<
+    readonly { message_id: string; sender_type: ConversationMessageInput['sender_type']; sender_id: string; content: string; created_at: string }[]
+  >;
   /** Moves `conversations.state`; the wire value is never stored (`06` §8.3 C-3). */
   setState(
     tenant_id: string,
@@ -90,7 +97,7 @@ export interface ConversationPort {
     state: ConversationState,
     takeover_operator_id: string | null,
   ): Promise<void>;
-  appendMessage(input: ConversationMessageInput): Promise<void>;
+  appendMessage(input: ConversationMessageInput): Promise<string>;
   /** Server-issued session token bound to the conversation credential (`06` §8.0 tenant binding). */
   issueSessionToken(input: {
     tenant_id: string;
@@ -166,7 +173,9 @@ export interface RunPort {
     tenant_id: string;
     correlation_id: string;
     request_id: string;
-    source_channel: ChannelId;
+    /** Internal gateway admission class; never sourced from a client field. */
+    admission_skill_id?: 'campaign.draft';
+    source_channel: RunSourceChannel;
     event_type: string;
     session_id: string;
     channel_type: string;
@@ -180,6 +189,9 @@ export interface RunPort {
     task_version: number;
     lifecycle_state: TaskStoredState;
     correlation_id: string;
+    /** Immutable admission owner; absent for non-conversation runs. */
+    conversation_id?: string;
+    session_id?: string;
     answer?: string;
     sources?: readonly TaskSourceRef[];
     actions?: readonly { operation: string; status: string; provider_reference: string }[];

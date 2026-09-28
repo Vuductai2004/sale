@@ -66,7 +66,7 @@ interface MessagePageRow extends QueryResultRow {
 }
 
 /** Which statement of the repository a SQL text is: a test names the transition, not the text. */
-type StatementKind = 'insert' | 'read_thread' | 'read' | 'state' | 'touch' | 'message' | 'messages';
+type StatementKind = 'insert' | 'read_thread' | 'read' | 'state' | 'touch' | 'message' | 'messages' | 'requested_message' | 'savepoint';
 
 function classify(sql: string): StatementKind {
   if (sql.startsWith('INSERT INTO agentos.conversations')) {
@@ -85,8 +85,16 @@ function classify(sql: string): StatementKind {
     return 'state';
   }
 
+  if (sql.includes('request_id = $4')) {
+    return 'requested_message';
+  }
+
   if (sql.includes('FROM agentos.conversation_messages')) {
     return 'messages';
+  }
+
+  if (sql.startsWith('SAVEPOINT') || sql.startsWith('RELEASE SAVEPOINT') || sql.startsWith('ROLLBACK TO SAVEPOINT')) {
+    return 'savepoint';
   }
 
   if (sql.includes('external_thread_id = $3')) {
@@ -552,6 +560,53 @@ describe('ConversationRepository.appendMessage', () => {
       'quick_reply',
       { locale: 'vi' },
     ]);
+  });
+
+  it('answers a replayed request key with the original message and refuses it for different content', async () => {
+    const uniqueViolation = Object.assign(new Error('duplicate key value violates unique constraint'), { code: '23505' });
+    const { repository, client } = harnessFor({
+      touch: { rows: [{ id: CONVERSATION_ID }] },
+      message: { fails: uniqueViolation },
+      requested_message: { rows: [{ id: MESSAGE_ID, content: 'Human response' }] },
+      savepoint: { rows: [] },
+    });
+
+    await expect(repository.appendMessage(messageInput({
+      sender_type: 'operator',
+      sender_id: OPERATOR_ID,
+      content: 'Human response',
+      request_id: 'operator-reply:key-1',
+    }))).resolves.toBe(MESSAGE_ID);
+
+    // The losing insert is rolled back to its savepoint before the replay is read, so the turn
+    // stays open and the caller receives the message the first request already produced.
+    expect(client.statements.map((statement) => statement.kind)).toEqual([
+      'touch',
+      'savepoint',
+      'message',
+      'savepoint',
+      'requested_message',
+    ]);
+    expect(bindingsOf(client, 'requested_message')).toEqual([
+      TENANT,
+      CONVERSATION_ID,
+      'operator',
+      'operator-reply:key-1',
+    ]);
+
+    const reused = harnessFor({
+      touch: { rows: [{ id: CONVERSATION_ID }] },
+      message: { fails: uniqueViolation },
+      requested_message: { rows: [{ id: MESSAGE_ID, content: 'Human response' }] },
+      savepoint: { rows: [] },
+    });
+
+    await expect(reused.repository.appendMessage(messageInput({
+      sender_type: 'operator',
+      sender_id: OPERATOR_ID,
+      content: 'Different text',
+      request_id: 'operator-reply:key-1',
+    }))).rejects.toThrow('IDEMPOTENCY_CONFLICT');
   });
 
   it('refuses to append a turn to a conversation this tenant does not hold', async () => {

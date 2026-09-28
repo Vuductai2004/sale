@@ -74,7 +74,7 @@ export function registerProvisioningRoutes(
   app.post('/provisioning/tenants', { preHandler }, async (request, reply) => {
     const runtime = deps.runtime;
     try {
-      requireOperator(request);
+      requireOperator(request, 'platform:admin');
       const body: unknown = request.body;
       if (body !== undefined && body !== null && !isPlainRecord(body)) {
         fail('VALIDATION_FAILED', 'the request body must be a JSON object when supplied');
@@ -119,7 +119,7 @@ export function registerProvisioningRoutes(
   app.get('/admin/tenants/current', { preHandler }, async (request, reply) => {
     const runtime = deps.runtime;
     try {
-      const principal = requireOperator(request);
+      const principal = requireOperator(request, 'platform:admin');
       const shell = await deps.provisioning.getShell(principal.tenant_id);
       if (shell === null) fail('NOT_FOUND', 'the authenticated tenant has not been provisioned');
       const autonomy = await autonomyAdmin.inspect({ tenant_id: principal.tenant_id });

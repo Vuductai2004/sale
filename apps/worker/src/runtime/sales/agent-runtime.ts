@@ -82,6 +82,10 @@ import {
   deriveEffectPolicy,
   type DerivedEffectPolicy,
 } from './plan-composer.js';
+import {
+  type SalesAdvisorExecutionState,
+  type SalesAdvisorRequirements,
+} from './advisor-adapters.js';
 import type { SalesReplenishmentPolicyPort } from './skills/types.js';
 export {
   cleanSearchQuery,
@@ -132,9 +136,73 @@ function extractSalesHandoffReason(signal: SignalEnvelope): string | undefined {
   return typeof reason === 'string' && reason.trim().length > 0 ? reason.trim() : undefined;
 }
 
+function readAdvisorRequirements(signal: SignalEnvelope): SalesAdvisorRequirements | undefined {
+  const payload = signal.payload;
+  const hasStructuredFields = Object.hasOwn(payload, 'sales_proposal_source')
+    || Object.hasOwn(payload, 'sales_intent')
+    || Object.hasOwn(payload, 'sales_requirements');
+  if (!hasStructuredFields) return undefined;
+
+  // These fields are stamped by the API gateway only after its trusted classifier has
+  // normalized the customer message. Presence is therefore mandatory: malformed or
+  // mismatched structured data must refuse instead of falling back to legacy text parsing.
+  if (
+    payload.sales_proposal_source !== 'API_GATEWAY'
+    || signal.source_channel !== 'WEB_CHAT'
+    || signal.event_type !== 'message.received'
+    || payload.sales_intent !== 'advisor'
+  ) {
+    throw new OrchestratorError(
+      'SALES_STRUCTURED_INTENT_INVALID',
+      'Sales advisor requirements are only accepted from the API-stamped WEB_CHAT message path.',
+    );
+  }
+
+  const raw = payload.sales_requirements;
+  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+    throw new OrchestratorError(
+      'SALES_STRUCTURED_INTENT_INVALID',
+      'Server-stamped Sales advisor intent requires a requirements object.',
+    );
+  }
+  const requirements = raw as Record<string, unknown>;
+  for (const key of Object.keys(requirements)) {
+    if (key !== 'category' && key !== 'budget_vnd' && key !== 'use_case') {
+      throw new OrchestratorError(
+        'SALES_STRUCTURED_INTENT_INVALID',
+        `Unknown server-stamped Sales requirement '${key}'.`,
+      );
+    }
+  }
+  const category = requirements.category;
+  const use_case = requirements.use_case;
+  const budget_vnd = requirements.budget_vnd;
+  if (
+    typeof category !== 'string'
+    || category.trim().length === 0
+    || category.trim().length > 64
+    || typeof use_case !== 'string'
+    || use_case.trim().length === 0
+    || use_case.trim().length > 160
+    || typeof budget_vnd !== 'number'
+    || !Number.isSafeInteger(budget_vnd)
+    || budget_vnd <= 0
+  ) {
+    throw new OrchestratorError(
+      'SALES_STRUCTURED_INTENT_INVALID',
+      'Sales advisor requirements must contain bounded category, budget_vnd, and use_case values.',
+    );
+  }
+  return {
+    category: category.trim().toLocaleLowerCase(),
+    budget_vnd,
+    use_case: use_case.trim().toLocaleLowerCase(),
+  };
+}
 export type SalesIntent =
   | 'customer_lookup'
   | 'product_search'
+  | 'advisor'
   | 'inventory'
   | 'price'
   | 'disabled_price'
@@ -155,35 +223,45 @@ export interface ParsedSalesRationale {
   readonly replenishmentIntervalDays?: number | undefined;
   readonly refusalReason?: string | undefined;
   readonly handoff_reason?: string | undefined;
+  readonly advisor_requirements?: SalesAdvisorRequirements | undefined;
 }
 
 export interface SalesAgentRuntimeOptions {
   readonly registry?: SkillRegistryResolver | undefined;
   readonly now?: (() => Date) | undefined;
   readonly resolvableDependencies?: DependencyReachabilityPredicate | undefined;
-   readonly replenishment_policy?: SalesReplenishmentPolicyPort | undefined;
+  readonly replenishment_policy?: SalesReplenishmentPolicyPort | undefined;
   readonly replenishment_policy_port?: SalesReplenishmentPolicyPort | undefined;
   readonly purchase_evidence?: SalesPurchaseEvidencePort | undefined;
- }
+  readonly advisor_state?: SalesAdvisorExecutionState | undefined;
+  readonly advisor_price_floor_bound?: boolean | undefined;
+  readonly advisor_quote_signing_bound?: boolean | undefined;
+}
 
  /**
   * SalesAgentRuntime implements deterministic sales reasoning across SAL-01, SAL-02, and SAL-03.
   */
- export class SalesAgentRuntime implements IAgentRuntime {
-   public readonly now?: (() => Date) | undefined;
-   private readonly registry?: SkillRegistryResolver | undefined;
-   private readonly resolvableDependencies?: DependencyReachabilityPredicate | undefined;
-   private readonly replenishment_policy?: SalesReplenishmentPolicyPort | undefined;
+export class SalesAgentRuntime implements IAgentRuntime {
+  public readonly now?: (() => Date) | undefined;
+  private readonly registry?: SkillRegistryResolver | undefined;
+  private readonly resolvableDependencies?: DependencyReachabilityPredicate | undefined;
+  private readonly replenishment_policy?: SalesReplenishmentPolicyPort | undefined;
   private readonly purchase_evidence?: SalesPurchaseEvidencePort | undefined;
-   private readonly retainedRationales = new WeakMap<HypothesisRecord, ParsedSalesRationale>();
+  private readonly advisor_state?: SalesAdvisorExecutionState | undefined;
+  private readonly advisor_price_floor_bound: boolean;
+  private readonly advisor_quote_signing_bound: boolean;
+  private readonly retainedRationales = new WeakMap<HypothesisRecord, ParsedSalesRationale>();
 
-   constructor(options: SalesAgentRuntimeOptions = {}) {
-     this.registry = options.registry;
-     this.now = options.now;
-     this.resolvableDependencies = options.resolvableDependencies;
+  constructor(options: SalesAgentRuntimeOptions = {}) {
+    this.registry = options.registry;
+    this.now = options.now;
+    this.resolvableDependencies = options.resolvableDependencies;
     this.replenishment_policy = options.replenishment_policy ?? options.replenishment_policy_port;
     this.purchase_evidence = options.purchase_evidence;
-   }
+    this.advisor_state = options.advisor_state;
+    this.advisor_price_floor_bound = options.advisor_price_floor_bound === true;
+    this.advisor_quote_signing_bound = options.advisor_quote_signing_bound === true;
+  }
 
   async deriveHypothesis(signal: SignalEnvelope, context: HydratedContext): Promise<HypothesisRecord> {
     const handoffTarget = readHandoffTargetDomain(signal);
@@ -459,9 +537,17 @@ export interface SalesAgentRuntimeOptions {
       };
     }
 
-    const handoff_reason = extractSalesHandoffReason(signal);
-    if (handoff_reason) {
-      rationaleData = { ...rationaleData, handoff_reason };
+    const advisorRequirements = readAdvisorRequirements(signal);
+    if (advisorRequirements !== undefined) {
+      this.advisor_state?.setRequirements(context.tenant_id, context.correlation_id, advisorRequirements);
+      intent = 'advisor';
+      confidence = 0.95;
+      rationaleData = {
+        reason: `Server-stamped Sales advisor requirements for ${advisorRequirements.category} within ${advisorRequirements.budget_vnd} VND.`,
+        intent: 'advisor',
+        query: advisorRequirements.use_case,
+        advisor_requirements: advisorRequirements,
+      };
     }
 
     const derived_from_signals = [signal.signal_id];
@@ -502,6 +588,21 @@ export interface SalesAgentRuntimeOptions {
       case 'customer_lookup':
         return {
           target_agent: 'SAL-01' as PlatformAgentId,
+          requires_clarification: false,
+          rationalization: hypothesis.reasoning,
+        };
+
+      case 'advisor':
+        if (rationale?.advisor_requirements === undefined) {
+          return {
+            target_agent: 'SAL-02' as PlatformAgentId,
+            requires_clarification: true,
+            clarification_prompt: 'The product requirements are incomplete; please provide category, budget, and use case.',
+            rationalization: 'Server-stamped advisor requirements are missing.',
+          };
+        }
+        return {
+          target_agent: 'SAL-02' as PlatformAgentId,
           requires_clarification: false,
           rationalization: hypothesis.reasoning,
         };
@@ -805,6 +906,118 @@ export interface SalesAgentRuntimeOptions {
       return {
         plan_id,
         steps: [step],
+        fallback_strategy: 'FAIL_CLOSED',
+      };
+    }
+
+    if (intent === 'advisor') {
+      const requirements = rationale?.advisor_requirements;
+      const customer = context.customer;
+      const customerId = customer?.customer_id;
+      if (
+        requirements === undefined
+        || customer === null
+        || customer === undefined
+        || customerId === undefined
+        || customer.consent_marketing !== true
+        || customer.suppression_active
+        || !this.advisor_state
+        || !this.advisor_price_floor_bound
+        || !this.advisor_quote_signing_bound
+      ) {
+        return {
+          plan_id,
+          steps: [],
+          fallback_strategy: 'FAIL_CLOSED',
+        };
+      }
+
+      const searchRow = lookupRegistryRow(this.registry, 'skill.sales.search_product');
+      const stockRow = lookupRegistryRow(this.registry, 'skill.sales.check_stock');
+      const priceRow = lookupRegistryRow(this.registry, 'skill.sales.check_price');
+      if (
+        !this.isRowExecutable(searchRow, routing.target_agent)
+        || searchRow.effect_class !== 'READ'
+        || !this.isRowExecutable(stockRow, routing.target_agent)
+        || stockRow.effect_class !== 'READ'
+        || !this.isRowExecutable(priceRow, routing.target_agent)
+        || priceRow.effect_class !== 'READ'
+      ) {
+        return {
+          plan_id,
+          steps: [],
+          fallback_strategy: 'FAIL_CLOSED',
+        };
+      }
+
+      const searchStep = this.buildPlannedStep(
+        1,
+        routing.target_agent,
+        searchRow,
+        {
+          tenant_id: context.tenant_id,
+          query: requirements.use_case,
+          category_id: requirements.category,
+          limit: 20,
+        },
+        [],
+      );
+      const stockStep = {
+        ...this.buildPlannedStep(
+          2,
+          routing.target_agent,
+          stockRow,
+          { tenant_id: context.tenant_id, sku_id: '' },
+          [1],
+        ),
+        input_bindings: {
+          sku_id: { source_step_index: 1, response_path: 'products.0.sku' },
+        },
+      };
+      const priceStep = {
+        ...this.buildPlannedStep(
+          3,
+          routing.target_agent,
+          priceRow,
+          {
+            tenant_id: context.tenant_id,
+            sku_id: '',
+            customer_id: customerId,
+          },
+          [2],
+        ),
+        input_bindings: {
+          sku_id: { source_step_index: 2, response_path: 'sku_id' },
+        },
+      };
+
+      const recommendRow = lookupRegistryRow(this.registry, 'skill.sales.recommend_product');
+      if (
+        !this.isRowExecutable(recommendRow, routing.target_agent)
+        || recommendRow.effect_class !== 'READ'
+      ) {
+        return {
+          plan_id,
+          steps: [],
+          fallback_strategy: 'FAIL_CLOSED',
+        };
+      }
+
+      const recommendStep = this.buildPlannedStep(
+        4,
+        routing.target_agent,
+        recommendRow,
+        {
+          tenant_id: context.tenant_id,
+          customer_id: customerId,
+          current_cart_skus: [],
+        },
+        [1, 2, 3],
+      );
+
+      return {
+        plan_id,
+        steps: [searchStep, stockStep, priceStep, recommendStep],
         fallback_strategy: 'FAIL_CLOSED',
       };
     }

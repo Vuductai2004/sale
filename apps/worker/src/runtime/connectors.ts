@@ -46,6 +46,7 @@ export interface WorkerConnectorEnv {
   readonly MOCK_ERP_ENABLED?: string;
   readonly ERP_API_BASE_URL?: string;
   readonly MOCK_SECRET_KEY?: string;
+  readonly QUOTE_SIGNING_SECRET?: string;
   readonly ERP_TIMEOUT_MS?: string;
 }
 

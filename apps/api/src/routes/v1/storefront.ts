@@ -35,6 +35,8 @@ import {
 import type { CredentialStore } from '../../gateway/principal.js';
 import { authenticate, requirePrincipal } from '../../gateway/principal.js';
 import type { ConversationRecord, GatewayRuntime } from '../../gateway/ports.js';
+import { classifyTurnModule } from './turn-classifier.js';
+import type { TurnIntentPort } from '../../runtime/bindings/turn-intent.js';
 
 /** Audit operation names; each route spells its own once. */
 const STREAM_OPERATION = 'POST /api/v1/storefront/stream';
@@ -70,6 +72,7 @@ export interface StorefrontRouteDeps {
   readonly enabledModules?: readonly string[];
   readonly salesSignalEventTypes?: readonly string[];
   readonly marketingSignalEventTypes?: readonly string[];
+  readonly intentProposer?: TurnIntentPort;
 }
 
 /** An ISO-8601 instant: a date, a time to the second, and an explicit UTC offset or `Z`. */
@@ -231,10 +234,10 @@ function readTurn(
   if (requestedModule !== null && !AGENT_MODULES.some((member) => member === requestedModule)) {
     fail('VALIDATION_FAILED', 'module must be one of the declared agent modules (06 §1)');
   }
-  const module = requestedModule === null || requestedModule === 'auto' ? 'support' : (requestedModule as AgentModule);
+  const module = classifyTurnModule(message, requestedModule === null ? undefined : requestedModule as AgentModule);
   const enabledModules = configuredModules ?? parseEnabledAgentModules(process.env.ENABLED_AGENT_MODULES);
   if (!enabledModules.includes(module)) {
-    fail('CAPABILITY_NOT_ENABLED', 'only Customer Care support turns are enabled');
+    fail('CAPABILITY_NOT_ENABLED', 'the selected agent module is not enabled');
   }
 
   const rawEventType = body['event_type'];
@@ -358,6 +361,10 @@ async function handleStream(
       tenant_id: principal.tenant_id,
       session_id: turn.session_id,
       channel_type: WIDGET_CHANNEL,
+      // The launched widget session IS the channel identifier the tenant's identity rows are keyed
+      // by (`agentos.customer_identities`), so a verified persona resolves and an unknown session
+      // stays unresolved rather than being handed a customer by assertion.
+      channel_identifier: turn.session_id,
     });
 
     const conversation: ConversationRecord = await runtime.conversations.bindOrCreate({
@@ -378,6 +385,7 @@ async function handleStream(
       module: turn.module,
       event_type: turn.event_type,
       ...(turn.attachments === undefined ? {} : { attachments: turn.attachments }),
+      ...(deps.intentProposer === undefined ? {} : { intentProposer: deps.intentProposer }),
       operation: STREAM_OPERATION,
     });
     receipt = admission.receipt;

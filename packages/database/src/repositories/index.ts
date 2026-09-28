@@ -41,6 +41,22 @@ export type {
   ReleaseTaskLeaseInput,
   RenewTaskLeaseInput,
 } from './durable-workflows.js';
+export { RunResponseRepository } from './run-responses.js';
+export {
+  RUN_STAGES,
+  RunStageEventsRepository,
+  RunStageEventRepository,
+  ProviderCallLedgerRepository,
+} from './run-stage-events.js';
+export type {
+  RunStage,
+  RunStageEventRecord,
+  AppendRunStageEventInput,
+  ProviderCallObservedStatus,
+  ProviderCallLedgerRecord,
+  AppendProviderCallInput,
+} from './run-stage-events.js';
+export type { RunResponseRecord, SaveRunResponseInput } from './run-responses.js';
 export { ApprovalRepository } from './approvals.js';
 export type {
   ApprovalActionDraft,

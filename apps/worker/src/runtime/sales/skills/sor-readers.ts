@@ -9,6 +9,10 @@ export interface ProductItem {
   readonly name?: string;
   readonly title?: string;
   readonly description?: string;
+  readonly category?: string;
+  readonly use_case?: string;
+  readonly key_attribute?: string;
+  readonly attributes?: Readonly<Record<string, unknown>>;
   readonly original_list_price?: number;
   readonly list_price?: number;
   readonly price?: number;
@@ -19,7 +23,7 @@ export interface ProductItem {
   readonly tenant_id?: string;
   readonly categories?: readonly string[];
   readonly tags?: readonly string[];
-  readonly category_path?: string;
+  readonly category_path?: string | readonly string[];
 }
 
 export interface InventoryItem {
@@ -83,7 +87,9 @@ export function productListPrice(product: ProductItem): number | undefined {
 
 export function categoryMatches(product: ProductItem, category_id: string | undefined): boolean {
   if (category_id === undefined) return true;
-  if (product.category_path?.split('/').includes(category_id)) return true;
+  if (product.category === category_id) return true;
+  if (Array.isArray(product.category_path)) return product.category_path.includes(category_id);
+  if (typeof product.category_path === 'string' && product.category_path.split('/').includes(category_id)) return true;
   return product.categories?.includes(category_id) ?? false;
 }
 
