@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { readdir, readFile } from 'node:fs/promises';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { describe, it } from 'node:test';
 
 import {
@@ -10,12 +11,29 @@ import {
   validateDemoEnvironment,
   validateDemoPack,
 } from './seed.mjs';
+import { isMainModule } from './lib/main-module.mjs';
 
 const VALID_ENV = Object.freeze({
   APP_ENV: 'local',
   DEMO_MODE: 'true',
   DEMO_TENANT_ID: NOVAMART_TENANT_ID,
   DATABASE_URL: 'postgresql://localhost:5432/agentos_dev',
+});
+
+describe('scripts/demo main-module helper', () => {
+  it('detects POSIX-style and Windows-style argv paths and rejects mismatches', () => {
+    const nativePath = fileURLToPath(new URL('./seed.mjs', import.meta.url));
+    const posixPath = nativePath.replaceAll('\\', '/');
+    const windowsPath = nativePath.replaceAll('/', '\\');
+
+    for (const argvPath of [posixPath, windowsPath]) {
+      const matchingUrl = pathToFileURL(argvPath).href;
+      assert.equal(isMainModule(matchingUrl, argvPath), true);
+      assert.equal(isMainModule(`${matchingUrl}.mismatch`, argvPath), false);
+    }
+
+    assert.equal(isMainModule(pathToFileURL(nativePath).href, undefined), false);
+  });
 });
 
 describe('scripts/demo/seed pure helpers', () => {

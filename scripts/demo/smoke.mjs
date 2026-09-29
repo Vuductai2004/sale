@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 
+import { isMainModule } from './lib/main-module.mjs';
 import { stableUuid } from './seed.mjs';
 
 const TENANT_ID = '99999999-9999-4999-8999-999999999999';
@@ -251,7 +252,7 @@ export async function runDemoLiveSmoke(env = process.env) {
   return runFlow(env, 'live');
 }
 
-if (process.argv[1]?.replaceAll('\\', '/').endsWith('/scripts/demo/smoke.mjs')) {
+if (isMainModule(import.meta.url, process.argv[1])) {
   const live = process.argv.includes('--live');
   const offline = process.argv.includes('--offline') || !live;
   const run = live && !offline ? runDemoLiveSmoke : runDemoSmoke;

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { isMainModule } from './lib/main-module.mjs';
 import { loadDemoPack, NOVAMART_TENANT_ID } from './seed.mjs';
 
 const REQUIRED = [
@@ -62,7 +63,7 @@ export async function runDemoLivePreflight(env = process.env) {
   return runDemoPreflight(env, 'live');
 }
 
-if (process.argv[1]?.replaceAll('\\', '/').endsWith('/scripts/demo/preflight.mjs')) {
+if (isMainModule(import.meta.url, process.argv[1])) {
   const profile = process.argv.includes('--live') && !process.argv.includes('--offline') ? 'live' : 'offline';
   runDemoPreflight(process.env, profile).then((result) => {
     console.log(`NovaMart demo ${profile} preflight passed: ${JSON.stringify(result)}`);

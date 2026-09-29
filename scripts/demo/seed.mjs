@@ -2,7 +2,7 @@
 import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
+import { isMainModule } from './lib/main-module.mjs';
 
 const requireDatabaseDependency = createRequire(new URL('../../packages/database/package.json', import.meta.url));
 export const NOVAMART_TENANT_ID = '99999999-9999-4999-8999-999999999999';
@@ -276,7 +276,7 @@ export async function seedNovaMart(env = process.env) {
   return { tenant_id: NOVAMART_TENANT_ID, counts: COUNTS, agent_count: AGENTS.length };
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === fileURLToPath(new URL(`file:///${process.argv[1].replaceAll('\\', '/')}`))) {
+if (isMainModule(import.meta.url, process.argv[1])) {
   seedNovaMart().then(({ tenant_id, counts, agent_count }) => {
     console.log(`NovaMart demo seeded for ${tenant_id}: ${JSON.stringify(counts)}, agents=${agent_count}`);
   }).catch((error) => {
