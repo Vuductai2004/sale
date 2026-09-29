@@ -22,7 +22,7 @@ import type {
   SignalEnvelope,
 } from '@agentos/core-engine/contracts';
 import { MemoryEffectGuard, OrchestratorError } from '@agentos/core-engine';
-import type { DurableTaskRecord } from '@agentos/database';
+import type { DurableTaskRecord, DurableWorkflowRepository } from '@agentos/database';
 
 import { createCrossDomainHandoffBroker } from '../runtime/shared/cross-domain-handoff.js';
 import {
@@ -223,6 +223,17 @@ describe('TC-E2E-001 worker claim seam', () => {
       resolve_correlation_id: async () => CORRELATION_ID,
       crossDomainHandoff: broker,
     };
+    const workflowRepository = {
+      claimNextQueuedTask: vi.fn(async () => null),
+      getTask: vi.fn(async (_tenant: string, runId: string) => tasks.get(runId) ?? null),
+      releaseTaskLease: vi.fn(async () => true),
+      renewTaskLease: vi.fn(async () => {
+        throw new Error('renewTaskLease is not used by this direct processClaimedTask seam');
+      }),
+      recordFailure: vi.fn(async () => ({ requeued: false })),
+      transitionTask: workflowEngine.transitionTask,
+    };
+
 
     const worker = startWorker(
       {
@@ -238,6 +249,7 @@ describe('TC-E2E-001 worker claim seam', () => {
         tenantIds: [TENANT_ID],
         autoStartPolling: false,
         workerId: WORKER_ID,
+        workflowRepository: workflowRepository as unknown as DurableWorkflowRepository,
         crossDomainHandoff: broker,
         marketingFactoryOptions: { ...shared, adapterDispatcher },
         salesFactoryOptions: {
@@ -263,6 +275,7 @@ describe('TC-E2E-001 worker claim seam', () => {
       if (!task) throw new Error(`missing durable task ${runId}`);
       const claimed: DurableTaskRecord = {
         ...task,
+        state: 'running',
         lease_owner: WORKER_ID,
         lease_expires_at: new Date(Date.now() + 60_000).toISOString(),
       };
@@ -270,12 +283,7 @@ describe('TC-E2E-001 worker claim seam', () => {
       return claimed;
     }
 
-    const workflowRepository = {
-      getTask: vi.fn(async (_tenant: string, runId: string) => tasks.get(runId) ?? null),
-      releaseTaskLease: vi.fn(async () => true),
-      recordFailure: vi.fn(async () => ({ requeued: false })),
-      transitionTask: workflowEngine.transitionTask,
-    };
+
 
     const marketingRun = 'run-tc-e2e-001-marketing';
     const marketingSignal: SignalEnvelope = {

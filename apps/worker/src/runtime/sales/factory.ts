@@ -97,6 +97,10 @@ import type {
   SalesReplenishmentPolicyPort,
   SalesSkillServices,
 } from './skills/types.js';
+import type { WorkerConnectorEnv } from '../connectors.js';
+type SalesFactoryEnv = WorkerConnectorEnv & {
+  readonly AUDIT_HMAC_SECRET?: string;
+};
 
 export interface SalesAdaptersShape extends DurableAdapters {
   readonly unbound?: readonly string[] | undefined;
@@ -138,6 +142,9 @@ export interface SalesOrchestratorFactoryOptions {
   readonly auditRepository?: AuditRepository | undefined;
   readonly conversationRepository?: ConversationRepository | undefined;
   readonly auditSecret?: string | undefined;
+  readonly blockers?: string[] | undefined;
+  readonly assertExecutionLease?: ((tenant_id: string, run_id: string) => Promise<void>) | undefined;
+  readonly env?: SalesFactoryEnv | undefined;
   readonly quote_signing_secret?: string | undefined;
   readonly advisor_state?: SalesAdvisorExecutionState | undefined;
   readonly erp_read?: ErpReadPort | null | undefined;
@@ -208,6 +215,9 @@ export function getSalesUnboundCapabilities(options: SalesOrchestratorFactoryOpt
   const unbound: string[] = [];
 
   if (!options.adapterDispatcher && !options.skillServices?.dispatcher) {
+    if (options.revenue_evidence === undefined) {
+      unbound.push('Core.RecommendationEngine revenue evidence: no owner-approved revenue model is bound');
+    }
     if (options.erp_read === null || options.erp_read === undefined) {
       unbound.push('API-001 (unbound ERP read: no ERP read connector is bound)');
     }
@@ -265,8 +275,14 @@ export function getSalesUnboundCapabilities(options: SalesOrchestratorFactoryOpt
  * Creates a per-tenant RevenueOrchestrator factory function for Sales.
  */
 export function createSalesOrchestratorFactory(
+  options: SalesOrchestratorFactoryOptions & { readonly auditSecret: string },
+): (tenant_id: string) => Promise<RevenueOrchestrator>;
+export function createSalesOrchestratorFactory(
+  options?: SalesOrchestratorFactoryOptions,
+): (tenant_id: string) => Promise<RevenueOrchestrator | null>;
+export function createSalesOrchestratorFactory(
   options: SalesOrchestratorFactoryOptions = {},
-): (tenant_id: string) => Promise<RevenueOrchestrator> {
+): (tenant_id: string) => Promise<RevenueOrchestrator | null> {
   const workerId = options.workerId ?? `sales_worker_${randomUUID().slice(0, 8)}`;
   const now = options.now ?? (() => new Date());
   // Offline compositions stay offline: only an explicit DurableWorkflowRepository opts
@@ -278,9 +294,11 @@ export function createSalesOrchestratorFactory(
   const responseStore = options.responseStore ?? (runResponseRepository === undefined ? undefined : createRunResponseStore(runResponseRepository));
   const runStageRecorder = options.runStageRecorder;
 
-  const auditSecret = options.auditSecret ?? process.env.AUDIT_HMAC_SECRET;
+  const auditSecret = options.auditSecret ?? options.env?.AUDIT_HMAC_SECRET ?? process.env.AUDIT_HMAC_SECRET;
   if (!auditSecret || auditSecret.trim().length === 0) {
-    throw new Error('SALES_AUDIT_SECRET_REQUIRED: audit HMAC secret must be provided or configured in AUDIT_HMAC_SECRET environment variable.');
+    const blocker = 'SALES_AUDIT_SECRET_REQUIRED: audit HMAC secret must be provided or configured in AUDIT_HMAC_SECRET environment variable.';
+    options.blockers?.push(blocker);
+    return async (): Promise<RevenueOrchestrator | null> => null;
   }
 
   // 1. Adapters from createDurableAdapters if not supplied directly
@@ -438,7 +456,7 @@ export function createSalesOrchestratorFactory(
     auditRepository: options.auditRepository,
   });
 
-  return async (_tenant_id: string): Promise<RevenueOrchestrator> => {
+  return async (_tenant_id: string): Promise<RevenueOrchestrator | null> => {
     if (!workflowEngine || !evidenceLogger || !auditTrail || !sessionControl || !leaseManager) {
       throw new Error('SALES_ORCHESTRATOR_UNBOUND: missing required durable workflow/evidence adapters.');
     }
@@ -459,6 +477,7 @@ export function createSalesOrchestratorFactory(
       effectGuard,
       sessionControl,
       leaseManager,
+      ...(options.assertExecutionLease === undefined ? {} : { assertExecutionLease: options.assertExecutionLease }),
       ...(responseFinalizer === undefined ? {} : { responseFinalizer }),
       ...(responseStore === undefined ? {} : { responseStore }),
       ...(runStageRecorder === undefined ? {} : { runStageRecorder }),

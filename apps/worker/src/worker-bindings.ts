@@ -43,6 +43,8 @@ import { createMarketingAudienceReader } from './runtime/marketing/audience-adap
 import { createSalesConsentPort } from './runtime/sales/consent-adapter.js';
 import { createSalesRevenueEvidencePort } from './runtime/sales/revenue-evidence-adapter.js';
 import { DurableRunStageRecorder } from './runtime/shared/stage-recorder.js';
+import { createExecutionLeaseAssertion } from './runtime/execution-lease.js';
+
 
 class MarketingContentProviderError extends Error {
   readonly code: 'PROVIDER_UNAVAILABLE' | 'PROVIDER_ERROR' | 'TENANT_SCOPE_MISMATCH';
@@ -242,6 +244,7 @@ function createMarketingContentEngine(env: WorkerBindingEnv): MarketingContentEn
 }
 
 interface WorkerBindingEnv extends WorkerConnectorEnv {
+  readonly DEMO_MODE?: string;
   readonly KNOWLEDGE_ROOT?: string;
   readonly KNOWLEDGE_TENANT_IDS?: string;
   readonly OPENAI_API_KEY?: string;
@@ -259,11 +262,13 @@ interface WorkerBindingEnv extends WorkerConnectorEnv {
   readonly QUOTE_SIGNING_SECRET?: string;
 }
 
+
 type OrchestratorFactory =
   (tenant_id: string) => Promise<RevenueOrchestrator | null> | RevenueOrchestrator | null;
 
 type WorkflowRepository = Pick<DurableWorkflowRepository,
-  'claimNextQueuedTask' | 'getTask' | 'releaseTaskLease' | 'recordFailure' | 'transitionTask'>;
+  'claimNextQueuedTask' | 'getTask' | 'renewTaskLease' | 'releaseTaskLease' | 'recordFailure' | 'transitionTask'>;
+
 
 interface WorkerBindingOptions {
   readonly env: WorkerBindingEnv;
@@ -305,6 +310,11 @@ export function createWorkerDomainBindings(options: WorkerBindingOptions): Domai
     marketingSignalContractDefaults,
   } = options;
   const bindings: DomainRuntimeBinding[] = [];
+  const assertExecutionLease = createExecutionLeaseAssertion({
+    workflowRepository,
+    workerId,
+  });
+
 
   let careOrchestratorFactory: OrchestratorFactory | null = null;
   if (enabledModules.includes('support')) {
@@ -316,11 +326,17 @@ export function createWorkerDomainBindings(options: WorkerBindingOptions): Domai
     const careFactory = unboundCapabilities.length === 0
       ? createCareOrchestratorFactory({
           ...options.careFactoryOptions,
+          ...(options.careFactoryOptions.env === undefined ? { env } : {}),
+          ...(options.careFactoryOptions.auditSecret === undefined
+            ? { auditSecret: env.AUDIT_HMAC_SECRET } : {}),
+          ...(options.careFactoryOptions.blockers === undefined ? { blockers } : {}),
+          ...(options.careFactoryOptions.assertExecutionLease === undefined ? { assertExecutionLease } : {}),
           ...(options.careFactoryOptions.runStageRecorder !== undefined
             || !(options.careFactoryOptions.workflowRepository instanceof DurableWorkflowRepository)
             ? {} : { runStageRecorder: new DurableRunStageRecorder(new RunStageEventsRepository()) }),
         })
       : null;
+
 
     careOrchestratorFactory = options.orchestratorFactory ?? careFactory;
 
@@ -347,15 +363,25 @@ export function createWorkerDomainBindings(options: WorkerBindingOptions): Domai
         ? {
             workerId,
             workflowRepository: workflowRepository as DurableWorkflowRepository,
+            env,
+            auditSecret: env.AUDIT_HMAC_SECRET,
+            blockers,
+            assertExecutionLease,
             erp_read: connectors.erp_read,
             consent: createSalesConsentPort(),
-            revenue_evidence: createSalesRevenueEvidencePort(),
+            ...(env.DEMO_MODE === 'true' && (env.APP_ENV === 'local' || env.APP_ENV === 'ci')
+              ? { revenue_evidence: createSalesRevenueEvidencePort() } : {}),
             ...(env.QUOTE_SIGNING_SECRET === undefined ? {} : { quote_signing_secret: env.QUOTE_SIGNING_SECRET }),
             ...(crossDomainHandoff === undefined ? {} : { crossDomainHandoff }),
             ...(autonomy === undefined ? {} : { autonomy }),
           }
         : {
             ...options.salesFactoryOptions,
+            ...(options.salesFactoryOptions.env === undefined ? { env } : {}),
+            ...(options.salesFactoryOptions.auditSecret === undefined
+              ? { auditSecret: env.AUDIT_HMAC_SECRET } : {}),
+            ...(options.salesFactoryOptions.blockers === undefined ? { blockers } : {}),
+            ...(options.salesFactoryOptions.assertExecutionLease === undefined ? { assertExecutionLease } : {}),
             ...(options.salesFactoryOptions.quote_signing_secret !== undefined || env.QUOTE_SIGNING_SECRET === undefined
               ? {}
               : { quote_signing_secret: env.QUOTE_SIGNING_SECRET }),
@@ -366,6 +392,7 @@ export function createWorkerDomainBindings(options: WorkerBindingOptions): Domai
               ? {}
               : { autonomy }),
           };
+
 
       // Reported, never used to suppress the domain: a deployment that binds only the read
       // connectors still serves catalog/stock/customer reads and refuses each mutation at
@@ -436,6 +463,11 @@ export function createWorkerDomainBindings(options: WorkerBindingOptions): Domai
         marketingFactory = createMarketingOrchestratorFactory({
           ...suppliedMarketingOptions,
           workerId,
+          ...(suppliedMarketingOptions.env === undefined ? { env } : {}),
+          ...(suppliedMarketingOptions.auditSecret === undefined
+            ? { auditSecret: env.AUDIT_HMAC_SECRET } : {}),
+          ...(suppliedMarketingOptions.blockers === undefined ? { blockers } : {}),
+          ...(suppliedMarketingOptions.assertExecutionLease === undefined ? { assertExecutionLease } : {}),
           ...(hasSuppliedContentEngine
             ? {}
             : {

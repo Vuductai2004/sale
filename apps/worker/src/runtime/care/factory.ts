@@ -128,8 +128,10 @@ export interface CareOrchestratorFactoryOptions {
   readonly auditRepository?: AuditRepository | undefined;
   readonly conversationRepository?: ConversationRepository | undefined;
   readonly auditSecret?: string | undefined;
+  readonly blockers?: string[] | undefined;
+  readonly assertExecutionLease?: ((tenant_id: string, run_id: string) => Promise<void>) | undefined;
   readonly erp_read?: ErpReadPort | null | undefined;
-  readonly env?: CareSkillEnv | undefined;
+  readonly env?: (CareSkillEnv & { readonly AUDIT_HMAC_SECRET?: string }) | undefined;
   readonly case_sla_target_hours?: CareSkillOptions['case_sla_target_hours'] | undefined;
   readonly handoff_repository?: CareSkillOptions['handoff_repository'] | undefined;
   readonly skill_enablement?: CareSkillOptions['skill_enablement'] | undefined;
@@ -266,8 +268,14 @@ export function getUnboundCapabilities(options: CareOrchestratorFactoryOptions =
  * Creates a per-tenant RevenueOrchestrator factory function.
  */
 export function createCareOrchestratorFactory(
+  options: CareOrchestratorFactoryOptions & { readonly auditSecret: string },
+): (tenant_id: string) => Promise<RevenueOrchestrator>;
+export function createCareOrchestratorFactory(
+  options?: CareOrchestratorFactoryOptions,
+): (tenant_id: string) => Promise<RevenueOrchestrator | null>;
+export function createCareOrchestratorFactory(
   options: CareOrchestratorFactoryOptions = {},
-): (tenant_id: string) => Promise<RevenueOrchestrator> {
+): (tenant_id: string) => Promise<RevenueOrchestrator | null> {
   const workerId = options.workerId ?? `care_worker_${randomUUID().slice(0, 8)}`;
   const now = options.now ?? (() => new Date());
   // An isolated/offline composition (no workflow repository, or a non-PostgreSQL test
@@ -279,9 +287,11 @@ export function createCareOrchestratorFactory(
   const responseFinalizer = options.responseFinalizer ?? (ownsDurableWorkflow ? createResponseFinalizer(now) : undefined);
   const responseStore = options.responseStore ?? (runResponseRepository === undefined ? undefined : createRunResponseStore(runResponseRepository));
   const runStageRecorder = options.runStageRecorder;
-  const auditSecret = options.auditSecret ?? process.env.AUDIT_HMAC_SECRET;
+  const auditSecret = options.auditSecret ?? options.env?.AUDIT_HMAC_SECRET ?? process.env.AUDIT_HMAC_SECRET;
   if (!auditSecret || auditSecret.trim().length === 0) {
-    throw new Error('CARE_AUDIT_SECRET_REQUIRED: audit HMAC secret must be provided or configured in AUDIT_HMAC_SECRET environment variable.');
+    const blocker = 'CARE_AUDIT_SECRET_REQUIRED: audit HMAC secret must be provided or configured in AUDIT_HMAC_SECRET environment variable.';
+    options.blockers?.push(blocker);
+    return async (): Promise<RevenueOrchestrator | null> => null;
   }
 
   // 1. Adapters from createDurableAdapters if not supplied directly
@@ -371,7 +381,7 @@ export function createCareOrchestratorFactory(
     auditRepository: options.auditRepository,
   });
 
-  return async (_tenant_id: string): Promise<RevenueOrchestrator> => {
+  return async (_tenant_id: string): Promise<RevenueOrchestrator | null> => {
     if (!workflowEngine || !evidenceLogger || !auditTrail || !sessionControl || !leaseManager) {
       throw new Error('CARE_ORCHESTRATOR_UNBOUND: missing required durable workflow/evidence adapters.');
     }
@@ -392,6 +402,7 @@ export function createCareOrchestratorFactory(
       effectGuard,
       sessionControl,
       leaseManager,
+      ...(options.assertExecutionLease === undefined ? {} : { assertExecutionLease: options.assertExecutionLease }),
       ...(responseFinalizer === undefined ? {} : { responseFinalizer }),
       ...(responseStore === undefined ? {} : { responseStore }),
       ...(runStageRecorder === undefined ? {} : { runStageRecorder }),

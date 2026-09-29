@@ -155,6 +155,7 @@ export interface WorkerEnv extends WorkerConnectorEnv {
   readonly MARKETING_SIGNAL_SOURCE_CHANNELS?: string;
   readonly MARKETING_SIGNAL_EVENT_TYPES?: string;
   readonly AUDIT_HMAC_SECRET?: string;
+  readonly DEMO_MODE?: string;
   readonly DATABASE_URL?: string;
   /**
    * Enables the brokered cross-domain journey (`marketing → sales → care → retention`). Absent or
@@ -172,7 +173,7 @@ export interface WorkerExecutionOptions extends WorkerConnectorOptions {
   /** Optional autonomy admission override; no in-memory store is created by the worker. */
   readonly autonomy?: AutonomyAdmissionPort;
   readonly workflowRepository?: Pick<DurableWorkflowRepository,
-    'claimNextQueuedTask' | 'getTask' | 'releaseTaskLease' | 'recordFailure' | 'transitionTask'>;
+    'claimNextQueuedTask' | 'getTask' | 'renewTaskLease' | 'releaseTaskLease' | 'recordFailure' | 'transitionTask'>;
   readonly orchestratorFactory?: (tenant_id: string) => Promise<RevenueOrchestrator | null> | RevenueOrchestrator | null;
   readonly salesOrchestratorFactory?: (tenant_id: string) => Promise<RevenueOrchestrator | null> | RevenueOrchestrator | null;
   readonly marketingOrchestratorFactory?: (tenant_id: string) => Promise<RevenueOrchestrator | null> | RevenueOrchestrator | null;
@@ -180,6 +181,9 @@ export interface WorkerExecutionOptions extends WorkerConnectorOptions {
   readonly domainRegistry?: DomainRuntimeRegistry;
   readonly pollIntervalMs?: number;
   readonly leaseDurationMs?: number;
+  readonly now?: () => Date;
+  readonly setTimeout?: (handler: () => void, timeout: number) => NodeJS.Timeout;
+  readonly clearTimeout?: (handle: NodeJS.Timeout) => void;
   readonly autoStartPolling?: boolean;
   readonly onError?: (tenant_id: string, error: unknown) => void;
   readonly careFactoryOptions?: CareOrchestratorFactoryOptions;
@@ -241,8 +245,9 @@ export async function processClaimedTask(params: {
   workflowRepository: Pick<DurableWorkflowRepository, 'getTask' | 'releaseTaskLease' | 'recordFailure' | 'transitionTask'>;
   orchestratorFactory?: (tenant_id: string) => Promise<RevenueOrchestrator | null> | RevenueOrchestrator | null;
   registry?: DomainRuntimeRegistry | undefined;
+  signal?: AbortSignal | undefined;
 }): Promise<void> {
-  const { taskRecord, tenant_id, worker_id, workflowRepository, orchestratorFactory } = params;
+  const { taskRecord, tenant_id, worker_id, workflowRepository, orchestratorFactory, signal: abortSignal } = params;
   const hadResumeEvent = hasResumeEvent(taskRecord.state_payload);
 
   const registry = params.registry ?? (
@@ -255,6 +260,7 @@ export async function processClaimedTask(params: {
   );
 
   try {
+    abortSignal?.throwIfAborted();
     const payload = taskRecord.state_payload;
     const record = asRecord(payload);
     const resumeEventValue = record?.['resume_event'];
@@ -345,6 +351,7 @@ export async function processClaimedTask(params: {
         return;
       }
 
+      abortSignal?.throwIfAborted();
       await orchestrator.resumeTask(taskRecord.run_id, resumeEvent as never);
       return;
     }
@@ -409,6 +416,7 @@ export async function processClaimedTask(params: {
         return;
       }
 
+      abortSignal?.throwIfAborted();
       await orchestrator.processQueuedSignal(taskRecord.run_id, signal as SignalEnvelope, { worker_id });
       return;
     }
@@ -544,14 +552,18 @@ export function startWorker(
     workerId,
     leaseDurationMs,
     pollIntervalMs,
+    ...(options.now === undefined ? {} : { now: options.now }),
+    ...(options.setTimeout === undefined ? {} : { setTimeout: options.setTimeout }),
+    ...(options.clearTimeout === undefined ? {} : { clearTimeout: options.clearTimeout }),
     autoStartPolling: options.autoStartPolling ?? true,
     onError: options.onError,
-    processTask: ({ taskRecord, tenant_id }) => processClaimedTask({
+    processTask: ({ taskRecord, tenant_id, signal }) => processClaimedTask({
       taskRecord,
       tenant_id,
       worker_id: workerId,
       workflowRepository,
       registry,
+      signal,
     }),
   });
 

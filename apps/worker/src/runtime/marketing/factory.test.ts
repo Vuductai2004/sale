@@ -71,6 +71,7 @@ interface OrchestratorInternals {
     readonly contextAggregator: IContextAggregator;
     readonly agentRuntime: IAgentRuntime;
     readonly policyEngine: IPolicyEngine;
+    readonly assertExecutionLease?: unknown;
   };
 }
 
@@ -97,12 +98,15 @@ const internals = (orchestrator: unknown): OrchestratorInternals => orchestrator
 
 describe('Marketing policy factory composition', () => {
   it('retains the audit secret and autonomy port without promoting AUTH-4 campaign dispatch', async () => {
+
     const auditTrail: IAuditTrail = { append: vi.fn(async () => undefined) };
     const admit = vi.fn(async () => ({ workflow: 'PARKED_DRAFT' as const, reason: 'not promoted' }));
+    const assertExecutionLease = vi.fn(async () => undefined);
     const factory = createMarketingOrchestratorFactory({
       auditSecret: AUDIT_SECRET,
       autonomy: { admit },
       resolve_grant: async () => 'AUTH-3',
+      assertExecutionLease,
       adapters: {
         workflowEngine: {} as IStatefulWorkflowEngine,
         evidenceLogger: {} as IEvidenceLogger,
@@ -113,7 +117,9 @@ describe('Marketing policy factory composition', () => {
       adapterDispatcher: {} as IAdapterDispatcher,
       effectGuard: {} as IEffectGuard,
     });
-    const policyEngine = internals(await factory(TENANT)).dependencies.policyEngine;
+    const orchestrator = await factory(TENANT);
+    expect(internals(orchestrator).dependencies.assertExecutionLease).toBe(assertExecutionLease);
+    const policyEngine = internals(orchestrator).dependencies.policyEngine;
     const context: HydratedContext = {
       tenant_id: TENANT,
       correlation_id: 'correlation-marketing-test',
@@ -165,6 +171,20 @@ describe('Marketing policy factory composition', () => {
       skill_id: 'skill.mkt.segment_audience',
     }));
   });
+  it('records a structured blocker when the audit secret is unavailable', async () => {
+    const blockers: string[] = [];
+    const factory = createMarketingOrchestratorFactory({
+      auditSecret: '',
+      env: { AUDIT_HMAC_SECRET: '' },
+      blockers,
+    });
+
+    await expect(factory(TENANT)).resolves.toBeNull();
+    expect(blockers).toEqual([
+      expect.stringContaining('MARKETING_AUDIT_SECRET_REQUIRED'),
+    ]);
+  });
+
 });
 
 describe('default Marketing context aggregation', () => {

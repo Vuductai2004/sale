@@ -210,8 +210,9 @@ describe('PILOT-01 through the shared P2 runtime', () => {
       run_id: 'run-pilot01-shared-runtime-1',
       correlation_id: PILOT_01_CORRELATION_ID,
       task_version: 1,
-      state: 'queued',
+      state: 'running',
       lease_owner: 'worker-1',
+      lease_expires_at: new Date(Date.now() + 60_000).toISOString(),
       state_payload: { signal },
     } as DurableTaskRecord;
     state_payload = taskRecord.state_payload;
@@ -232,6 +233,8 @@ describe('PILOT-01 through the shared P2 runtime', () => {
         hmac: () => '',
         tenantIds: [SHARED_TENANT_ID],
         autoStartPolling: false,
+        workerId: 'worker-1',
+        workflowRepository: workflowRepository as unknown as DurableWorkflowRepository,
         marketingFactoryOptions: {
           auditSecret: 'pilot01-audit-secret-000000000000',
           now: () => new Date('2026-03-01T09:00:00.000Z'),

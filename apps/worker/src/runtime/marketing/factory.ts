@@ -45,6 +45,7 @@ import type {
   IPlanInputResolver,
   ISessionControl,
 } from '@agentos/core-engine/contracts';
+import type { WorkerConnectorEnv } from '../connectors.js';
 import {
   AuditRepository,
   ApprovalRepository,
@@ -79,6 +80,9 @@ import {
   type MarketingSkillServices,
 } from './skills/index.js';
 import { createMarketingKnowledgePort } from './knowledge-adapter.js';
+type MarketingFactoryEnv = WorkerConnectorEnv & {
+  readonly AUDIT_HMAC_SECRET?: string;
+};
 
 const MARKETING_AGENT_BY_SKILL: Readonly<Record<string, PlatformAgentId>> = Object.freeze({
   'skill.mkt.analyze_market_signal': 'MKT-01',
@@ -775,6 +779,9 @@ export interface MarketingOrchestratorFactoryOptions {
   readonly conversationRepository?: ConversationRepository;
   readonly effectReservationRepository?: EffectReservationRepository;
   readonly auditSecret?: string;
+  readonly blockers?: string[];
+  readonly assertExecutionLease?: (tenant_id: string, run_id: string) => Promise<void>;
+  readonly env?: MarketingFactoryEnv;
   readonly now?: () => Date;
   readonly resolve_grant?: (tenant_id: string, agent_id: string) => Promise<AssignableAuthority | null>;
   readonly resolve_correlation_id?: (tenant_id: string, run_id: string) => Promise<string>;
@@ -787,11 +794,19 @@ export interface MarketingOrchestratorFactoryOptions {
  * Missing provider ports remain fail-closed in the canonical Marketing skill dispatcher.
  */
 export function createMarketingOrchestratorFactory(
+  options: MarketingOrchestratorFactoryOptions & { readonly auditSecret: string },
+): (tenant_id: string) => Promise<RevenueOrchestrator>;
+export function createMarketingOrchestratorFactory(
+  options?: MarketingOrchestratorFactoryOptions,
+): (tenant_id: string) => Promise<RevenueOrchestrator | null>;
+export function createMarketingOrchestratorFactory(
   options: MarketingOrchestratorFactoryOptions = {},
-): (tenant_id: string) => Promise<RevenueOrchestrator> {
-  const auditSecret = options.auditSecret ?? process.env.AUDIT_HMAC_SECRET;
+): (tenant_id: string) => Promise<RevenueOrchestrator | null> {
+  const auditSecret = options.auditSecret ?? options.env?.AUDIT_HMAC_SECRET ?? process.env.AUDIT_HMAC_SECRET;
   if (!auditSecret || auditSecret.trim().length === 0) {
-    throw new Error('MARKETING_AUDIT_SECRET_REQUIRED: audit HMAC secret must be provided or configured in AUDIT_HMAC_SECRET.');
+    const blocker = 'MARKETING_AUDIT_SECRET_REQUIRED: audit HMAC secret must be provided or configured in AUDIT_HMAC_SECRET environment variable.';
+    options.blockers?.push(blocker);
+    return async (): Promise<RevenueOrchestrator | null> => null;
   }
   const now = options.now ?? (() => new Date());
   // Offline compositions stay offline: only an explicit DurableWorkflowRepository opts
@@ -885,7 +900,7 @@ export function createMarketingOrchestratorFactory(
     options.validateAuthoritative,
   );
 
-  return async (_tenant_id: string): Promise<RevenueOrchestrator> => {
+  return async (_tenant_id: string): Promise<RevenueOrchestrator | null> => {
     if (!workflowEngine || !evidenceLogger || !auditTrail || !sessionControl || !leaseManager) {
       throw new Error('MARKETING_ORCHESTRATOR_UNBOUND: missing shared durable workflow/evidence adapters.');
     }
@@ -908,6 +923,7 @@ export function createMarketingOrchestratorFactory(
       effectGuard,
       sessionControl,
       leaseManager,
+      ...(options.assertExecutionLease === undefined ? {} : { assertExecutionLease: options.assertExecutionLease }),
       ...(responseFinalizer === undefined ? {} : { responseFinalizer }),
       ...(responseStore === undefined ? {} : { responseStore }),
       ...(runStageRecorder === undefined ? {} : { runStageRecorder }),
