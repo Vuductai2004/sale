@@ -168,6 +168,8 @@ export interface GatewayPrincipal {
   readonly tenant_id: string;
   /** Present for `OPERATOR`; the authenticated decision principal, never payload-only authority. */
   readonly operator_id?: string;
+  /** Present for a channel session: the channel the signed credential was issued for. */
+  readonly channel?: ChannelId;
   /** Present for a session-bound caller: the conversation/session the credential is bound to. */
   readonly conversation_id?: string;
   readonly session_id?: string;

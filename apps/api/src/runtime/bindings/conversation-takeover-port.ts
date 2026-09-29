@@ -26,6 +26,8 @@ import type {
 } from '../../gateway/ports.js';
 import { systemClock } from './run-port.js';
 
+const CONVERSATION_SESSION_TTL_SECONDS = 60 * 60;
+
 /** Encodes the canonical effect key and request fingerprint of one reservable effect. */
 export function createEffectGuard(repository: EffectReservationRepository): IEffectGuard {
   return {
@@ -174,14 +176,22 @@ export function createConversationPort(
     }),
 
     issueSessionToken: async (input) => {
-      // The token is the binding itself, signed. It carries no authority of its own: the gateway
-      // still resolves the principal and re-checks the conversation on every request, and the
-      // signature is what makes the binding unforgeable rather than merely opaque.
-      const binding = `${input.tenant_id}.${input.conversation_id}.${input.channel}`;
+      const row = await repository.get(input.tenant_id, input.conversation_id);
+      if (row === null) {
+        throw new Error('CONVERSATION_NOT_FOUND: cannot issue a token for an unknown conversation');
+      }
+      const binding = JSON.stringify({
+        tenant_id: input.tenant_id,
+        conversation_id: input.conversation_id,
+        session_id: row.external_thread_id,
+        exp: Math.floor(Date.now() / 1000) + CONVERSATION_SESSION_TTL_SECONDS,
+        channel: input.channel,
+      });
+      const encodedBinding = Buffer.from(binding, 'utf8').toString('base64url');
       const signature = createHmac('sha256', options.session_secret)
         .update(binding, 'utf8')
         .digest('base64url');
-      return `${Buffer.from(binding, 'utf8').toString('base64url')}.${signature}`;
+      return `${encodedBinding}.${signature}`;
     },
   };
 }

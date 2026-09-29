@@ -8,16 +8,18 @@
  * nothing" an observation about the request instead of a claim about a handler.
  */
 
+import { createHmac } from 'node:crypto';
+
 import { MemoryEffectGuard } from '@agentos/core-engine';
 import Fastify, { type FastifyInstance } from 'fastify';
 import { describe, expect, it } from 'vitest';
-
 import { correlationIdOf, replyFailure } from './http.js';
 import {
   authenticate,
   createCredentialStore,
   requireOperator,
   requirePrincipal,
+  verifyConversationSessionToken,
   type CredentialStore,
   type OperatorCredential,
   type SessionCredential,
@@ -87,6 +89,27 @@ function testCredentials(): CredentialStore {
 /** The bearer presentation of a token; the scheme is the only structure the gateway reads. */
 function bearer(token: string): Record<string, string> {
   return { authorization: `Bearer ${token}` };
+}
+
+const SESSION_SIGNING_SECRET = 'test-session-secret-000000';
+const SESSION_NOW = 1_800_000_000;
+
+function signedSessionToken(overrides: Partial<{
+  tenant_id: string;
+  conversation_id: string;
+  session_id: string;
+  exp: number;
+}> = {}): string {
+  const binding = JSON.stringify({
+    tenant_id: overrides.tenant_id ?? TENANT_A,
+    conversation_id: overrides.conversation_id ?? 'conversation-1',
+    session_id: overrides.session_id ?? 'session-1',
+    exp: overrides.exp ?? SESSION_NOW + 60,
+    channel: 'WEB_CHAT',
+  });
+  const encoded = Buffer.from(binding, 'utf8').toString('base64url');
+  const signature = createHmac('sha256', SESSION_SIGNING_SECRET).update(binding, 'utf8').digest('base64url');
+  return `${encoded}.${signature}`;
 }
 
 /** The port bundle and every call it received. */
@@ -186,6 +209,69 @@ describe('createCredentialStore', () => {
     expect(credentials.resolveOperator(`${OPERATOR_TOKEN} `)).toBeNull();
     expect(credentials.resolveOperator(OPERATOR_TOKEN.toUpperCase())).toBeNull();
     expect(credentials.resolveOperator('')).toBeNull();
+  });
+  it('keeps exact static session rows authoritative when signed verification is enabled', () => {
+    const staticSession: SessionCredential = {
+      token: 'static.session.token',
+      tenant_id: TENANT_A,
+      conversation_id: 'conversation-static',
+      session_id: 'session-static',
+      channel: 'WEB_CHAT',
+    };
+    const credentials = createCredentialStore({
+      operators: [],
+      sessions: [staticSession],
+      widgets: [],
+      session_secret: SESSION_SIGNING_SECRET,
+    });
+
+    expect(credentials.resolveConversationSession(staticSession.token)).toBe(staticSession);
+  });
+});
+
+describe('verifyConversationSessionToken', () => {
+  it('accepts a valid binding and rejects tampered or expired tokens', () => {
+    const valid = signedSessionToken();
+    const parts = valid.split('.');
+    const tampered = `${parts[0]}.${parts[1]?.slice(0, -1)}${parts[1]?.endsWith('A') ? 'B' : 'A'}`;
+
+    expect(verifyConversationSessionToken(valid, SESSION_SIGNING_SECRET, SESSION_NOW)).toMatchObject({
+      tenant_id: TENANT_A,
+      conversation_id: 'conversation-1',
+      session_id: 'session-1',
+      channel: 'WEB_CHAT',
+    });
+    expect(verifyConversationSessionToken(tampered, SESSION_SIGNING_SECRET, SESSION_NOW)).toBeNull();
+    expect(
+      verifyConversationSessionToken(
+        signedSessionToken({ exp: SESSION_NOW }),
+        SESSION_SIGNING_SECRET,
+        SESSION_NOW,
+      ),
+    ).toBeNull();
+  });
+
+  it('authenticates a signed session without a static row and refuses tampering or expiry', async () => {
+    const credentials = createCredentialStore({
+      operators: [],
+      sessions: [],
+      widgets: [],
+      session_secret: SESSION_SIGNING_SECRET,
+    });
+    const valid = signedSessionToken({ exp: Math.floor(Date.now() / 1000) + 60 });
+    const tamperedParts = valid.split('.');
+    const tampered = `${tamperedParts[0]}.${tamperedParts[1]?.slice(0, -1)}${tamperedParts[1]?.endsWith('A') ? 'B' : 'A'}`;
+    const expired = signedSessionToken({ exp: Math.floor(Date.now() / 1000) - 1 });
+    for (const [token, expectedStatus] of [[valid, 200], [tampered, 401], [expired, 401]] as const) {
+      const app = createApp(credentials, createTestRuntime());
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/v1/probe',
+        headers: bearer(token),
+      });
+      expect(response.statusCode).toBe(expectedStatus);
+      await app.close();
+    }
   });
 });
 

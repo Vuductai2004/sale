@@ -18,6 +18,14 @@ import type { ConversationRecord, GatewayRuntime, RunAdmission } from '../../gat
 
 const CONVERSATION_TURN_SKILL = 'conversation.turn';
 
+export interface HumanOwnedResponse {
+  readonly conversation_id: string;
+  readonly status: 'HUMAN_OWNED';
+  readonly correlation_id: string;
+}
+
+type CareTurnAcceptedResponse = TaskAcceptedResponse | HumanOwnedResponse;
+
 export const VALID_AGENT_MODULES: readonly string[] = Object.freeze(['support', 'sales', 'marketing']);
 
 export function parseEnabledAgentModules(raw?: string): readonly string[] {
@@ -97,15 +105,22 @@ function wireStatusOf(state: TaskStoredState): TaskWireStatus {
 function acceptedFromReceipt(
   receipt: Record<string, unknown>,
   conversation_id: string,
-): TaskAcceptedResponse {
+): CareTurnAcceptedResponse {
+  const status = receipt['status'];
+  const correlation_id = receipt['correlation_id'];
+  if (typeof correlation_id !== 'string') {
+    fail('INTERNAL_ERROR', 'the receipt stored for this idempotency key is incomplete and cannot be returned');
+  }
+  if (status === 'HUMAN_OWNED') {
+    return { conversation_id, status, correlation_id };
+  }
+
   const task_id = receipt['task_id'];
   const task_version = receipt['task_version'];
-  const correlation_id = receipt['correlation_id'];
-  if (typeof task_id !== 'string' || typeof task_version !== 'number' || typeof correlation_id !== 'string') {
+  if (typeof task_id !== 'string' || typeof task_version !== 'number') {
     fail('INTERNAL_ERROR', 'the receipt stored for this idempotency key is incomplete and cannot be returned');
   }
 
-  const status = receipt['status'];
   return {
     task_id,
     conversation_id,
@@ -119,7 +134,7 @@ function acceptedFromReceipt(
 }
 
 export interface CareTurnAdmission {
-  readonly accepted: TaskAcceptedResponse;
+  readonly accepted: CareTurnAcceptedResponse;
   /** Complete canonical replay receipt, including `request_fingerprint`. */
   readonly receipt: Record<string, unknown>;
   readonly admission: RunAdmission;
@@ -203,16 +218,6 @@ export async function admitCareTurn(input: {
   const tenant_id = principal.tenant_id;
   const conversation_id = conversation.conversation_id;
 
-  if (conversation.state === 'paused_takeover') {
-    const lease = await runtime.takeover.holder(tenant_id, conversation_id);
-    if (lease === null || lease.operator_id !== principal.operator_id) {
-      fail(
-        'CONVERSATION_LOCKED',
-        'another operator holds the takeover lease for this conversation, so no new agent turn may start',
-      );
-    }
-  }
-
   const effect_key = runtime.effects.computeEffectKey({
     tenant_id,
     skill_id: CONVERSATION_TURN_SKILL,
@@ -226,6 +231,120 @@ export async function admitCareTurn(input: {
     module: input.module,
     attachments: input.attachments ?? null,
   });
+
+  if (
+    conversation.state === 'paused_takeover' &&
+    (principal.kind === 'CHANNEL_SESSION' || principal.kind === 'WIDGET_SESSION')
+  ) {
+    const stored = await runtime.receipts.receiptFor(tenant_id, effect_key);
+    if (stored !== null) {
+      if (stored['request_fingerprint'] !== request_fingerprint) {
+        fail(
+          'IDEMPOTENCY_CONFLICT',
+          'this idempotency key was already claimed for a different payload; the turn is not started again',
+        );
+      }
+      await runtime.audit.record({
+        tenant_id,
+        correlation_id: input.correlation_id,
+        operation: input.operation,
+        principal_kind: principal.kind,
+        outcome: 'ACCEPTED',
+        detail: { replay: true, effect_key, conversation_id, status: stored['status'] },
+      });
+      return {
+        accepted: acceptedFromReceipt(stored, conversation_id),
+        receipt: stored,
+        admission: 'REPLAY',
+        replayed: true,
+      };
+    }
+    const reservation = typeof runtime.effects.reserve === 'function'
+      ? await runtime.effects.reserve({
+          tenant_id,
+          run_id: effect_key,
+          request_id: input.request_id,
+          effect_key,
+          request_fingerprint,
+          skill_id: CONVERSATION_TURN_SKILL,
+          step_index: 0,
+          action_revision: 0,
+        })
+      : { kind: 'RESERVED' as const };
+    if (reservation.kind === 'CONFLICT') {
+      fail('IDEMPOTENCY_CONFLICT', 'this idempotency key was already claimed for a different payload');
+    }
+    if (reservation.kind === 'REPLAY') {
+      const replayReceipt = reservation.receipt;
+      if (typeof replayReceipt !== 'object' || replayReceipt === null || Array.isArray(replayReceipt)) {
+        fail('INTERNAL_ERROR', 'the durable replay has no stored receipt and cannot be returned');
+      }
+      return {
+        accepted: acceptedFromReceipt(replayReceipt as Record<string, unknown>, conversation_id),
+        receipt: replayReceipt as Record<string, unknown>,
+        admission: 'REPLAY',
+        replayed: true,
+      };
+    }
+    if (reservation.kind === 'IN_FLIGHT') {
+      const receipt = await waitForTurnReceipt({
+        runtime,
+        tenant_id,
+        effect_key,
+        request_fingerprint,
+      });
+      return {
+        accepted: acceptedFromReceipt(receipt, conversation_id),
+        receipt,
+        admission: 'IN_FLIGHT',
+        replayed: true,
+      };
+    }
+    if (reservation.kind === 'RECONCILE_REQUIRED') {
+      fail('RUN_NOT_RECONCILABLE', 'the human-owned message reservation requires reconciliation before retrying');
+    }
+    const session_id = principal.session_id ?? conversation.external_thread_id;
+
+    await runtime.conversations.appendMessage({
+      tenant_id,
+      conversation_id,
+      sender_type: 'customer',
+      sender_id: session_id,
+      content: input.message,
+      request_id: input.request_id,
+    });
+    const receipt: Record<string, unknown> = {
+      conversation_id,
+      status: 'HUMAN_OWNED',
+      correlation_id: input.correlation_id,
+      request_fingerprint,
+    };
+    await runtime.receipts.storeReceipt(tenant_id, effect_key, receipt);
+    await runtime.audit.record({
+      tenant_id,
+      correlation_id: input.correlation_id,
+      operation: input.operation,
+      principal_kind: principal.kind,
+      detail: { effect_key, conversation_id, status: 'HUMAN_OWNED' },
+      outcome: 'ACCEPTED',
+    });
+    return {
+      accepted: { conversation_id, status: 'HUMAN_OWNED', correlation_id: input.correlation_id },
+      receipt,
+      admission: 'ADMITTED',
+      replayed: false,
+    };
+  }
+
+  if (conversation.state === 'paused_takeover') {
+    const lease = await runtime.takeover.holder(tenant_id, conversation_id);
+    if (lease === null || lease.operator_id !== principal.operator_id) {
+      fail(
+        'CONVERSATION_LOCKED',
+        'another operator holds the takeover lease for this conversation, so no new agent turn may start',
+      );
+    }
+  }
 
   const stored = await runtime.receipts.receiptFor(tenant_id, effect_key);
   if (stored !== null) {
@@ -382,6 +501,7 @@ export async function admitCareTurn(input: {
     sender_type: 'customer',
     sender_id: session_id,
     content: input.message,
+    request_id: input.request_id,
   });
   await runtime.receipts.storeReceipt(tenant_id, effect_key, receipt);
 

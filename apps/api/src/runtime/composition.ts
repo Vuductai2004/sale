@@ -256,8 +256,13 @@ export function createGatewayComposition(
   const demo_enabled = demoModeEnabled(env);
   const demoAuth = demo_enabled ? demoCredentialStore(env) : undefined;
   const intentProposer = createTurnIntentPort(env as NodeJS.ProcessEnv);
-  const credentials = options?.credentials ?? demoAuth ?? createCredentialStore({ operators: [], sessions: [], widgets: [] });
   const { session_secret, platform_secret } = resolveSecrets(env);
+  const credentials = options?.credentials ?? demoAuth ?? createCredentialStore({
+    operators: [],
+    sessions: [],
+    widgets: [],
+    session_secret,
+  });
   const hmac = options?.hmac ?? nodeHmacSha256Hex;
   const hasDatabase = options?.databaseRunner !== undefined
     || (typeof env.DATABASE_URL === 'string' && env.DATABASE_URL.trim().length > 0);

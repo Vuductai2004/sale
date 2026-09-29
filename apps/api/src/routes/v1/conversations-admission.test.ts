@@ -61,6 +61,8 @@ function buildHarness(options: { readonly intentProposer?: TurnIntentPort } = {}
       computeEffectKey: (input: { tenant_id: string; skill_id: string; request_id: string }) =>
         [input.tenant_id, input.skill_id, input.request_id].join(':'),
       computeRequestFingerprint: (input: Record<string, unknown>) => JSON.stringify(input),
+      reserve: vi.fn(async () => ({ kind: 'RESERVED' as const })),
+      resolve: vi.fn(async () => undefined),
     },
     audit,
     providerCalls,
@@ -251,7 +253,7 @@ describe('POST /conversations/:conversation_id/messages shared Care admission', 
     }
   });
 
-  it('rejects message admission with HTTP 409 and CONVERSATION_LOCKED when conversation.state=paused_takeover', async () => {
+  it('persists a customer message during human takeover with HTTP 202 HUMAN_OWNED and no run', async () => {
     const { app, appendMessage, conversation, start } = buildHarness();
     conversation.state = 'paused_takeover';
     const url = `/conversations/${CONVERSATION_ID}/messages`;
@@ -260,14 +262,22 @@ describe('POST /conversations/:conversation_id/messages shared Care admission', 
 
     try {
       const response = await app.inject({ method: 'POST', url, headers, payload: body });
+      const replay = await app.inject({ method: 'POST', url, headers, payload: body });
 
-      expect(response.statusCode).toBe(409);
+      expect(response.statusCode).toBe(202);
       expect(response.json()).toMatchObject({
-        error_code: 'CONVERSATION_LOCKED',
-        retryable: false,
+        conversation_id: CONVERSATION_ID,
+        status: 'HUMAN_OWNED',
       });
+      expect(replay.statusCode).toBe(202);
+      expect(replay.json()).toEqual(response.json());
+      expect(appendMessage).toHaveBeenCalledTimes(1);
+      expect(appendMessage).toHaveBeenCalledWith(expect.objectContaining({
+        conversation_id: CONVERSATION_ID,
+        content: body.message,
+        request_id: body.idempotency_key,
+      }));
       expect(start).not.toHaveBeenCalled();
-      expect(appendMessage).not.toHaveBeenCalled();
     } finally {
       await app.close();
     }

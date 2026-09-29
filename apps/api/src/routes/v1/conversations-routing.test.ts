@@ -1,13 +1,31 @@
-import Fastify from 'fastify';
+import { createHmac } from 'node:crypto';
 import { describe, expect, it, vi } from 'vitest';
+import Fastify from 'fastify';
 import { createCredentialStore } from '../../gateway/principal.js';
 import type { GatewayRuntime } from '../../gateway/ports.js';
 import { replyFailure } from '../../gateway/http.js';
 import { registerConversationRoutes } from './conversations.js';
 import { registerStorefrontRoutes } from './storefront.js';
 
+const SESSION_SECRET = 'routing-session-secret-000000';
 const TENANT = 'tenant-a';
 const CONVERSATION = '11111111-1111-4111-8111-111111111111';
+
+function signedSessionToken(input: {
+  readonly conversation_id: string;
+  readonly session_id: string;
+  readonly exp: number;
+}): string {
+  const binding = JSON.stringify({
+    tenant_id: TENANT,
+    conversation_id: input.conversation_id,
+    session_id: input.session_id,
+    exp: input.exp,
+  });
+  const payload = Buffer.from(binding, 'utf8').toString('base64url');
+  const signature = createHmac('sha256', SESSION_SECRET).update(binding, 'utf8').digest('base64url');
+  return `${payload}.${signature}`;
+}
 
 function harness() {
   const start = vi.fn(async (input: { correlation_id: string }) => ({
@@ -29,6 +47,7 @@ function harness() {
         conversation_id: CONVERSATION, tenant_id: TENANT, customer_id: null, channel: 'WEB_CHAT',
         external_thread_id: 'thread-a', state: 'open', bound: false,
       })),
+      issueSessionToken: vi.fn(async () => 'issued-session-token'),
       appendMessage: vi.fn(async () => undefined),
     },
     takeover: { holder: vi.fn(async () => null) },
@@ -48,11 +67,15 @@ function harness() {
         { token: 'owner', tenant_id: TENANT, conversation_id: CONVERSATION, session_id: 'thread-a', channel: 'WEB_CHAT' },
         { token: 'other', tenant_id: TENANT, conversation_id: '22222222-2222-4222-8222-222222222222', session_id: 'thread-b', channel: 'WEB_CHAT' },
       ],
-      widgets: [{ token: 'widget', tenant_id: TENANT, session_id: 'thread-a', origin: 'https://demo.example.test' }],
+      widgets: [
+        { token: 'widget', tenant_id: TENANT, session_id: 'thread-a', origin: 'https://demo.example.test' },
+        { token: 'widget-other', tenant_id: TENANT, session_id: 'thread-b', origin: 'https://demo.example.test' },
+      ],
       operators: [
         { token: 'reader', tenant_id: TENANT, operator_id: 'op-reader', permissions: ['run:read'] },
         { token: 'non-reader', tenant_id: TENANT, operator_id: 'op-no-read', permissions: [] },
       ],
+      session_secret: SESSION_SECRET,
   });
   registerConversationRoutes(app, { runtime, credentials, enabledModules: ['support', 'sales'] });
   registerStorefrontRoutes(app, { runtime, credentials, enabledModules: ['support', 'sales'] });
@@ -92,6 +115,114 @@ describe('conversation turn routing and task ownership', () => {
       });
       expect(response.body).toContain('\"task_id\":\"run-a\"');
     } finally { await app.close(); }
+  });
+
+  it('refuses operator customer turns and widget/session turns addressed to another session thread', async () => {
+    const { app, start } = harness();
+    try {
+      const operator = await app.inject({
+        method: 'POST',
+        url: `/conversations/${CONVERSATION}/messages`,
+        headers: { authorization: 'Bearer reader' },
+        payload: { message: 'post as customer', module: 'support', idempotency_key: 'operator-turn' },
+      });
+      const widget = await app.inject({
+        method: 'POST',
+        url: `/conversations/${CONVERSATION}/messages`,
+        headers: { authorization: 'Bearer widget-other', origin: 'https://demo.example.test' },
+        payload: { message: 'wrong thread', module: 'support', idempotency_key: 'widget-turn' },
+      });
+      const session = await app.inject({
+        method: 'POST',
+        url: `/conversations/${CONVERSATION}/messages`,
+        headers: { authorization: 'Bearer other' },
+        payload: { message: 'wrong session thread', module: 'support', idempotency_key: 'session-turn' },
+      });
+
+      expect(operator.statusCode).toBe(403);
+      expect(operator.json().error_code).toBe('INSUFFICIENT_AUTHORITY');
+      expect(widget.statusCode).toBe(403);
+      expect(widget.json().error_code).toBe('INSUFFICIENT_AUTHORITY');
+      expect(session.statusCode).toBe(403);
+      expect(session.json().error_code).toBe('INSUFFICIENT_AUTHORITY');
+      expect(start).not.toHaveBeenCalled();
+    } finally {
+      await app.close();
+    }
+  });
+  it('accepts valid conversation session tokens and rejects tampered, expired, and wrong-conversation bindings', async () => {
+    const { app, start } = harness();
+    const now = Math.floor(Date.now() / 1000);
+    const valid = signedSessionToken({
+      conversation_id: CONVERSATION,
+      session_id: 'thread-a',
+      exp: now + 60,
+    });
+    const validParts = valid.split('.');
+    const tampered = `${validParts[0]}.${validParts[1]?.slice(0, -1)}${validParts[1]?.endsWith('A') ? 'B' : 'A'}`;
+    const expired = signedSessionToken({
+      conversation_id: CONVERSATION,
+      session_id: 'thread-a',
+      exp: now - 1,
+    });
+    const wrongConversation = signedSessionToken({
+      conversation_id: '22222222-2222-4222-8222-222222222222',
+      session_id: 'thread-a',
+      exp: now + 60,
+    });
+
+    try {
+      for (const [token, expectedStatus] of [
+        [valid, 202],
+        [tampered, 401],
+        [expired, 401],
+        [wrongConversation, 403],
+      ] as const) {
+        const response = await app.inject({
+          method: 'POST',
+          url: `/conversations/${CONVERSATION}/messages`,
+          headers: { authorization: `Bearer ${token}` },
+          payload: { message: 'hello', module: 'support', idempotency_key: `token-${token.slice(-8)}` },
+        });
+        expect(response.statusCode).toBe(expectedStatus);
+      }
+      expect(start).toHaveBeenCalledTimes(1);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('requires takeover authority for R01 operators, owns session threads, and validates channels', async () => {
+    const { app } = harness();
+    try {
+      const invalidChannel = await app.inject({
+        method: 'POST',
+        url: '/conversations',
+        headers: { authorization: 'Bearer reader' },
+        payload: { channel: 'UNKNOWN_CHANNEL', customer_identifier: 'thread-a' },
+      });
+      const operator = await app.inject({
+        method: 'POST',
+        url: '/conversations',
+        headers: { authorization: 'Bearer reader' },
+        payload: { channel: 'WEB_CHAT', customer_identifier: 'thread-a' },
+      });
+      const otherThread = await app.inject({
+        method: 'POST',
+        url: '/conversations',
+        headers: { authorization: 'Bearer owner' },
+        payload: { channel: 'WEB_CHAT', customer_identifier: 'thread-b' },
+      });
+
+      expect(invalidChannel.statusCode).toBe(400);
+      expect(invalidChannel.json().error_code).toBe('VALIDATION_FAILED');
+      expect(operator.statusCode).toBe(403);
+      expect(operator.json().error_code).toBe('INSUFFICIENT_AUTHORITY');
+      expect(otherThread.statusCode).toBe(403);
+      expect(otherThread.json().error_code).toBe('INSUFFICIENT_AUTHORITY');
+    } finally {
+      await app.close();
+    }
   });
 
   it('returns a completed answer only to its owner session, bound widget, or permitted operator', async () => {
