@@ -1,9 +1,77 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { DurableTaskRecord, DurableWorkflowRepository } from '@agentos/database';
+import { RunStageEventsRepository } from '@agentos/database';
 
 import { processClaimedTask, startWorker } from './worker.js';
+import { DurableRunStageRecorder } from './runtime/shared/stage-recorder.js';
 
 describe('startWorker', () => {
+
+  it('binds PostgreSQL stage recording for the production Marketing composition', async () => {
+    const tenant_id = '00000000-0000-4000-8000-000000000001';
+    const worker = startWorker({
+      ENABLED_AGENT_MODULES: 'marketing',
+      AUDIT_HMAC_SECRET: 'production-binding-test-secret',
+    }, {
+      hmac: () => '',
+      tenantIds: [tenant_id],
+      autoStartPolling: false,
+    });
+    try {
+      const orchestrator = await worker.registry?.resolve('marketing')?.createOrchestrator(tenant_id);
+      expect(orchestrator).toBeDefined();
+      const internals = orchestrator as unknown as {
+        dependencies: { runStageRecorder?: unknown };
+      };
+      const recorder = internals.dependencies.runStageRecorder;
+      expect(recorder).toBeInstanceOf(DurableRunStageRecorder);
+      const adapter = recorder as { repository: unknown };
+      expect(adapter.repository).toBeInstanceOf(RunStageEventsRepository);
+    } finally {
+      await worker.close();
+    }
+  });
+  it('preserves offline Marketing workflow and stage-recorder seams', async () => {
+    const tenant_id = '00000000-0000-4000-8000-000000000001';
+    const customWorkflowRepository = {} as DurableWorkflowRepository;
+    const customWorkflowEngine = {};
+    const customRecorder = {
+      nextAttemptOrdinal: vi.fn(),
+      append: vi.fn(),
+    };
+    const worker = startWorker({
+      ENABLED_AGENT_MODULES: 'marketing',
+      AUDIT_HMAC_SECRET: 'offline-marketing-test-secret',
+    }, {
+      hmac: () => '',
+      tenantIds: [tenant_id],
+      autoStartPolling: false,
+      workflowRepository: customWorkflowRepository,
+      marketingFactoryOptions: {
+        auditSecret: 'offline-marketing-test-secret',
+        workflowRepository: customWorkflowRepository,
+        workflowEngine: customWorkflowEngine as never,
+        evidenceLogger: {} as never,
+        auditTrail: {} as never,
+        sessionControl: {} as never,
+        leaseManager: {} as never,
+        runStageRecorder: customRecorder as never,
+      },
+    });
+    try {
+      const orchestrator = await worker.registry?.resolve('marketing')?.createOrchestrator(tenant_id);
+      expect(orchestrator).toBeDefined();
+      const internals = orchestrator as unknown as {
+        dependencies: { runStageRecorder?: unknown; workflowEngine?: unknown };
+      };
+      expect(internals.dependencies.workflowEngine).toBe(customWorkflowEngine);
+      expect(internals.dependencies.runStageRecorder).toBe(customRecorder);
+      expect(internals.dependencies.runStageRecorder).not.toBeInstanceOf(DurableRunStageRecorder);
+    } finally {
+      await worker.close();
+    }
+  });
+
 
   it('does not claim tenant work when the Care orchestrator is unbound', async () => {
     const claimNextQueuedTask = vi.fn();

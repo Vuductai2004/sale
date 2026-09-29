@@ -65,7 +65,26 @@ function describeError(payload: ApiResult, fallback: string): string {
   if (typeof payload.message === 'string') return payload.message;
   return code || fallback;
 }
-
+function approvalStatusLabel(status: unknown, paused = false): string {
+  const normalized = typeof status === 'string' ? status.toLowerCase() : '';
+  if (paused || normalized === 'paused' || normalized === 'paused_takeover') return 'AWAITING_HUMAN';
+  switch (normalized) {
+    case 'accepted': return 'ACCEPTED';
+    case 'queued': return 'QUEUED';
+    case 'running': return 'RUNNING';
+    case 'waiting': return 'WAITING';
+    case 'pending':
+    case 'awaiting_approval':
+    case 'pending_approval': return 'PENDING_APPROVAL';
+    case 'awaiting_human': return 'AWAITING_HUMAN';
+    case 'completed': return 'COMPLETED';
+    case 'failed': return 'FAILED';
+    case 'stopped':
+    case 'cancelled': return 'STOPPED';
+    case 'unavailable': return 'UNAVAILABLE';
+    default: return 'UNAVAILABLE';
+  }
+}
 
 export default function CampaignsPage() {
   const router = useRouter();
@@ -100,7 +119,7 @@ export default function CampaignsPage() {
         run_id: String(record.run_id ?? record.runId ?? ''),
         title: typeof record.title === 'string' ? record.title : 'Campaign approval',
         reason: typeof record.reason === 'string' ? record.reason : 'Approval required before campaign dispatch.',
-        status: typeof record.status === 'string' ? record.status : 'PENDING',
+        ...(typeof record.status === 'string' ? { status: record.status } : {}),
         ...(typeof record.payload_sha256 === 'string'
           ? { payload_sha256: record.payload_sha256 }
           : typeof record.payloadSha256 === 'string' ? { payload_sha256: record.payloadSha256 } : {}),
@@ -171,8 +190,15 @@ export default function CampaignsPage() {
         setError(describeError(payload, 'Campaign draft was not accepted.'));
         return;
       }
-      const taskId = typeof payload.task_id === 'string' ? payload.task_id : typeof payload.run_id === 'string' ? payload.run_id : 'accepted';
-      setNotice(`Campaign draft accepted (${taskId}). It remains pending approval; no delivery was requested.`);
+      const taskId = typeof payload.task_id === 'string' ? payload.task_id : typeof payload.run_id === 'string' ? payload.run_id : undefined;
+      const draftStatus = approvalStatusLabel(payload.status ?? payload.lifecycle_state);
+      const taskSuffix = taskId ? ` (${taskId})` : '';
+      const statusContext = draftStatus === 'PENDING_APPROVAL' || draftStatus === 'AWAITING_HUMAN'
+        ? ' It remains pending approval; no delivery was requested.'
+        : ' No delivery outcome is shown.';
+      setNotice(draftStatus === 'UNAVAILABLE'
+        ? `Campaign draft submitted${taskSuffix}, but its durable draft status and approval state are unavailable. No delivery outcome is shown.`
+        : `Campaign draft ${draftStatus.toLowerCase()}${taskSuffix}.${statusContext}`);
     } catch {
       setError('Unable to submit campaign draft.');
     } finally {
@@ -215,7 +241,10 @@ export default function CampaignsPage() {
         setError(describeError(payload, 'Approval decision was not accepted.'));
         return;
       }
-      setNotice(`Decision ${decision} queued. The approval remains durable and will not be shown as final until the API reports it.`);
+      const decisionStatus = approvalStatusLabel(payload.status);
+      setNotice(decisionStatus === 'UNAVAILABLE'
+        ? `Decision ${decision} submitted, but its durable queue status is unavailable. It is not shown as final.`
+        : `Decision ${decision} ${decisionStatus.toLowerCase()}. The approval remains durable and will not be shown as final until the API reports it.`);
       await loadApprovals();
     } catch {
       setError('Unable to submit approval decision.');
@@ -255,7 +284,7 @@ export default function CampaignsPage() {
         ) : session?.role === 'marketing_approver' ? (
           <section className="mt-8" aria-labelledby="approval-heading">
             <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><h2 id="approval-heading" className="text-base font-semibold">Pending approvals</h2><p className="mt-1 text-sm text-slate-400">Review the exact payload digest before queuing a decision.</p></div><button type="button" onClick={() => void loadApprovals()} className="self-start rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:border-slate-500 hover:text-white sm:self-auto">Refresh</button></div>
-            {approvals.length === 0 ? <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-8 text-center"><p className="text-sm font-semibold">No pending approval</p><p className="mt-1 text-sm text-slate-400">The queue is empty; no campaign decision is fabricated.</p></div> : <div className="grid gap-4">{approvals.map((approval) => <article key={approval.approval_id} className="rounded-xl border border-amber-800/70 bg-slate-900/60 p-5"><div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-xs font-mono uppercase tracking-wider text-amber-300">{approval.status || 'AWAITING_HUMAN'}{approval.is_paused ? ' · PAUSED' : ''}</p><h3 className="mt-1 text-base font-semibold">{approval.title || 'Marketing campaign approval'}</h3><p className="mt-1 text-sm text-slate-400">{approval.reason || 'AUTH-4 approval is required before dispatch.'}</p></div><span className="rounded-full border border-amber-700/80 bg-amber-950/40 px-2.5 py-1 text-xs font-semibold text-amber-200">pending approval</span></div><dl className="mt-4 grid gap-3 text-xs sm:grid-cols-2"><div><dt className="text-slate-500">Approval ID</dt><dd className="mt-1 break-all font-mono text-slate-300">{approval.approval_id}</dd></div><div><dt className="text-slate-500">Run ID</dt><dd className="mt-1 break-all font-mono text-slate-300">{approval.run_id || 'Unavailable'}</dd></div><div className="sm:col-span-2"><dt className="text-slate-500">Reviewed payload SHA-256</dt><dd className="mt-1 break-all font-mono text-slate-300">{approval.payload_sha256 || 'Unavailable'}</dd></div></dl>{approval.payload && <pre className="mt-4 max-h-48 overflow-auto rounded-lg border border-slate-800 bg-slate-950 p-3 text-xs text-slate-400">{JSON.stringify(approval.payload, null, 2)}</pre>}<div className="mt-5 flex flex-wrap gap-2"><button type="button" onClick={() => void handleDecision(approval, 'APPROVE')} disabled={approvalBusy === approval.approval_id || !approval.payload_sha256} className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50">{approvalBusy === approval.approval_id ? 'Queuing…' : 'Approve'}</button><button type="button" onClick={() => void handleDecision(approval, 'REJECT')} disabled={approvalBusy === approval.approval_id || !approval.payload_sha256} className="rounded-lg border border-rose-700 px-3 py-2 text-xs font-semibold text-rose-200 hover:bg-rose-950/40 disabled:cursor-not-allowed disabled:opacity-50">Reject</button><button type="button" onClick={() => void handleDecision(approval, 'PAUSE')} disabled={approvalBusy === approval.approval_id || !approval.payload_sha256} className="rounded-lg border border-amber-700 px-3 py-2 text-xs font-semibold text-amber-200 hover:bg-amber-950/40 disabled:cursor-not-allowed disabled:opacity-50">Pause</button><button type="button" onClick={() => void handleDecision(approval, 'CANCEL')} disabled={approvalBusy === approval.approval_id || !approval.payload_sha256} className="rounded-lg border border-slate-600 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50">Cancel</button></div></article>)}</div>}
+            {approvals.length === 0 ? <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-8 text-center"><p className="text-sm font-semibold">No pending approval</p><p className="mt-1 text-sm text-slate-400">The queue is empty; no campaign decision is fabricated.</p></div> : <div className="grid gap-4">{approvals.map((approval) => <article key={approval.approval_id} className="rounded-xl border border-amber-800/70 bg-slate-900/60 p-5"><div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-xs font-mono uppercase tracking-wider text-amber-300">{approvalStatusLabel(approval.status, approval.is_paused)}</p><h3 className="mt-1 text-base font-semibold">{approval.title || 'Marketing campaign approval'}</h3><p className="mt-1 text-sm text-slate-400">{approval.reason || 'AUTH-4 approval is required before dispatch.'}</p></div><span className="rounded-full border border-amber-700/80 bg-amber-950/40 px-2.5 py-1 text-xs font-semibold text-amber-200">{approvalStatusLabel(approval.status, approval.is_paused).toLowerCase().replaceAll('_', ' ')}</span></div><dl className="mt-4 grid gap-3 text-xs sm:grid-cols-2"><div><dt className="text-slate-500">Approval ID</dt><dd className="mt-1 break-all font-mono text-slate-300">{approval.approval_id}</dd></div><div><dt className="text-slate-500">Run ID</dt><dd className="mt-1 break-all font-mono text-slate-300">{approval.run_id || 'Unavailable'}</dd></div><div className="sm:col-span-2"><dt className="text-slate-500">Reviewed payload SHA-256</dt><dd className="mt-1 break-all font-mono text-slate-300">{approval.payload_sha256 || 'Unavailable'}</dd></div></dl>{approval.payload && <pre className="mt-4 max-h-48 overflow-auto rounded-lg border border-slate-800 bg-slate-950 p-3 text-xs text-slate-400">{JSON.stringify(approval.payload, null, 2)}</pre>}<div className="mt-5 flex flex-wrap gap-2"><button type="button" onClick={() => void handleDecision(approval, 'APPROVE')} disabled={approvalBusy === approval.approval_id || !approval.payload_sha256} className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50">{approvalBusy === approval.approval_id ? 'Queuing…' : 'Approve'}</button><button type="button" onClick={() => void handleDecision(approval, 'REJECT')} disabled={approvalBusy === approval.approval_id || !approval.payload_sha256} className="rounded-lg border border-rose-700 px-3 py-2 text-xs font-semibold text-rose-200 hover:bg-rose-950/40 disabled:cursor-not-allowed disabled:opacity-50">Reject</button><button type="button" onClick={() => void handleDecision(approval, 'PAUSE')} disabled={approvalBusy === approval.approval_id || !approval.payload_sha256} className="rounded-lg border border-amber-700 px-3 py-2 text-xs font-semibold text-amber-200 hover:bg-amber-950/40 disabled:cursor-not-allowed disabled:opacity-50">Pause</button><button type="button" onClick={() => void handleDecision(approval, 'CANCEL')} disabled={approvalBusy === approval.approval_id || !approval.payload_sha256} className="rounded-lg border border-slate-600 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50">Cancel</button></div></article>)}</div>}
           </section>
         ) : <section role="alert" className="mt-8 rounded-xl border border-rose-800/80 bg-rose-950/30 p-6"><p className="font-mono text-xs text-rose-300">permission_denied</p><h2 className="mt-2 text-lg font-semibold">No campaign role is available</h2><p className="mt-1 text-sm text-slate-300">Sign in with a tenant operator or marketing approver session.</p></section>}
       </div>

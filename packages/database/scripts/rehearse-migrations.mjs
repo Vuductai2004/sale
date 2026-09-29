@@ -40,6 +40,7 @@ const TRANSACTION_GROUPS = [
 
 /** Helpers the schema promises to a tenant-scoped session. */
 const REQUIRED_FUNCTIONS = ['uuid_generate_v7', 'prevent_immutable_table_modification', 'current_tenant_id'];
+const REQUIRED_PUBLIC_FUNCTIONS = ['uuid_generate_v5', 'uuid_ns_url'];
 
 const SCHEMA_FILE = '0000_agentos_schema.sql';
 
@@ -221,6 +222,13 @@ async function assertAppliedSchema(client, schemaSql) {
        JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
       WHERE n.nspname = 'agentos'`,
   );
+  const { rows: publicRoutines } = await client.query(
+    `SELECT p.proname AS name
+       FROM pg_catalog.pg_proc p
+       JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
+      WHERE n.nspname = 'public' AND p.proname = ANY($1::text[])`,
+    [REQUIRED_PUBLIC_FUNCTIONS],
+  );
 
   const present = new Set(relations.map((relation) => relation.name));
   const unforced = relations
@@ -232,11 +240,14 @@ async function assertAppliedSchema(client, schemaSql) {
     return missing.length > 0 ? `${kind} absent after apply: ${missing.join(', ')}` : undefined;
   };
   const routineNames = new Set(routines.map((routine) => routine.name));
+  const publicRoutineNames = new Set(publicRoutines.map((routine) => routine.name));
+  const missingPublicFunctions = REQUIRED_PUBLIC_FUNCTIONS.filter((name) => !publicRoutineNames.has(name));
   const missingFunctions = REQUIRED_FUNCTIONS.filter((name) => !routineNames.has(name));
   const problems = [
     absent('tables', tables),
     absent('views', views),
     missingFunctions.length > 0 ? `functions absent after apply: ${missingFunctions.join(', ')}` : undefined,
+    missingPublicFunctions.length > 0 ? `public functions absent after apply: ${missingPublicFunctions.join(', ')}` : undefined,
     unforced.length > 0 ? `tables without ENABLE + FORCE ROW LEVEL SECURITY: ${unforced.join(', ')}` : undefined,
   ].filter((problem) => problem !== undefined);
 

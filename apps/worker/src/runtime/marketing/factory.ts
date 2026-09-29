@@ -53,7 +53,6 @@ import {
   EffectReservationRepository,
   EvidenceRepository,
   RunResponseRepository,
-  RunStageEventsRepository,
   getProfile as dbGetProfile,
   type CustomerProfileRow,
 } from '@agentos/database';
@@ -67,7 +66,6 @@ import {
   createResponseFinalizer,
   createRunResponseStore,
 } from '../shared/response.js';
-import { DurableRunStageRecorder } from '../shared/stage-recorder.js';
 import { DomainPolicyEngine } from '../shared/policy-engine.js';
 import { createPolicyAuditSink } from '../shared/policy-audit.js';
 import {
@@ -76,6 +74,7 @@ import {
 } from '../sales/factory.js';
 import {
   createMarketingSkillServices,
+  type InputMktGenerateContent,
   type MarketingSkillOptions,
   type MarketingSkillServices,
 } from './skills/index.js';
@@ -119,10 +118,50 @@ const MARKETING_TIMEOUT_MS: Readonly<Record<string, number>> = Object.freeze({
   'skill.mkt.analyze_market_signal': 5000,
   'skill.mkt.segment_audience': 5000,
   'skill.mkt.check_consent': 3000,
-  'skill.mkt.generate_content': 10000,
+  'skill.mkt.generate_content': 18000,
   'skill.mkt.audit_brand_compliance': 5000,
   'skill.mkt.dispatch_campaign': 5000,
   'skill.mkt.evaluate_attribution': 5000,
+});
+
+const DEFAULT_CAMPAIGN_THEME = 'Customer reactivation campaign';
+const DEFAULT_CONTENT_CHANNEL: InputMktGenerateContent['channel'] = 'EMAIL_HTML';
+const DEFAULT_CONTENT_LOCALE: InputMktGenerateContent['locale'] = 'en-US';
+const CONTENT_CHANNELS: readonly InputMktGenerateContent['channel'][] = Object.freeze([
+  'LINE_FLEX',
+  'WHATSAPP_TEMPLATE',
+  'EMAIL_HTML',
+  'SMS_TEXT',
+  'ZALO_ZNS',
+  'TIKTOK_CARD',
+  'MESSENGER_GENERIC',
+  'INSTAGRAM_DIRECT',
+]);
+const CONTENT_LOCALES: readonly InputMktGenerateContent['locale'][] = Object.freeze([
+  'zh-TW',
+  'en-US',
+  'vi-VN',
+  'ja-JP',
+]);
+
+type MarketingDispatchChannel =
+  | 'LINE'
+  | 'WHATSAPP'
+  | 'EMAIL'
+  | 'SMS'
+  | 'ZALO'
+  | 'TIKTOK'
+  | 'MESSENGER'
+  | 'INSTAGRAM';
+const DISPATCH_CHANNEL_BY_CONTENT_CHANNEL: Readonly<Record<InputMktGenerateContent['channel'], MarketingDispatchChannel>> = Object.freeze({
+  LINE_FLEX: 'LINE',
+  WHATSAPP_TEMPLATE: 'WHATSAPP',
+  EMAIL_HTML: 'EMAIL',
+  SMS_TEXT: 'SMS',
+  ZALO_ZNS: 'ZALO',
+  TIKTOK_CARD: 'TIKTOK',
+  MESSENGER_GENERIC: 'MESSENGER',
+  INSTAGRAM_DIRECT: 'INSTAGRAM',
 });
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -164,6 +203,44 @@ interface NormalizedCampaignRequest {
   readonly objective: 'reactivation';
   readonly min_days_inactive: number;
   readonly instruction: string;
+  readonly content_channel: InputMktGenerateContent['channel'];
+  readonly content_locale: InputMktGenerateContent['locale'];
+}
+
+function normalizedContentConstraints(
+  raw: Readonly<Record<string, unknown>>,
+): Pick<NormalizedCampaignRequest, 'content_channel' | 'content_locale'> {
+  const constraints = raw['content_constraints'];
+  if (constraints === undefined) {
+    return {
+      content_channel: DEFAULT_CONTENT_CHANNEL,
+      content_locale: DEFAULT_CONTENT_LOCALE,
+    };
+  }
+  const record = asRecord(constraints);
+  if (record === null) {
+    throw new OrchestratorError(
+      'MARKETING_CAMPAIGN_INVALID',
+      'campaign.requested content_constraints must be an object when supplied',
+    );
+  }
+  const channel = record['channel'];
+  const locale = record['locale'];
+  if (
+    typeof channel !== 'string'
+    || !CONTENT_CHANNELS.includes(channel as InputMktGenerateContent['channel'])
+    || typeof locale !== 'string'
+    || !CONTENT_LOCALES.includes(locale as InputMktGenerateContent['locale'])
+  ) {
+    throw new OrchestratorError(
+      'MARKETING_CAMPAIGN_INVALID',
+      'campaign.requested content_constraints must name a supported channel and locale',
+    );
+  }
+  return {
+    content_channel: channel as InputMktGenerateContent['channel'],
+    content_locale: locale as InputMktGenerateContent['locale'],
+  };
 }
 
 function normalizedCampaignRequest(signal: SignalEnvelope, tenant_id: string): NormalizedCampaignRequest {
@@ -204,6 +281,7 @@ function normalizedCampaignRequest(signal: SignalEnvelope, tenant_id: string): N
     );
   }
   const campaign_id = raw['campaign_id'];
+  const contentConstraints = normalizedContentConstraints(raw);
   return {
     campaign_id: typeof campaign_id === 'string' && campaign_id.trim().length > 0
       ? campaign_id
@@ -213,7 +291,8 @@ function normalizedCampaignRequest(signal: SignalEnvelope, tenant_id: string): N
     min_days_inactive,
     instruction: typeof instruction === 'string'
       ? instruction.trim()
-      : `NovaMart ${min_days_inactive}-day customer reactivation`,
+      : DEFAULT_CAMPAIGN_THEME,
+    ...contentConstraints,
   };
 }
 
@@ -222,8 +301,8 @@ function campaignPlan(
   context: HydratedContext,
 ): ExecutionPlan {
   const campaign = normalizedCampaignRequest(signal, context.tenant_id);
-  const channel = 'EMAIL_HTML' as const;
-  const dispatchChannel = 'EMAIL' as const;
+  const channel = campaign.content_channel;
+  const dispatchChannel = DISPATCH_CHANNEL_BY_CONTENT_CHANNEL[campaign.content_channel];
   return {
     plan_id: 'plan_' + signal.signal_id,
     steps: [
@@ -236,7 +315,7 @@ function campaignPlan(
           tenant_id: context.tenant_id,
           rfm_criteria: 'HIBERNATING',
           min_days_inactive: campaign.min_days_inactive,
-          // Demo policy cap: the tenant's reactivation audience never exceeds 100 customers.
+          // Tenant policy cap: the reactivation audience never exceeds 100 customers.
           max_segment_size: 100,
         },
         required_authority: 'AUTH-1',
@@ -254,7 +333,7 @@ function campaignPlan(
           tenant_id: context.tenant_id,
           campaign_theme: campaign.instruction,
           channel,
-          locale: 'vi-VN',
+          locale: campaign.content_locale,
         },
         required_authority: 'AUTH-2',
         mutating: false,
@@ -714,14 +793,15 @@ export function createMarketingOrchestratorFactory(
   if (!auditSecret || auditSecret.trim().length === 0) {
     throw new Error('MARKETING_AUDIT_SECRET_REQUIRED: audit HMAC secret must be provided or configured in AUDIT_HMAC_SECRET.');
   }
-
   const now = options.now ?? (() => new Date());
-  const ownsDurableWorkflow = options.workflowRepository === undefined
-    || options.workflowRepository instanceof DurableWorkflowRepository;
+  // Offline compositions stay offline: only an explicit DurableWorkflowRepository opts
+  // into durable PostgreSQL response/stage recording. Production passes that repository;
+  // unit/E2E passes undefined or an isolated fake and receives no live-DB writer.
+  const ownsDurableWorkflow = options.workflowRepository instanceof DurableWorkflowRepository;
   const runResponseRepository = ownsDurableWorkflow ? options.runResponseRepository ?? new RunResponseRepository() : options.runResponseRepository;
   const responseFinalizer = options.responseFinalizer ?? (ownsDurableWorkflow ? createResponseFinalizer(now) : undefined);
   const responseStore = options.responseStore ?? (runResponseRepository === undefined ? undefined : createRunResponseStore(runResponseRepository));
-  const runStageRecorder = options.runStageRecorder ?? (ownsDurableWorkflow ? new DurableRunStageRecorder(new RunStageEventsRepository()) : undefined);
+  const runStageRecorder = options.runStageRecorder;
 
   const workflowRepository = options.workflowRepository ?? new DurableWorkflowRepository();
   let workflowEngine = options.workflowEngine ?? options.adapters?.workflowEngine;

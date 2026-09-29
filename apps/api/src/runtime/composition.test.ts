@@ -77,4 +77,22 @@ describe('createGatewayComposition', () => {
     expect(snapshot.ledger).toEqual({ status: 'UNAVAILABLE', stage_event_count: null, provider_call_count: null });
     await composition.close();
   });
+
+  it('keeps the offline demo provider-free even when boot schema placeholders are present', async () => {
+    const composition = createGatewayComposition({
+      ...ENV,
+      APP_ENV: 'local',
+      DEMO_MODE: 'true',
+      DEMO_PROVIDER_MODE: 'offline',
+      DEMO_TENANT_OPERATOR_PASSWORD: 'tenant-password',
+      DEMO_MARKETING_APPROVER_PASSWORD: 'marketing-password',
+      DEMO_PLATFORM_ADMIN_PASSWORD: 'platform-password',
+      OPENAI_API_KEY: 'offline-provider-disabled',
+      OPENAI_BASE_URL: 'http://127.0.0.1:9/v1',
+      PRIMARY_REASONING_MODEL: 'offline-model',
+    });
+    expect(composition.intentProposer).toBeUndefined();
+    expect((await composition.readiness.snapshot({ tenant_id: 'tenant-a' })).provider.configured).toBe(false);
+    await composition.close();
+  });
 });

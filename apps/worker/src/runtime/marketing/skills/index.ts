@@ -80,7 +80,8 @@ export const DEFAULT_MARKETING_SKILL_ENABLEMENT: PlatformSkillEnablement = Objec
  * - applies explicit skill enablement
  * - builds SkillRuntimeEngine with canonical effect key, request fingerprint, and authority evaluator
  * - builds adapter dispatcher that forwards approval_id and approval_payload_digest unchanged
- * - lists unbound connectors when ports are not configured (failing closed)
+ * - lists unbound connectors when ports are not configured (failing closed); knowledge never substitutes
+ *   for the Core.LLMContentEngine provider
  */
 export function createMarketingSkillServices(
   options: MarketingSkillOptions,
@@ -137,7 +138,7 @@ export function createMarketingSkillServices(
   if (!options.consent) {
     unbound.push('API-002.ConsentStore: no consent store connector is bound');
   }
-  if (!options.content_engine && !options.knowledge) {
+  if (!options.content_engine) {
     unbound.push('Core.LLMContentEngine: no content generation engine is bound');
   }
   if (!options.brand_guard && !options.knowledge) {

@@ -2586,15 +2586,15 @@
       "credit_status": "NORMAL",
       "customer_tier": "SILVER",
       "tier": "SILVER",
-      "identity_verified": false,
-      "verified_at": null,
-      "verification_reference": null,
+      "identity_verified": true,
+      "verified_at": "2026-09-28T00:00:00Z",
+      "verification_reference": "VER-NM-C06",
       "web_chat_identity": {
         "channel": "WEB_CHAT",
         "channel_identifier": "sess-novamart-c06",
-        "verified": false,
-        "verified_at": null,
-        "verification_reference": null
+        "verified": true,
+        "verified_at": "2026-09-28T00:00:00Z",
+        "verification_reference": "VER-NM-C06"
       },
       "consent": {
         "email_marketing": true,

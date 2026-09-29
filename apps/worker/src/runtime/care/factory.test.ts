@@ -169,6 +169,26 @@ describe('createCareOrchestratorFactory', () => {
     await expect(factory(tenant_id)).rejects.toThrow('CARE_ORCHESTRATOR_UNBOUND');
   });
 
+  it('keeps an offline composition offline: no DATABASE_URL-backed recorder without a durable repository', async () => {
+    const factory = createCareOrchestratorFactory({
+      workerId: 'test-worker-offline',
+      contextAggregator: {} as IContextAggregator,
+      agentRuntime: {} as IAgentRuntime,
+      policyEngine: {} as IPolicyEngine,
+      effectGuard: {} as IEffectGuard,
+      adapterDispatcher: mockDispatcher,
+      adapters: mockAdapters,
+      auditSecret: testAuditSecret,
+    });
+    const orchestrator = await factory(tenant_id);
+    const internals = orchestrator as unknown as {
+      dependencies: { runStageRecorder?: unknown; responseStore?: unknown; responseFinalizer?: unknown };
+    };
+    expect(internals.dependencies.runStageRecorder).toBeUndefined();
+    expect(internals.dependencies.responseStore).toBeUndefined();
+    expect(internals.dependencies.responseFinalizer).toBeUndefined();
+  });
+
   describe('policy audit binding regression (BR-010)', () => {
     const createEscalateAction = (): ActionDraft => ({
       action_id: '00000000-0000-4000-8000-000000000099',

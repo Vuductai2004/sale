@@ -49,6 +49,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { after, before, describe, it } from 'node:test';
+import { ensureIntegrationTenant } from './tenant-fixtures.mjs';
 
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 
@@ -308,6 +309,8 @@ describe('P4 cross-domain handoff ledger (real PostgreSQL)', () => {
       auditSecret: audit_secret,
     });
 
+    await ensureIntegrationTenant(db, tenant_id, 'p4');
+    await ensureIntegrationTenant(db, SECOND_TENANT_ID, 'p4-foreign');
     context = {
       db,
       workerHandoff,
@@ -1065,11 +1068,11 @@ describe('P4 cross-domain handoff ledger (real PostgreSQL)', () => {
     // entry. The Care target intentionally remains unbound at its onboarding itinerary seam.
     await context.db.withTenantContext(context.tenant_id, async (client) => {
       await client.query(
-        'INSERT INTO agentos.agents (tenant_id, code, name, domain, assigned_authority, is_active) VALUES ($1, \'SAL-02\', \'P4 Sales Advisor\', \'sales\', \'AUTH-3\', TRUE) ON CONFLICT (tenant_id, code) DO NOTHING',
+        'INSERT INTO agentos.agents (tenant_id, code, name, domain, assigned_authority, is_active) VALUES ($1, \'SAL-02\', \'P4 Sales Advisor\', \'sales\', \'AUTH-3\', TRUE) ON CONFLICT (tenant_id, code) DO UPDATE SET assigned_authority = EXCLUDED.assigned_authority, is_active = EXCLUDED.is_active',
         [context.tenant_id],
       );
       await client.query(
-        'INSERT INTO agentos.agents (tenant_id, code, name, domain, assigned_authority, is_active) VALUES ($1, \'CS-01\', \'P4 Customer Care Agent\', \'support\', \'AUTH-1\', TRUE) ON CONFLICT (tenant_id, code) DO NOTHING',
+        'INSERT INTO agentos.agents (tenant_id, code, name, domain, assigned_authority, is_active) VALUES ($1, \'CS-01\', \'P4 Customer Care Agent\', \'support\', \'AUTH-1\', TRUE) ON CONFLICT (tenant_id, code) DO UPDATE SET assigned_authority = EXCLUDED.assigned_authority, is_active = EXCLUDED.is_active',
         [context.tenant_id],
       );
     });

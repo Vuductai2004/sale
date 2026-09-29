@@ -449,10 +449,10 @@ export function startWorker(
   const workerId = options.workerId ?? `worker_${randomUUID().slice(0, 8)}`;
   const blockers: string[] = [];
 
-  // Parse tenant scope: explicit options or CARE_TENANT_IDS environment variable
+  // Polling scope is independent of the knowledge corpus tenant allowlist.
   const rawTenants = options.tenantIds ?? (
-    typeof env.CARE_TENANT_IDS === 'string'
-      ? env.CARE_TENANT_IDS.split(',').map((id) => id.trim()).filter(Boolean)
+    typeof env.WORKER_TENANT_IDS === 'string'
+      ? env.WORKER_TENANT_IDS.split(',').map((id) => id.trim()).filter(Boolean)
       : []
   );
 
@@ -462,13 +462,13 @@ export function startWorker(
   // (`11111111-1111-1111-1111-111111111111`) is a real row in the fixtures, and rejecting it here
   // would refuse the registered tenant rather than an unregistered one.
   if (tenantIds.some((id) => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id))) {
-    throw new Error('CARE_TENANT_IDS_INVALID: expected comma-separated tenant UUIDs');
+    throw new Error('WORKER_TENANT_IDS_INVALID: expected comma-separated tenant UUIDs');
   }
   const pollIntervalMs = options.pollIntervalMs ?? 1000;
   const leaseDurationMs = options.leaseDurationMs ?? 30000;
   if (!Number.isSafeInteger(pollIntervalMs) || pollIntervalMs < 1
     || !Number.isSafeInteger(leaseDurationMs) || leaseDurationMs < 1) {
-    throw new Error('CARE_POLL_CONFIG_INVALID: polling interval and lease duration must be positive integers');
+    throw new Error('WORKER_POLL_CONFIG_INVALID: polling interval and lease duration must be positive integers');
   }
 
   const workflowRepository = options.workflowRepository ?? new DurableWorkflowRepository();
@@ -535,7 +535,7 @@ export function startWorker(
   const registry = options.domainRegistry ?? createDomainRuntimeRegistry(bindings);
 
   if (tenantIds.length === 0) {
-    blockers.push('CARE_TENANT_IDS_EMPTY: No tenants configured; background polling disabled (fail closed).');
+    blockers.push('WORKER_TENANT_IDS_EMPTY: No tenants configured; background polling disabled (fail closed).');
   }
   const poller = createWorkerPoller({
     tenantIds,

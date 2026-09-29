@@ -8,7 +8,8 @@
 import Fastify from 'fastify';
 import { describe, expect, it, vi } from 'vitest';
 import { createCredentialStore } from '../../gateway/principal.js';
-import { GatewayRuntime } from '../../gateway/ports.js';
+import type { GatewayRuntime } from '../../gateway/ports.js';
+import type { TurnIntentPort } from '../../runtime/bindings/turn-intent.js';
 import { registerConversationRoutes } from './conversations.js';
 
 const TENANT = 'tenant-a';
@@ -17,7 +18,7 @@ const CONVERSATION_ID = '11111111-1111-4111-8111-111111111111';
 
 const SESSION_TOKEN = 'session-token';
 
-function buildHarness() {
+function buildHarness(options: { readonly intentProposer?: TurnIntentPort } = {}) {
   const conversation = {
     conversation_id: CONVERSATION_ID,
     tenant_id: TENANT,
@@ -31,6 +32,8 @@ function buildHarness() {
     created_at: '2026-09-23T00:00:00.000Z',
   };
   const receipts = new Map<string, Record<string, unknown>>();
+  const providerCalls = { appendProviderCall: vi.fn(async (_input: unknown) => undefined) };
+  const audit = { record: vi.fn(async (_input: unknown) => undefined) };
   const appendMessage = vi.fn(async (_input: unknown) => undefined);
   // The real `runs.start` port carries the server-resolved channel, so the fixture names it too:
   // a case can then assert what the admission path actually passed.
@@ -59,7 +62,8 @@ function buildHarness() {
         [input.tenant_id, input.skill_id, input.request_id].join(':'),
       computeRequestFingerprint: (input: Record<string, unknown>) => JSON.stringify(input),
     },
-    audit: { record: vi.fn(async () => undefined) },
+    audit,
+    providerCalls,
     clock: () => new Date('2026-09-23T00:00:00.000Z'),
     ids: () => 'corr-a',
   } as unknown as GatewayRuntime;
@@ -78,12 +82,94 @@ function buildHarness() {
       }],
       widgets: [],
     }),
+    ...(options.intentProposer === undefined ? {} : { intentProposer: options.intentProposer }),
   });
 
-  return { app, appendMessage, conversation, receipts, start };
+  return { app, appendMessage, conversation, receipts, start, providerCalls, audit };
 }
 
 describe('POST /conversations/:conversation_id/messages shared Care admission', () => {
+  it('records only redacted provider telemetry after an admitted intent proposal', async () => {
+    const intentProposer: TurnIntentPort = {
+      propose: vi.fn(async () => ({
+        intent: 'faq_search' as const,
+        requirements: { question: 'return policy' },
+        confidence: 0.93,
+        metadata: {
+          provider: 'openai-compatible',
+          model: 'intent-model',
+          request_id: 'provider-request-1',
+          latency_ms: 21,
+          usage: { prompt_tokens: 12, completion_tokens: 8 },
+        },
+      })),
+    };
+    const { app, providerCalls } = buildHarness({ intentProposer });
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: `/conversations/${CONVERSATION_ID}/messages`,
+        headers: { authorization: `Bearer ${SESSION_TOKEN}` },
+        payload: { message: 'What is your return policy?', idempotency_key: 'turn-provider-1', module: 'support' },
+      });
+
+      expect(response.statusCode).toBe(202);
+      expect(providerCalls.appendProviderCall).toHaveBeenCalledWith({
+        tenant_id: TENANT,
+        run_id: 'run-a',
+        step_index: 0,
+        stage: 'HYPOTHESIS',
+        call_index: 0,
+        provider: 'openai-compatible',
+        model: 'intent-model',
+        observed_status: 'SUCCESS',
+        latency_ms: 21,
+        prompt_tokens: 12,
+        completion_tokens: 8,
+      });
+      const ledgerInput = providerCalls.appendProviderCall.mock.calls[0]?.[0];
+      expect(JSON.stringify(ledgerInput)).not.toContain('return policy');
+      expect(ledgerInput).not.toHaveProperty('prompt');
+      expect(ledgerInput).not.toHaveProperty('completion');
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('keeps an admitted turn accepted when telemetry storage is unavailable and reports UNAVAILABLE', async () => {
+    const intentProposer: TurnIntentPort = {
+      propose: vi.fn(async () => ({
+        intent: 'faq_search' as const,
+        requirements: {},
+        confidence: 0.8,
+        metadata: {
+          provider: 'openai-compatible',
+          model: 'intent-model',
+          latency_ms: 11,
+        },
+      })),
+    };
+    const { app, providerCalls, audit } = buildHarness({ intentProposer });
+    providerCalls.appendProviderCall.mockRejectedValue(new Error('ledger connection secret must not escape'));
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: `/conversations/${CONVERSATION_ID}/messages`,
+        headers: { authorization: `Bearer ${SESSION_TOKEN}` },
+        payload: { message: 'Can you help?', idempotency_key: 'turn-provider-2', module: 'support' },
+      });
+
+      expect(response.statusCode).toBe(202);
+      expect(JSON.stringify(response.json())).not.toContain('secret');
+      expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({
+        operation: 'conversations.messages.provider_ledger',
+        outcome: 'ACCEPTED',
+        detail: { provider_ledger: 'UNAVAILABLE' },
+      }));
+    } finally {
+      await app.close();
+    }
+  });
   it('replays the durable acceptance without starting or appending twice, and rejects changed bytes', async () => {
     const { app, appendMessage, start } = buildHarness();
     const url = `/conversations/${CONVERSATION_ID}/messages`;

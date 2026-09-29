@@ -148,7 +148,7 @@ async function waitForTurnReceipt(input: {
   fail('RUN_LEASE_HELD', 'another delivery still owns this turn; retry after its durable receipt is settled');
 }
 
-import { salesRequirementsFor } from './turn-classifier.js';
+import { salesRequirementsFor, shouldUseSalesAdvisor } from './turn-classifier.js';
 import type { TurnIntentPort } from '../../runtime/bindings/turn-intent.js';
 
 /**
@@ -254,10 +254,16 @@ export async function admitCareTurn(input: {
     };
   }
 
-  const careProposal = input.module === 'support' && input.intentProposer !== undefined
+  const intentProposal = input.module !== 'marketing' && input.intentProposer !== undefined
     ? await proposeCareIntent(input.intentProposer, input.message, input.correlation_id)
     : undefined;
-  const salesRequirements = input.module === 'sales' ? salesRequirementsFor(input.message) : undefined;
+  const careProposal = input.module === 'support' ? intentProposal : undefined;
+  const parsedSalesRequirements = input.module === 'sales'
+    ? salesRequirementsFor(input.message, intentProposal?.sales_requirements)
+    : undefined;
+  const salesRequirements = shouldUseSalesAdvisor(input.message, parsedSalesRequirements)
+    ? parsedSalesRequirements
+    : undefined;
 
   const session_id = principal.session_id ?? conversation.external_thread_id;
   const started = await runtime.runs.start({
@@ -278,14 +284,59 @@ export async function admitCareTurn(input: {
       ...(careProposal === undefined ? {} : {
         care_intent: careProposal.intent,
         care_requirements: careProposal.requirements,
+        ...(careProposal.metadata === undefined ? {} : { care_intent_metadata: careProposal.metadata }),
       }),
       ...(salesRequirements === undefined ? {} : {
         sales_proposal_source: 'API_GATEWAY',
         sales_intent: 'advisor',
         sales_requirements: salesRequirements,
       }),
+      ...(input.module === 'sales' && intentProposal?.metadata !== undefined
+        ? { sales_intent_metadata: intentProposal.metadata }
+        : {}),
     },
   });
+  if (
+    (started.admission === undefined || started.admission === 'ADMITTED')
+    && intentProposal?.metadata !== undefined
+    && runtime.providerCalls !== undefined
+  ) {
+    const metadata = intentProposal.metadata;
+    try {
+      await runtime.providerCalls.appendProviderCall({
+        tenant_id,
+        run_id: started.run_id,
+        step_index: 0,
+        stage: 'HYPOTHESIS',
+        call_index: 0,
+        provider: metadata.provider,
+        model: metadata.model,
+        observed_status: 'SUCCESS',
+        latency_ms: metadata.latency_ms,
+        ...(metadata.usage === undefined ? {} : {
+          prompt_tokens: metadata.usage.prompt_tokens,
+          completion_tokens: metadata.usage.completion_tokens,
+        }),
+      });
+    } catch {
+      // Telemetry must never turn an already-admitted customer turn into a second failure. The
+      // request remains truthful because the ledger is explicitly absent, not reported as success.
+      try {
+        await runtime.audit.record({
+          tenant_id,
+          correlation_id: input.correlation_id,
+          operation: `${input.operation}.provider_ledger`,
+          principal_kind: principal.kind,
+          ...(principal.operator_id === undefined ? {} : { operator_id: principal.operator_id }),
+          outcome: 'ACCEPTED',
+          detail: { provider_ledger: 'UNAVAILABLE' },
+        });
+      } catch {
+        // The primary admission and its receipt are already durable.
+      }
+    }
+  }
+
 
   const admission = started.admission ?? 'ADMITTED';
 
@@ -341,7 +392,14 @@ export async function admitCareTurn(input: {
     principal_kind: principal.kind,
     ...(principal.operator_id === undefined ? {} : { operator_id: principal.operator_id }),
     outcome: 'ACCEPTED',
-    detail: { run_id: started.run_id, effect_key, conversation_id },
+    detail: {
+      run_id: started.run_id,
+      effect_key,
+      conversation_id,
+      ...(careProposal?.metadata === undefined && intentProposal?.metadata === undefined
+        ? {}
+        : { intent_provider: careProposal?.metadata ?? intentProposal?.metadata }),
+    },
   });
 
   return {

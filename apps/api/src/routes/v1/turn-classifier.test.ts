@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { classifyTurnModule, salesRequirementsFor } from './turn-classifier.js';
+import { classifyTurnModule, salesRequirementsFor, shouldUseSalesAdvisor } from './turn-classifier.js';
 
 describe('classifyTurnModule', () => {
   it('routes the demo shopping prompt to Sales without a provider classification', () => {
@@ -17,26 +17,42 @@ describe('classifyTurnModule', () => {
     expect(classifyTurnModule('Hello, are you there?', undefined)).toBe('support');
     expect(classifyTurnModule('Hello', 'marketing')).toBe('marketing');
   });
+
+  it('routes a generic commercial request without a tenant catalog or currency assumption', () => {
+    expect(classifyTurnModule('Recommend a camera for travel under USD 1000', undefined)).toBe('sales');
+  });
+
+  it('refuses an explicitly unknown automatic intent', () => {
+    expect(() => classifyTurnModule('Hello', 'auto')).toThrow();
+  });
 });
 
 describe('salesRequirementsFor', () => {
-  it('parses English fractional-million budgets without losing the fraction', () => {
-    expect(salesRequirementsFor('Recommend a laptop under 1.5m for graphic design')).toEqual({
-      category: 'laptops',
-      budget_vnd: 1_500_000,
-      use_case: 'graphic design',
+  it('parses a bounded generic budget with its stated ISO-4217-style currency', () => {
+    expect(salesRequirementsFor('Recommend a camera under USD 1,500 for travel')).toEqual({
+      category: 'cameras',
+      budget: { amount: 1_500, currency: 'USD' },
+      use_case: 'travel',
     });
   });
 
-  it('parses Vietnamese budget wording', () => {
-    expect(salesRequirementsFor('Tư vấn điện thoại dưới 20 triệu để chơi game')).toEqual({
-      category: 'phones',
-      budget_vnd: 20_000_000,
-      use_case: 'gaming',
+  it('admits partial understanding so Sales can clarify missing preferences', () => {
+    expect(salesRequirementsFor('Recommend a printer')).toEqual({
+      category: 'printers',
     });
   });
 
-  it('fails closed when a required requirement is absent', () => {
-    expect(salesRequirementsFor('Recommend a laptop under 20m')).toBeUndefined();
+  it('does not accept provider-supplied amounts without a source in the message', () => {
+    expect(salesRequirementsFor('Recommend a printer', {
+      category: 'printers',
+      budget: { amount: 10, currency: 'USD' },
+    })).toEqual({
+      category: 'printers',
+    });
+  });
+  it('keeps direct inventory and price questions out of advisor clarification', () => {
+    expect(shouldUseSalesAdvisor('Is SKU-LOCAL-1 in stock?', salesRequirementsFor('Is SKU-LOCAL-1 in stock?'))).toBe(false);
+    expect(shouldUseSalesAdvisor('What is the price of this laptop?', salesRequirementsFor('What is the price of this laptop?'))).toBe(false);
+    expect(shouldUseSalesAdvisor('Recommend a laptop under USD 1000', salesRequirementsFor('Recommend a laptop under USD 1000'))).toBe(true);
   });
 });

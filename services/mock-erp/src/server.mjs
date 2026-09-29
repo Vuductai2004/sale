@@ -412,7 +412,8 @@ export function createServer(env = process.env, deps = {}) {
         if (
           !orderRef
           || !match
-          || (body?.customer_id !== undefined && match.customer_id !== body.customer_id)
+          || typeof body?.customer_id !== 'string'
+          || match.customer_id !== body.customer_id
         ) {
           unavailable(res);
           return;

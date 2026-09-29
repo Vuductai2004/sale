@@ -502,6 +502,73 @@ describe('Marketing Skill Services and Dispatcher', () => {
         'PostgreSQL.AnalyticsStore: no downstream analytics/order evidence store is bound',
       );
     });
+    it('does not treat approved knowledge as a content provider', async () => {
+      const readApproved = vi.fn(async () => ({
+        path: 'brand/voice.md',
+        version: 'approved-v1',
+        content: '---\nstatus: approved\n---\nApproved voice',
+      }));
+      const services = createMarketingSkillServices({
+        knowledge: { readApproved },
+        resolve_correlation_id: vi.fn(async () => CORRELATION_ID),
+        resolve_grant: vi.fn(async () => 'AUTH-3'),
+      });
+
+      await expect(services.tool_port.invoke({
+        skill_id: 'skill.mkt.generate_content',
+        tool_binding: 'Core.LLMContentEngine',
+        input: {
+          tenant_id: TENANT_ID,
+          campaign_theme: 'theme',
+          channel: 'SMS_TEXT',
+          locale: 'en-US',
+        },
+        context: {
+          run_id: RUN_ID,
+          tenant_id: TENANT_ID,
+          caller_agent: 'MKT-03',
+          correlation_id: CORRELATION_ID,
+          granted_authority: 'AUTH-3',
+          effect_key: 'effect-content',
+        },
+      })).rejects.toMatchObject({ code: 'UNBOUND_PROVIDER' });
+      expect(readApproved).not.toHaveBeenCalled();
+    });
+
+    it('surfaces configured content provider failures as typed provider errors', async () => {
+      const content_engine: MarketingContentEnginePort = {
+        generateContent: vi.fn(async () => {
+          throw Object.assign(new Error('provider unavailable'), { code: 'LLM_UNAVAILABLE' });
+        }),
+      };
+      const services = createMarketingSkillServices({
+        content_engine,
+        resolve_correlation_id: vi.fn(async () => CORRELATION_ID),
+        resolve_grant: vi.fn(async () => 'AUTH-3'),
+      });
+
+      await expect(services.tool_port.invoke({
+        skill_id: 'skill.mkt.generate_content',
+        tool_binding: 'Core.LLMContentEngine',
+        input: {
+          tenant_id: TENANT_ID,
+          campaign_theme: 'theme',
+          channel: 'SMS_TEXT',
+          locale: 'en-US',
+        },
+        context: {
+          run_id: RUN_ID,
+          tenant_id: TENANT_ID,
+          caller_agent: 'MKT-03',
+          correlation_id: CORRELATION_ID,
+          granted_authority: 'AUTH-3',
+          effect_key: 'effect-content',
+        },
+      })).rejects.toMatchObject({
+        code: 'PROVIDER_ERROR',
+        details: { provider_code: 'LLM_UNAVAILABLE' },
+      });
+    });
 
     it('fails closed on tool_port.invoke for every unbound skill with UNBOUND_PROVIDER', async () => {
       const services = createMarketingSkillServices({

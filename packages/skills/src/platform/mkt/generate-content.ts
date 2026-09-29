@@ -134,7 +134,7 @@ const spec: Omit<PlatformRowSpec, 'skill_id'> = {
     retry_on_timeout: true,
     non_retryable_errors: ['PROMPT_INJECTION_BLOCKED'],
   },
-  timeout_ms: 5000,
+  timeout_ms: 18000,
   audit_spec: {
     log_level: 'INFO',
     mask_pii_fields: [],
@@ -172,7 +172,7 @@ const spec: Omit<PlatformRowSpec, 'skill_id'> = {
     {
       test_id: 'TC-SKILL-04',
       category: 'TIMEOUT',
-      scenario: 'The bound `Core.LLMContentEngine` call hangs past `timeout_ms` of 5000ms.',
+      scenario: 'The bound `Core.LLMContentEngine` call hangs past `timeout_ms` of 18000ms.',
       expected_outcome: 'Engine timeout retried once; no partial draft persisted',
       required: true,
     },

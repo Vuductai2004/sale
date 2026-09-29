@@ -13,6 +13,7 @@
 import type { IEffectGuard } from '@agentos/core-engine/contracts';
 
 import type {
+  AppendProviderCallInput,
   CareHandoffClaimOutcome,
   CareHandoffCompletionOutcome,
   ClaimCareHandoffInput,
@@ -382,6 +383,11 @@ export interface WebhookVerificationPort {
   }): Promise<{ readonly ok: true } | { readonly ok: false; readonly error_code: GatewayErrorCode_ }>;
 }
 
+/** Redacted provider-call telemetry; prompts, completions, credentials, and URLs never cross this port. */
+export interface ProviderCallPort {
+  appendProviderCall(input: AppendProviderCallInput): Promise<unknown>;
+}
+
 /** One audit row per gateway operation (`06` §8.0); reads audit too and write no evidence row. */
 export interface GatewayAuditPort {
   record(input: {
@@ -425,6 +431,7 @@ export interface GatewayRuntime {
   readonly identity: IdentityPort;
   readonly webhooks: WebhookVerificationPort;
   readonly audit: GatewayAuditPort;
+  readonly providerCalls?: ProviderCallPort;
   readonly receipts: ReceiptPort;
   /**
    * The durable reservation protocol (`04` §4.4, BR-005/BR-006). Route-level idempotency for R02,

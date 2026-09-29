@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url';
 
 const requireDatabaseDependency = createRequire(new URL('../../packages/database/package.json', import.meta.url));
 export const NOVAMART_TENANT_ID = '99999999-9999-4999-8999-999999999999';
+const DEMO_IDEMPOTENCY_KEY = 'a9f4074913447922c5577959b02c1b0c934e7f77694473284f22382b621b6064';
+const DEMO_REQUEST_FINGERPRINT = 'e3d62b23859d8d9b5835f81e567683226c077103b0a4d098007e3d97028f789a';
 const PACK_URL = new URL('../../services/mock-erp/src/demo/novamart.json', import.meta.url);
 const COUNTS = Object.freeze({ products: 24, skus: 28, customers: 12, orders: 20, events: 53, segments: 2, campaigns: 1, engagement_events: 8, cases: 4 });
 const AGENTS = Object.freeze([
@@ -242,6 +244,7 @@ async function promoteDemoSkills(query, tenant) {
   );
 }
 
+
 export async function seedNovaMart(env = process.env) {
   validateDemoEnvironment(env);
   const pack = await loadDemoPack();
@@ -249,13 +252,18 @@ export async function seedNovaMart(env = process.env) {
   const client = new Client({ connectionString: env.DATABASE_URL });
   await client.connect();
   try {
-    const bootstrap = await client.query('SELECT agentos.provision_novamart_demo_tenant() AS tenant_id');
-    if (bootstrap.rows[0]?.tenant_id !== NOVAMART_TENANT_ID) throw new Error('DEMO_TENANT_MISMATCH: bootstrap returned a different tenant');
     await client.query('BEGIN');
     try {
       await client.query('SET LOCAL ROLE agentos_app');
       await client.query('SET LOCAL search_path TO agentos, public');
       await client.query("SELECT set_config('app.current_tenant_id', $1, true)", [NOVAMART_TENANT_ID]);
+      const bootstrap = await client.query(
+        'SELECT agentos.provision_tenant_shell_for_id($1::uuid,$2::char(64),$3::char(64),$4::varchar(128)) AS tenant_id',
+        [NOVAMART_TENANT_ID, DEMO_IDEMPOTENCY_KEY, DEMO_REQUEST_FINGERPRINT, 'NovaMart Demo'],
+      );
+      if (bootstrap.rows[0]?.tenant_id !== NOVAMART_TENANT_ID) {
+        throw new Error('DEMO_TENANT_MISMATCH: bootstrap returned a different tenant');
+      }
       await seedRows(client, pack);
       await client.query('COMMIT');
     } catch (error) {

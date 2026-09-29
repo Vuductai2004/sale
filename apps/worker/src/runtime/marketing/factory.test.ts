@@ -294,6 +294,13 @@ describe('default Marketing context aggregation', () => {
     // Contiguous steps, and the approval gate is on the dispatch step itself: the plan parks in
     // SCR-003 as AUTH-4 before any provider call.
     expect(plan.steps.map((step) => step.step_index)).toEqual([1, 2, 3, 4]);
+    const content = plan.steps[1]!;
+    expect(content.input_parameters).toMatchObject({
+      campaign_theme: 'Reactivate the 90-day inactive segment.',
+      channel: 'EMAIL_HTML',
+      locale: 'vi-VN',
+    });
+    expect(content.timeout_ms).toBe(18000);
     const dispatch = plan.steps[3]!;
     expect(dispatch.skill_id).toBe('skill.mkt.dispatch_campaign');
     expect(dispatch.required_authority).toBe('AUTH-4');

@@ -481,7 +481,9 @@ export class CareAgentRuntime implements IAgentRuntime {
           || careIntent === 'return_refund' || careIntent === 'usage'
           ? { faqQuery: text }
           : {})),
-      ...(orderRef ? { orderRef } : {}),
+      // An anonymous order request is retained only as an identity refusal. Do not carry the
+      // caller's order reference into durable hypothesis metadata or a later refusal response.
+      ...(orderRef && context.customer ? { orderRef } : {}),
       ...(handoffTarget === null ? {} : { handoffTarget }),
     };
 
@@ -490,7 +492,7 @@ export class CareAgentRuntime implements IAgentRuntime {
       confidence = 0.3;
     } else if ((careIntent === 'order_status' || careIntent === 'order_lookup') && !context.customer) {
       intent = 'order_lookup_unverified';
-      reason = 'Order status request has a reference but no server-verified customer binding.';
+      reason = 'Order status request requires a server-verified customer binding.';
       confidence = 0.5;
     } else if ((careIntent === 'order_status' || careIntent === 'order_lookup') && orderRef) {
       intent = 'order_lookup';
@@ -510,13 +512,15 @@ export class CareAgentRuntime implements IAgentRuntime {
       churn_risk_score: 0.0,
       purchase_propensity: 0.0,
       reasoning: reason,
-      derived_from_signals: orderRef
+      // Never retain an anonymous caller's order reference as a signal-derived fact.
+      derived_from_signals: orderRef && context.customer
         ? [signal.signal_id, `order:${orderRef}`]
         : [signal.signal_id],
     };
 
     this.retainedRationales.set(hypothesis, { ...rationaleData, reason });
     return hypothesis;
+
   }
 
   async resolveRouting(
@@ -562,9 +566,10 @@ export class CareAgentRuntime implements IAgentRuntime {
     if (intent === 'order_lookup_unverified' || hypothesis.intent === 'order_lookup_unverified') {
       return {
         target_agent: 'CS-01',
-        requires_clarification: true,
-        clarification_prompt: 'Please verify your customer account so we can retrieve your order status.',
-        rationalization: hypothesis.reasoning,
+        // An anonymous identity request is a typed refusal, not a clarification. Setting this
+        // flag would make the core orchestrator synthesize an unregistered Sales send_message step.
+        requires_clarification: false,
+        rationalization: 'IDENTITY_UNVERIFIED: order status requires a server-verified customer binding.',
       };
     }
 
@@ -690,6 +695,14 @@ export class CareAgentRuntime implements IAgentRuntime {
         }],
         fallback_strategy: 'FAIL_CLOSED',
       };
+    }
+
+    if (hypothesis.intent === 'order_lookup_unverified') {
+      throw new OrchestratorError(
+        'IDENTITY_UNVERIFIED',
+        'Order status is unavailable until this session has a server-verified customer binding; '
+          + 'no order record was read or disclosed.',
+      );
     }
 
     if (routing.requires_clarification) {

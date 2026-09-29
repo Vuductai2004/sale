@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readdir, readFile } from 'node:fs/promises';
 import { describe, it } from 'node:test';
 
 import {
@@ -162,6 +162,28 @@ describe('scripts/demo/seed pure helpers', () => {
       () => mapDemoServiceCase({ ...pack.cases[0], priority: 'invalid_priority' }),
       /DEMO_PACK_INVALID/,
     );
+  });
+
+  it('keeps canonical migrations generic and fences demo bootstrap in one replay-safe transaction', async () => {
+    const migrationDirectory = new URL('../../packages/database/migrations/', import.meta.url);
+    const migrationNames = await readdir(migrationDirectory);
+    assert.equal(migrationNames.includes('0008_demo_novamart_bootstrap.sql'), false);
+
+    const migrationSql = (await Promise.all(
+      migrationNames
+        .filter((name) => name.endsWith('.sql'))
+        .map((name) => readFile(new URL(name, migrationDirectory), 'utf8')),
+    )).join('\n');
+    assert.doesNotMatch(migrationSql, /NovaMart|provision_novamart_demo_tenant|99999999-9999-4999-8999-999999999999/i);
+    assert.match(migrationSql, /provision_tenant_shell_for_id/);
+    assert.match(migrationSql, /ON CONFLICT DO NOTHING/);
+
+    const seedSource = await readFile(new URL('./seed.mjs', import.meta.url), 'utf8');
+    assert.match(seedSource, /provision_tenant_shell_for_id/);
+    assert.match(seedSource, /BEGIN/);
+    assert.match(seedSource, /COMMIT/);
+    assert.match(seedSource, /ROLLBACK/);
+    assert.doesNotMatch(seedSource, /provision_novamart_demo_tenant/);
   });
 
   it('binds exact-tenant RLS in seed source without BYPASSRLS or multi-tenant settings', async () => {

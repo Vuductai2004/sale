@@ -38,8 +38,8 @@ does not override `.env`, so two files silently disagree:
 
 ```bash
 cp .env.example .env
-# edit .env: DEMO_MODE=true, the three DEMO_* passwords, DEMO_WIDGET_ORIGINS, CARE_TENANT_IDS,
-# CARE_KNOWLEDGE_ROOT (absolute), ENABLED_AGENT_MODULES, the SALES_/MARKETING_ signal vars.
+# edit .env: DEMO_MODE=true, the three DEMO_* passwords, DEMO_WIDGET_ORIGINS, WORKER_TENANT_IDS,
+# KNOWLEDGE_TENANT_IDS, KNOWLEDGE_ROOT (absolute), ENABLED_AGENT_MODULES, the SALES_/MARKETING_ signal vars.
 docker compose up -d --build
 # Compose creates the extensions and least-privilege roles only; apply the schema before seeding.
 # Use the bootstrap (superuser) URL, exactly as the CI database gates do: the first migrations
@@ -72,8 +72,8 @@ real key for scenario B.
 - `SALES_SIGNAL_SOURCE_CHANNELS=WEB_CHAT` and `SALES_SIGNAL_EVENT_TYPES=message.received` bind the
   Sales domain contract; `MARKETING_SIGNAL_SOURCE_CHANNELS=MARKETING_CAMPAIGN` with
   `MARKETING_SIGNAL_EVENT_TYPES=campaign.requested` binds the operator campaign contract.
-- `CARE_TENANT_IDS` scopes the worker schedule and `CARE_KNOWLEDGE_ROOT=packages/second-brain/demo/novamart`
-  points Care and Marketing at the approved synthetic corpus (tenant-checked at read time).
+  `WORKER_TENANT_IDS` scopes the worker schedule and `KNOWLEDGE_ROOT`/`KNOWLEDGE_TENANT_IDS`
+  point Care and Marketing at the approved synthetic corpus (tenant-checked at read time).
 - `MOCK_ERP_DEMO_PACK=novamart` makes the mock system of record serve only the NovaMart tenant.
 - `demo:seed` promotes the six canonical low-risk skills (`skill.sales.check_stock`,
   `skill.sales.search_product`, `skill.sales.retrieve_customer`, `skill.care.search_faq`,
@@ -111,47 +111,61 @@ finalizer from that run's own successful receipts (verified quote, approved FAQ 
 order status), then read back through `GET /api/v1/tasks/:task_id`. Exactly one customer message and
 one agent message are recorded per admitted conversational run.
 
-### Verified live (fresh stack, real provider)
+### Verification status for this branch
 
-| Scenario | Result |
-|---|---|
-| A — Sales advisor | `completed`; answer `Quote for NM-L01-BLK: VND 18900000 (valid until …)`, 1 citation (`API-001.PricingEngine`) |
-| B1 — Care FAQ | `completed`; approved answer citing `customer-care/faq.md` (FAQ-1, SHA-256 source version) |
-| B2 — Care order | `completed`; `Order ORD-DEMO-005 status: DELIVERED.` citing `API-001.OrderConnector` |
-| B3 — anonymous order | run `failed`; no order reference and no status in any field (fail-closed, no leak) |
-| C — Marketing draft | `202`; approval `PENDING`, `authority_required=AUTH-4`; task `awaiting_human`, `paused_for_approval_id` set; no dispatch observed |
-| Provider probe | `gpt-6-luna` JSON mode 200 (≈18 s), `gpt-4o-mini` JSON mode 200 (≈1.5 s), text 200; usage returned |
+No three-agent live-provider acceptance run was executed in this checkout. Docker health smoke,
+offline demo smoke, and the database rehearsal were executed; none claims live Sales, Care, or
+Marketing provider success.
 
-Gateway intent classification uses `FAST_COMPLETION_MODEL` (the plan's classifier model); the reasoning
-model is reserved for domain proposals and reply formatting.
+#### Verified locally
 
-### Known gaps (not smoothed over)
+- `pnpm check:demo-boundary`: 162 files scanned, 0 platform/demo violations.
+- Demo helper tests: 12 passed, including pack counts, C05/C06 identity facts, seed transaction
+  fencing, offline/live profile gates, and the boundary checker.
+- `pnpm typecheck`, `pnpm lint`, and production-mode `pnpm build` passed. A build with the shell's
+  `NODE_ENV=development` failed Next.js prerendering; production builds require
+  `NODE_ENV=production`.
+- Unit matrix passed: API 136, Worker 650, Database 120, Skills 70, Core Engine 185, Adapters 41,
+  Tenant Console 45, and Platform Admin 31 tests.
+- Contract (29), adversarial (106), security (117), pilot (27), and Worker E2E (9) tests passed.
+  The offline composition does not create a PostgreSQL recorder.
+- Provider adapter tests passed (7), including 401/429/5xx classification, timeout, cancellation,
+  malformed JSON, invalid structured output, missing usage, bounded response, and secret redaction.
+  Mock ERP boundary tests passed (16).
+- `pnpm test:integration` passed 24 tests against an isolated PostgreSQL application role:
+  Care 7, cross-domain handoff 12, and Sales 5. The same run verified idempotency conflicts,
+  retry recovery, tenant/customer ownership, durable evidence, and the three-leg handoff journey.
+- On a disposable PostgreSQL container, all 13 migrations applied from empty state, replayed
+  idempotently, both RLS suites passed (6 policy and 17 rehearsal tests), and `pnpm demo:seed`
+  passed twice with 24 products, 28 SKUs, 12 customers, 20 orders, 53 events, 2 segments, 1
+  campaign, 8 engagement events, 4 cases, and 13 agents.
+- Changing the seeded tenant display name caused the second seed to fail and preserved the
+  mismatched value; it did not silently overwrite tenant identity.
+- `pnpm docker:smoke --env-file .env.example --project agentos-ci-smoke-20260929` built, inspected,
+  started, health-checked, and tore down API, Worker, Tenant Console, and Platform Admin images.
+- `demo:smoke:offline` passed against a fresh API/mock-ERP stack with 28 catalog items. It accepted
+  the Sales turn and explicitly reported the provider as `not_exercised`; Care and Marketing were
+  `not_exercised_offline`. `demo:smoke:live` refused before requests when provider/database
+  prerequisites were absent.
+- Customer-facing responses remain receipt-grounded: missing successful receipts, source versions,
+  or tenant-bound evidence refuse finalization rather than rendering fallback text. The C06 route
+  and storefront persona control are demo-only and support the cross-customer denial scenario.
 
-- **Escalation parks instead of reaching `awaiting_human` — observed state, cause not yet confirmed.**
-  Observed: the run sits `waiting` at step 1 with a `RESERVED` effect and **zero**
-  `agentos.care_handoffs` rows; no worker error is logged for that run, and the first attempt's
-  failure reason was not captured. Hypothesis (not proven): the skill row's `timeout_ms: 1000`
-  (`packages/skills/src/platform/care/escalate-to-human.ts:80`) and the handoff repository's own
-  transaction deadline (`packages/database/src/repositories/care-handoffs.ts:196`,
-  `HANDOFF_QUEUE_TIMEOUT`) leave no room, and `handleHandoff` deliberately never retries an enqueue, so
-  the dispatch aborts, the reservation stays unsettled, and the retry parks the task for operator
-  reconciliation. A direct `enqueue` probe from the worker container confirmed the repository's lease
-  prerequisite (`HANDOFF_TASK_NOT_ACTIVE` without a live run) but **could not** confirm its latency or
-  timeout behaviour inside a run; the real throw was never observed. Operator-reply verification (B5)
-  depends on that escalation and therefore did not run live.
-- **Cross-customer denial is unverified.** `customer-care/support-policy.md` requires that a second
-  verified customer (C06) be denied C05's `ORD-DEMO-005`, and the ownership rule is covered offline by
-  the R03 task-ownership and conversation-ownership suites — but the demo widget mints only `C05` and
-  `anonymous` (`apps/api/src/routes/v1/demo-widget.ts`), so no authenticated C06 turn can be produced
-  live. The anonymous case that did run proves missing identity, not cross-customer isolation; the
-  cross-customer acceptance case needs a sanctioned C06 fixture or persona before it can be claimed.
-- **Anonymous refusal path raises a registry gap.** The anonymous order run fails closed (no leak), but
-  its failure is `UNKNOWN_SKILL: skill 'skill.sales.send_message' is not registered in schema` — the
-  Care refusal path reaches for a Sales skill outside the Care registry, so it is a registry error
-  rather than a clean typed refusal.
-- **Marketing content generation is knowledge-backed, not provider-backed.** Binding the provider
-  engine needs the content step's 10 s deadline raised (or the fast model used for content), because
-  the configured reasoning model answers in ≈18 s.
+#### Not verified
+
+- Sales, Care, and Marketing live-provider acceptance against a real OpenAI-compatible endpoint.
+- Live operator reply after escalation, and live campaign-content generation.
+
+#### Blocked prerequisites
+
+- `demo:smoke:live` requires `DEMO_PROVIDER_MODE=live`, `DATABASE_URL`, the three demo credentials,
+  and `OPENAI_API_KEY`/`OPENAI_BASE_URL`/`PRIMARY_REASONING_MODEL`.
+- Live acceptance is fail-closed without those prerequisites; offline smoke never claims provider
+  success and reports Care/Marketing as `not_exercised_offline`.
+
+The boundary checker intentionally allows demo fixtures, demo auth, demo UI routes, and demo
+documentation while rejecting the canonical NovaMart tenant/brand in generic migrations and
+platform runtime code.
 
 ### Limitations
 

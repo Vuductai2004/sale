@@ -1001,7 +1001,7 @@ describe('SalesSkillServices - read, recommendation and customer skills', () => 
     const advisor_state = new SalesAdvisorExecutionState();
     advisor_state.setRequirements(TENANT_ID, CORRELATION_ID, {
       category: 'accessories',
-      budget_vnd: 100,
+      budget: { amount: 100, currency: 'TWD' },
       use_case: 'accessories',
     });
     const erp_read: ErpReadPort = {

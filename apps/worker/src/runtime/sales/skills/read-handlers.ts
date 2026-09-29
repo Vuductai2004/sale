@@ -139,7 +139,10 @@ export async function handleSearchProduct(
       ) {
         return false;
       }
-      if (advisorRequirements !== undefined && !advisorUseCaseMatches(product, advisorRequirements.use_case)) {
+      if (
+        advisorRequirements?.use_case !== undefined
+        && !advisorUseCaseMatches(product, advisorRequirements.use_case)
+      ) {
         return false;
       }
       const searchable = [
@@ -153,7 +156,7 @@ export async function handleSearchProduct(
       return searchable.includes(query);
     })
     .sort((left, right) => {
-      if (advisorRequirements !== undefined) {
+      if (advisorRequirements?.use_case !== undefined) {
         const requiredUseCase = advisorRequirements.use_case;
         const leftUseCase = left.use_case?.trim().toLocaleLowerCase();
         const rightUseCase = right.use_case?.trim().toLocaleLowerCase();
@@ -187,7 +190,14 @@ export async function handleSearchProduct(
         'Authoritative catalog record is incomplete or invalid',
       );
     }
-    if (advisorRequirements !== undefined && list_price > advisorRequirements.budget_vnd) {
+    const advisorBudget = advisorRequirements?.budget;
+    if (
+      advisorBudget !== undefined
+      && (
+        list_price > advisorBudget.amount
+        || product.currency.trim().toLocaleUpperCase() !== advisorBudget.currency
+      )
+    ) {
       continue;
     }
 
@@ -393,7 +403,14 @@ export async function handleRecommendProduct(
     ) {
       continue;
     }
-    if (advisorRequirements !== undefined && list_price > advisorRequirements.budget_vnd) {
+    const advisorBudget = advisorRequirements?.budget;
+    if (
+      advisorBudget !== undefined
+      && (
+        list_price > advisorBudget.amount
+        || currency.toLocaleUpperCase() !== advisorBudget.currency
+      )
+    ) {
       continue;
     }
 
@@ -592,10 +609,17 @@ export async function handleCheckPrice(
     );
   }
 
-  if (advisorRequirements !== undefined && decision.list_price > advisorRequirements.budget_vnd) {
+  const advisorBudget = advisorRequirements?.budget;
+  if (
+    advisorBudget !== undefined
+    && (
+      decision.list_price > advisorBudget.amount
+      || decision.currency.trim().toLocaleUpperCase() !== advisorBudget.currency
+    )
+  ) {
     throw new SalesSkillToolError(
       'BUDGET_EXCEEDED',
-      `Verified API-001 price exceeds the server-stamped budget for SKU ${input.sku_id}`,
+      `Verified API-001 quote exceeds the server-stamped ${advisorBudget.currency} budget for SKU ${input.sku_id}`,
     );
   }
   const clock = options.now ?? (() => new Date());

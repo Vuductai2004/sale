@@ -49,7 +49,6 @@ import {
   EffectReservationRepository,
   EvidenceRepository,
   RunResponseRepository,
-  RunStageEventsRepository,
   withTenantContext,
   type TenantTransactionRunner,
 } from '@agentos/database';
@@ -66,7 +65,6 @@ import {
   createResponseFinalizer,
   createRunResponseStore,
 } from '../shared/response.js';
-import { DurableRunStageRecorder } from '../shared/stage-recorder.js';
 import {
   createPolicyAuditSink,
 } from '../shared/policy-audit.js';
@@ -272,14 +270,15 @@ export function createCareOrchestratorFactory(
 ): (tenant_id: string) => Promise<RevenueOrchestrator> {
   const workerId = options.workerId ?? `care_worker_${randomUUID().slice(0, 8)}`;
   const now = options.now ?? (() => new Date());
-  // An injected workflow repository may be an isolated non-PostgreSQL implementation. Do not
-  // attach a separate live-DB response/trace writer to that unrelated task store.
-  const ownsDurableWorkflow = options.workflowRepository === undefined
-    || options.workflowRepository instanceof DurableWorkflowRepository;
+  // An isolated/offline composition (no workflow repository, or a non-PostgreSQL test
+  // double) must never silently gain a live-DB response/trace writer. Only an explicit
+  // DurableWorkflowRepository opts into durable PostgreSQL recording; production
+  // composition passes that repository, offline unit/E2E passes undefined or a fake.
+  const ownsDurableWorkflow = options.workflowRepository instanceof DurableWorkflowRepository;
   const runResponseRepository = ownsDurableWorkflow ? options.runResponseRepository ?? new RunResponseRepository() : options.runResponseRepository;
   const responseFinalizer = options.responseFinalizer ?? (ownsDurableWorkflow ? createResponseFinalizer(now) : undefined);
   const responseStore = options.responseStore ?? (runResponseRepository === undefined ? undefined : createRunResponseStore(runResponseRepository));
-  const runStageRecorder = options.runStageRecorder ?? (ownsDurableWorkflow ? new DurableRunStageRecorder(new RunStageEventsRepository()) : undefined);
+  const runStageRecorder = options.runStageRecorder;
   const auditSecret = options.auditSecret ?? process.env.AUDIT_HMAC_SECRET;
   if (!auditSecret || auditSecret.trim().length === 0) {
     throw new Error('CARE_AUDIT_SECRET_REQUIRED: audit HMAC secret must be provided or configured in AUDIT_HMAC_SECRET environment variable.');

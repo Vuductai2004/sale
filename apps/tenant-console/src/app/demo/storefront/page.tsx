@@ -3,9 +3,10 @@
 import Link from 'next/link';
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
-type Persona = 'anonymous' | 'C05';
+type Persona = 'anonymous' | 'C05' | 'C06';
+const PERSONAS = ['anonymous', 'C05', 'C06'] as const;
 type ViewState = 'loading' | 'ready' | 'empty' | 'unauthenticated' | 'permission_denied' | 'error';
-type TaskStatus = 'accepted' | 'running' | 'waiting' | 'awaiting_human' | 'completed' | 'stopped' | 'failed';
+type TaskStatus = 'accepted' | 'queued' | 'running' | 'waiting' | 'pending' | 'pending_approval' | 'awaiting_human' | 'completed' | 'failed' | 'stopped' | 'unavailable';
 
 type CatalogItem = {
   readonly sku_id: string;
@@ -45,7 +46,7 @@ type ChatEntry =
   | {
       readonly id: string;
       readonly role: 'assistant';
-      readonly status: 'pending' | 'completed' | 'awaiting_human' | 'stopped' | 'failed';
+      readonly status: TaskStatus;
       readonly taskId?: string;
       readonly text?: string;
       readonly sources?: readonly unknown[];
@@ -64,6 +65,7 @@ const TERMINAL_STATUSES: Partial<Record<TaskStatus, true>> = {
   awaiting_human: true,
   stopped: true,
   failed: true,
+  unavailable: true,
 };
 const POLL_DELAYS_MS = [1000, 2000, 4000, 8000];
 const MAX_POLL_MS = 90_000;
@@ -148,16 +150,22 @@ function sourceLabel(source: unknown): string {
   return displayValue(source);
 }
 
-function statusLabel(status: string | undefined): string {
+function statusLabel(status: TaskStatus | string | undefined): string {
   switch (status) {
     case 'accepted': return 'Accepted';
+    case 'queued': return 'Queued';
     case 'running': return 'Running';
     case 'waiting': return 'Waiting';
-    case 'awaiting_human': return 'Awaiting a human agent';
+    case 'pending': return 'Pending';
+    case 'pending_approval':
+    case 'awaiting_approval': return 'Pending approval';
+    case 'awaiting_human':
+    case 'paused_takeover': return 'Awaiting a human agent';
     case 'completed': return 'Completed';
     case 'stopped': return 'Stopped';
     case 'failed': return 'Failed';
-    default: return 'Pending';
+    case 'unavailable': return 'Unavailable';
+    default: return 'Unavailable';
   }
 }
 
@@ -217,9 +225,26 @@ async function readReceipt(response: Response): Promise<TaskReceipt> {
   return receipt;
 }
 
-function isTaskStatus(value: unknown): value is TaskStatus {
-  return typeof value === 'string' && ['accepted', 'running', 'waiting', 'awaiting_human', 'completed', 'stopped', 'failed'].includes(value);
+function normalizeTaskStatus(value: unknown): TaskStatus | null {
+  if (typeof value !== 'string') return null;
+  switch (value.toLowerCase()) {
+    case 'accepted': return 'accepted';
+    case 'queued': return 'queued';
+    case 'running': return 'running';
+    case 'waiting': return 'waiting';
+    case 'pending': return 'pending';
+    case 'pending_approval':
+    case 'awaiting_approval': return 'pending_approval';
+    case 'awaiting_human':
+    case 'paused_takeover': return 'awaiting_human';
+    case 'completed': return 'completed';
+    case 'failed': return 'failed';
+    case 'stopped': return 'stopped';
+    case 'unavailable': return 'unavailable';
+    default: return null;
+  }
 }
+
 
 function normalizeTaskState(value: unknown): TaskState {
   if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('The task status response was invalid.');
@@ -228,7 +253,7 @@ function normalizeTaskState(value: unknown): TaskState {
   return {
     task_id: record.task_id,
     ...(typeof record.task_version === 'number' ? { task_version: record.task_version } : {}),
-    ...(isTaskStatus(record.status) ? { status: record.status } : {}),
+    ...(typeof record.status === 'string' ? { status: record.status } : {}),
     ...(typeof record.answer === 'string' ? { answer: record.answer } : {}),
     ...(Array.isArray(record.sources) ? { sources: record.sources } : {}),
     ...(Array.isArray(record.actions) ? { actions: record.actions } : {}),
@@ -238,7 +263,27 @@ function normalizeTaskState(value: unknown): TaskState {
 }
 
 function safeStatusFromReceipt(receipt: TaskReceipt): TaskStatus {
-  return isTaskStatus(receipt.status) ? receipt.status : 'accepted';
+  if (typeof receipt.status !== 'string') return 'unavailable';
+  return normalizeTaskStatus(receipt.status) ?? 'unavailable';
+}
+
+function safeStatusFromTask(task: TaskState): TaskStatus {
+  if (typeof task.status !== 'string') return 'unavailable';
+  const normalized = normalizeTaskStatus(task.status);
+  return normalized === 'accepted' ? 'queued' : normalized ?? 'unavailable';
+}
+
+function hasGroundedAnswer(task: TaskState): boolean {
+  const hasSources = Array.isArray(task.sources) && task.sources.some((source) => sourceLabel(source).trim().length > 0);
+  const hasEvidenceReference = typeof task.evidence_reference === 'string' && task.evidence_reference.trim().length > 0;
+  return typeof task.answer === 'string' && task.answer.trim().length > 0 && (hasSources || hasEvidenceReference);
+}
+
+function hasGroundedChatEntry(entry: ChatEntry): boolean {
+  if (entry.role !== 'assistant' || entry.status !== 'completed' || typeof entry.text !== 'string' || entry.text.trim().length === 0) return false;
+  const hasSources = Array.isArray(entry.sources) && entry.sources.some((source) => sourceLabel(source).trim().length > 0);
+  const hasEvidenceReference = typeof entry.evidenceReference === 'string' && entry.evidenceReference.trim().length > 0;
+  return hasSources || hasEvidenceReference;
 }
 
 export default function StorefrontDemoPage() {
@@ -396,8 +441,23 @@ export default function StorefrontDemoPage() {
       const payload = await readJson(response);
       if (!response.ok) throw new Error(errorMessage(payload, `Task status could not be read (${response.status}).`));
       const task = normalizeTaskState(payload);
-      const status = safeStatusFromReceipt(task);
-      setEntries((current) => current.map((entry) => entry.id === assistantId ? { ...entry, status: TERMINAL_STATUSES[status] ? status === 'completed' ? 'completed' : status === 'awaiting_human' ? 'awaiting_human' : status === 'stopped' ? 'stopped' : 'failed' : 'pending', taskId, ...(task.answer === undefined ? {} : { text: task.answer }), ...(task.sources === undefined ? {} : { sources: task.sources }), ...(task.actions === undefined ? {} : { actions: task.actions }), ...(task.evidence_reference === undefined ? {} : { evidenceReference: task.evidence_reference }), ...(status === 'failed' ? { error: task.answer || 'The agent could not complete this request.' } : {}) } : entry));
+      const status = safeStatusFromTask(task);
+      const grounded = status === 'completed' && hasGroundedAnswer(task);
+      const displayStatus: TaskStatus = status === 'completed' && !grounded ? 'unavailable' : status;
+      setEntries((current) => current.map((entry) => {
+        if (entry.id !== assistantId || entry.role !== 'assistant') return entry;
+        return {
+          ...entry,
+          status: displayStatus,
+          taskId,
+          ...(grounded && task.answer !== undefined && task.sources !== undefined
+            ? { text: task.answer, sources: task.sources }
+            : {}),
+          ...(task.actions === undefined ? {} : { actions: task.actions }),
+          ...(task.evidence_reference === undefined ? {} : { evidenceReference: task.evidence_reference }),
+          ...(status === 'failed' ? { error: task.answer || 'The agent could not complete this request.' } : {}),
+        };
+      }));
       if (TERMINAL_STATUSES[status]) {
         setActiveTaskId(null);
         return;
@@ -437,7 +497,8 @@ export default function StorefrontDemoPage() {
       const taskId = receipt.task_id;
       if (!taskId) throw new Error('The storefront receipt did not include a task.');
       setActiveTaskId(taskId);
-      setEntries((current) => current.map((entry) => entry.id === assistantId ? { ...entry, taskId, status: safeStatusFromReceipt(receipt) === 'completed' ? 'completed' : 'pending' } : entry));
+      const receiptStatus = safeStatusFromReceipt(receipt);
+      setEntries((current) => current.map((entry) => entry.id === assistantId && entry.role === 'assistant' ? { ...entry, taskId, status: receiptStatus === 'completed' ? 'unavailable' : receiptStatus } : entry));
       await pollTask(taskId, assistantId, widgetSession.access_token);
     } catch (error) {
       const textError = error instanceof Error ? error.message : 'The message could not be completed.';
@@ -532,8 +593,8 @@ export default function StorefrontDemoPage() {
                   <div><h2 id="chat-heading" className="text-lg font-semibold text-slate-100">NovaMart assistant</h2><p className="mt-1 text-xs text-slate-500">One scoped session for product advice and Care questions.</p></div>
                   <span className={`rounded-full border px-2 py-1 font-mono text-[10px] ${widgetState === 'ready' ? 'border-emerald-800 bg-emerald-950/40 text-emerald-300' : 'border-slate-700 bg-slate-950 text-slate-500'}`}>{widgetState === 'ready' ? 'WIDGET READY' : 'NOT CONNECTED'}</span>
                 </div>
-                <div className="mt-4 grid grid-cols-2 gap-2" role="group" aria-label="Simulated shopper persona">
-                  {(['anonymous', 'C05'] as const).map((value) => <button key={value} type="button" onClick={() => changePersona(value)} aria-pressed={persona === value} className={`rounded-md border px-3 py-2 text-left text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 ${persona === value ? 'border-sky-500 bg-sky-500/10 text-sky-200' : 'border-slate-700 bg-slate-950 text-slate-400 hover:border-slate-600'}`}><span className="block font-medium">{value === 'C05' ? 'Verified C05' : 'Anonymous shopper'}</span><span className="mt-1 block text-[10px] text-slate-500">{value === 'C05' ? 'Order lookup and Customer360 identity' : 'Public questions only'}</span></button>)}
+                <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3" role="group" aria-label="Simulated shopper persona">
+                  {PERSONAS.map((value) => <button key={value} type="button" onClick={() => changePersona(value)} aria-pressed={persona === value} className={`rounded-md border px-3 py-2 text-left text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 ${persona === value ? 'border-sky-500 bg-sky-500/10 text-sky-200' : 'border-slate-700 bg-slate-950 text-slate-400 hover:border-slate-600'}`}><span className="block font-medium">{value === 'anonymous' ? 'Anonymous shopper' : `Verified ${value}`}</span><span className="mt-1 block text-[10px] text-slate-500">{value === 'anonymous' ? 'Public questions only' : value === 'C05' ? 'Owned order lookup' : 'Cross-customer denial test'}</span></button>)}
                 </div>
                 {widgetState !== 'ready' && <button type="button" onClick={() => void mintWidgetSession(persona)} disabled={widgetState === 'minting'} className="mt-3 w-full rounded-md bg-sky-500 px-3 py-2 text-sm font-medium text-slate-950 hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300">{widgetState === 'minting' ? 'Opening scoped widget…' : 'Open chat session'}</button>}
                 {widgetError && <p role="alert" className="mt-3 rounded-md border border-rose-900/70 bg-rose-950/30 px-3 py-2 text-xs leading-5 text-rose-300">{widgetError}</p>}
@@ -541,7 +602,31 @@ export default function StorefrontDemoPage() {
 
               <div className="flex-1 space-y-3 overflow-y-auto py-4" aria-live="polite" aria-label="Conversation transcript">
                 {entries.length === 0 && <div className="flex min-h-64 flex-col items-center justify-center px-5 text-center"><div className="mb-3 rounded-full border border-slate-700 bg-slate-950 px-3 py-1 font-mono text-[10px] text-slate-500">SESSION-BOUND CHAT</div><p className="text-sm font-medium text-slate-300">Ask about a product, return policy, or order status.</p><p className="mt-2 max-w-xs text-xs leading-5 text-slate-500">Try: “I need a laptop under 20 million VND for graphic design.” or “What is your return policy?”</p></div>}
-                {entries.map((entry) => entry.role === 'user' ? <div key={entry.id} className="ml-8 rounded-lg rounded-br-sm bg-sky-500/15 px-3 py-2.5 text-sm leading-6 text-sky-100"><p className="mb-1 text-[10px] font-mono uppercase tracking-wider text-sky-400">You</p>{entry.text}</div> : <div key={entry.id} className="mr-4 rounded-lg rounded-bl-sm border border-slate-800 bg-slate-950/80 px-3 py-3"><p className="mb-2 text-[10px] font-mono uppercase tracking-wider text-slate-500">NovaMart assistant</p>{entry.status === 'pending' && <p className="text-xs text-slate-400" role="status">{entry.taskId ? `Task ${entry.taskId} is ${statusLabel('running').toLowerCase()}…` : 'Accepted. Waiting for a task receipt…'}</p>}{entry.status === 'awaiting_human' && <p className="text-xs leading-5 text-amber-300" role="status">This conversation is awaiting a human agent. No automated answer was added.</p>}{entry.status === 'stopped' && <p className="text-xs leading-5 text-slate-400">The task stopped before returning an answer.</p>}{entry.status === 'failed' && <p role="alert" className="text-xs leading-5 text-rose-300">{entry.error ?? 'The task failed before returning an answer.'}</p>}{entry.status === 'completed' && entry.text && <p className="whitespace-pre-wrap text-sm leading-6 text-slate-200">{entry.text}</p>}{entry.status === 'completed' && !entry.text && <p className="text-xs leading-5 text-slate-400">The task completed without an answer. No reply was invented.</p>}{entry.status === 'completed' && entry.sources && entry.sources.length > 0 && <div className="mt-3 border-t border-slate-800 pt-3"><p className="text-[10px] font-mono uppercase tracking-wider text-slate-500">Sources</p><ul className="mt-2 space-y-1 text-xs text-slate-400">{entry.sources.map((source, index) => <li key={`${entry.id}-source-${index}`} className="break-words">{sourceLabel(source)}</li>)}</ul></div>}{entry.status === 'completed' && entry.actions && entry.actions.length > 0 && <div className="mt-3 border-t border-slate-800 pt-3"><p className="text-[10px] font-mono uppercase tracking-wider text-slate-500">Actions</p><ul className="mt-2 space-y-1 text-xs text-slate-400">{entry.actions.map((action, index) => <li key={`${entry.id}-action-${index}`} className="whitespace-pre-wrap break-words">{displayValue(action)}</li>)}</ul></div>}{entry.status === 'completed' && entry.evidenceReference !== undefined && <p className="mt-3 border-t border-slate-800 pt-3 font-mono text-[10px] text-slate-600">Evidence reference: {displayValue(entry.evidenceReference)}</p>}</div>)}
+                {entries.map((entry) => entry.role === 'user' ? (
+                  <div key={entry.id} className="ml-8 rounded-lg rounded-br-sm bg-sky-500/15 px-3 py-2.5 text-sm leading-6 text-sky-100">
+                    <p className="mb-1 text-[10px] font-mono uppercase tracking-wider text-sky-400">You</p>
+                    {entry.text}
+                  </div>
+                ) : (
+                  <div key={entry.id} className="mr-4 rounded-lg rounded-bl-sm border border-slate-800 bg-slate-950/80 px-3 py-3">
+                    <p className="mb-2 text-[10px] font-mono uppercase tracking-wider text-slate-500">NovaMart assistant</p>
+                    {entry.status === 'accepted' && <p className="text-xs text-slate-400" role="status">{statusLabel(entry.status)}. {entry.taskId ? `Task ${entry.taskId} is waiting for execution…` : 'Waiting for a task receipt…'}</p>}
+                    {entry.status === 'queued' && <p className="text-xs text-slate-400" role="status">{statusLabel(entry.status)}. Waiting for worker execution…</p>}
+                    {entry.status === 'running' && <p className="text-xs text-slate-400" role="status">{statusLabel(entry.status)}. The task is being processed…</p>}
+                    {entry.status === 'waiting' && <p className="text-xs text-slate-400" role="status">{statusLabel(entry.status)} for the next task event…</p>}
+                    {entry.status === 'pending' && <p className="text-xs text-slate-400" role="status">{statusLabel(entry.status)}; the durable status is still being read…</p>}
+                    {entry.status === 'pending_approval' && <p className="text-xs leading-5 text-amber-300" role="status">{statusLabel(entry.status)}. No automated action will be shown.</p>}
+                    {entry.status === 'awaiting_human' && <p className="text-xs leading-5 text-amber-300" role="status">{statusLabel(entry.status)}. No automated answer was added.</p>}
+                    {entry.status === 'stopped' && <p className="text-xs leading-5 text-slate-400">{statusLabel(entry.status)} before returning an answer.</p>}
+                    {entry.status === 'failed' && <p role="alert" className="text-xs leading-5 text-rose-300">{entry.error ?? `${statusLabel(entry.status)} before returning an answer.`}</p>}
+                    {entry.status === 'unavailable' && <p className="text-xs leading-5 text-slate-400" role="status">{statusLabel(entry.status)}: the durable task response did not include a grounded answer and citation.</p>}
+                    {hasGroundedChatEntry(entry) && <p className="whitespace-pre-wrap text-sm leading-6 text-slate-200">{entry.text}</p>}
+                    {entry.status === 'completed' && !hasGroundedChatEntry(entry) && <p className="text-xs leading-5 text-slate-400" role="status">Unavailable: the task completed without a grounded answer and citation. No reply was invented.</p>}
+                    {hasGroundedChatEntry(entry) && entry.sources && entry.sources.length > 0 && <div className="mt-3 border-t border-slate-800 pt-3"><p className="text-[10px] font-mono uppercase tracking-wider text-slate-500">Sources</p><ul className="mt-2 space-y-1 text-xs text-slate-400">{entry.sources.map((source, index) => <li key={`${entry.id}-source-${index}`} className="break-words">{sourceLabel(source)}</li>)}</ul></div>}
+                    {hasGroundedChatEntry(entry) && entry.actions && entry.actions.length > 0 && <div className="mt-3 border-t border-slate-800 pt-3"><p className="text-[10px] font-mono uppercase tracking-wider text-slate-500">Actions</p><ul className="mt-2 space-y-1 text-xs text-slate-400">{entry.actions.map((action, index) => <li key={`${entry.id}-action-${index}`} className="whitespace-pre-wrap break-words">{displayValue(action)}</li>)}</ul></div>}
+                    {hasGroundedChatEntry(entry) && entry.evidenceReference !== undefined && <p className="mt-3 border-t border-slate-800 pt-3 font-mono text-[10px] text-slate-600">Evidence reference: {displayValue(entry.evidenceReference)}</p>}
+                  </div>
+                ))}
               </div>
 
               <form onSubmit={sendMessage} className="border-t border-slate-800 pt-4">

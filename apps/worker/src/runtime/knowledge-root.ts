@@ -63,7 +63,7 @@ function normalizeTenantIds(options: TenantKnowledgeRootResolverOptions): readon
  *
  * `allow_unbound` is deliberately opt-in and is used only by the shipped
  * package root (whose draft documents are still filtered) and direct injected
- * fake-root tests. Configured demo roots must provide tenant_ids or tenant_id.
+ * fake-root tests. Configured roots MUST provide tenant_ids or tenant_id.
  */
 export function createTenantKnowledgeRootResolver(
   options: TenantKnowledgeRootResolverOptions,

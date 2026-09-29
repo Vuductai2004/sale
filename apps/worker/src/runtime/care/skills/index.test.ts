@@ -94,7 +94,7 @@ function createMockOptions(overrides: Partial<Parameters<typeof createCareSkillS
   return {
     erp_read,
     env: {
-      CARE_TENANT_IDS: TENANT_ID,
+      KNOWLEDGE_TENANT_IDS: TENANT_ID,
     },
     resolve_correlation_id: vi.fn().mockResolvedValue('corr-123'),
     resolve_grant: vi.fn().mockResolvedValue('AUTH-0'),
@@ -156,7 +156,7 @@ describe('CareSkillServices', () => {
       expect(reconcile).not.toHaveBeenCalled();
     });
 
-    it('reconciles a timed-out INTERNAL effect by key and never enqueues it twice', async () => {
+    it('reconciles a timed-out INTERNAL effect by key before any idempotent retry', async () => {
       const enqueue = vi.fn(async (_input: EnqueueCareHandoffInput) => {
         throw new Error('HANDOFF_QUEUE_TIMEOUT: transaction exceeded its 1000ms deadline.');
       });
@@ -199,8 +199,35 @@ describe('CareSkillServices', () => {
         input: HANDOFF_INPUT,
         context: handoffContext(),
       })).rejects.toMatchObject({ code: 'QUEUE_DOWN' });
-      expect(enqueue).toHaveBeenCalledTimes(1);
+      expect(enqueue).toHaveBeenCalledTimes(2);
+      expect(reconcile).toHaveBeenCalledTimes(2);
+    });
+    it('retries a rolled-back enqueue with the same idempotency key and returns one durable output', async () => {
+      let attempts = 0;
+      const enqueue = vi.fn(async (_input: EnqueueCareHandoffInput) => {
+        attempts += 1;
+        if (attempts === 1) throw new Error('connection reset');
+        return {
+          disposition: 'CREATED' as const,
+          output: HANDOFF_OUTPUT,
+          receipt: HANDOFF_RECEIPT,
+        };
+      });
+      const reconcile = vi.fn(async () => ({ state: 'NOT_COMMITTED' as const }));
+      const services = createCareSkillServices(createMockOptions({
+        handoff_repository: { enqueue, reconcile },
+      }));
+
+      await expect(services.tool_port.invoke({
+        skill_id: 'skill.care.escalate_to_human',
+        tool_binding: 'Orchestrator.HandoffBus',
+        input: HANDOFF_INPUT,
+        context: handoffContext(),
+      })).resolves.toEqual(HANDOFF_OUTPUT);
+
+      expect(enqueue).toHaveBeenCalledTimes(2);
       expect(reconcile).toHaveBeenCalledTimes(1);
+      expect(enqueue.mock.calls[0]?.[0]).toEqual(enqueue.mock.calls[1]?.[0]);
     });
 
     it('rejects a payload tenant mismatch before queue access', async () => {
@@ -316,8 +343,8 @@ describe('CareSkillServices', () => {
     it('reads approved FAQ from the tenant-bound NovaMart root and refuses another tenant', async () => {
       const services = createCareSkillServices(createMockOptions({
         env: {
-          CARE_KNOWLEDGE_ROOT: NOVAMART_KNOWLEDGE_ROOT,
-          CARE_TENANT_IDS: NOVAMART_TENANT_ID,
+          KNOWLEDGE_ROOT: NOVAMART_KNOWLEDGE_ROOT,
+          KNOWLEDGE_TENANT_IDS: NOVAMART_TENANT_ID,
         },
       }));
       const novamartContext = { ...DUMMY_CONTEXT, tenant_id: NOVAMART_TENANT_ID };
@@ -355,7 +382,7 @@ describe('CareSkillServices', () => {
     });
     it('refuses a configured Care root without a tenant allowlist', async () => {
       const services = createCareSkillServices(createMockOptions({
-        env: { CARE_KNOWLEDGE_ROOT: NOVAMART_KNOWLEDGE_ROOT },
+        env: { KNOWLEDGE_ROOT: NOVAMART_KNOWLEDGE_ROOT },
       }));
 
       await expect(services.tool_port.invoke({
@@ -378,7 +405,7 @@ describe('CareSkillServices', () => {
         );
 
         const options = createMockOptions({
-          env: { CARE_KNOWLEDGE_ROOT: tempRoot, CARE_TENANT_IDS: TENANT_ID },
+        env: { KNOWLEDGE_ROOT: tempRoot, KNOWLEDGE_TENANT_IDS: TENANT_ID },
         });
         const services = createCareSkillServices(options);
 
@@ -424,7 +451,7 @@ describe('CareSkillServices', () => {
         }
 
         const options = createMockOptions({
-          env: { CARE_KNOWLEDGE_ROOT: tempRoot, CARE_TENANT_IDS: TENANT_ID },
+        env: { KNOWLEDGE_ROOT: tempRoot, KNOWLEDGE_TENANT_IDS: TENANT_ID },
         });
         const services = createCareSkillServices(options);
 

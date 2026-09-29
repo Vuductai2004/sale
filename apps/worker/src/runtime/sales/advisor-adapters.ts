@@ -3,11 +3,24 @@ import type { SalesPriceFloorDecision, SalesPriceFloorPort } from './skills/type
 import type { ErpReadPort } from './skills/types.js';
 
 
-/** Server-stamped requirements for one conversational advisor run. */
+/** Server-stamped requirements/proposals for one conversational advisor run. */
+export interface SalesAdvisorBudget {
+  readonly amount: number;
+  readonly currency: string;
+}
+
+export interface SalesProductEligibilityProposal {
+  /** A search hint only; inventory and quote reads must still verify the returned SKU. */
+  readonly sku?: string;
+  /** A search hint only; it is not authoritative catalog eligibility. */
+  readonly category?: string;
+}
+
 export interface SalesAdvisorRequirements {
-  readonly category: string;
-  readonly budget_vnd: number;
-  readonly use_case: string;
+  readonly category?: string;
+  readonly budget?: SalesAdvisorBudget;
+  readonly use_case?: string;
+  readonly product_eligibility?: SalesProductEligibilityProposal;
 }
 
 interface AdvisorRunState {

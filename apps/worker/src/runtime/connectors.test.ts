@@ -180,7 +180,7 @@ describe('createWorkerConnectors', () => {
     const { server, base_url } = await startMockErp();
     try {
       const connectors = createWorkerConnectors(
-        { ...LOCAL_ENV, ERP_API_BASE_URL: base_url, CARE_KNOWLEDGE_ROOT: '/custom/root' },
+        { ...LOCAL_ENV, ERP_API_BASE_URL: base_url, KNOWLEDGE_ROOT: '/custom/root' },
         { hmac: nodeHmacSha256Hex, authority: { authorize: () => true } },
       );
 

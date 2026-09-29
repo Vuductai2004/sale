@@ -159,45 +159,125 @@ function readAdvisorRequirements(signal: SignalEnvelope): SalesAdvisorRequiremen
   }
 
   const raw = payload.sales_requirements;
-  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) {
+  if (raw !== undefined && (typeof raw !== 'object' || raw === null || Array.isArray(raw))) {
     throw new OrchestratorError(
       'SALES_STRUCTURED_INTENT_INVALID',
-      'Server-stamped Sales advisor intent requires a requirements object.',
+      'Server-stamped Sales advisor intent requires a requirements object when provided.',
     );
   }
-  const requirements = raw as Record<string, unknown>;
+  const requirements = (raw ?? {}) as Record<string, unknown>;
   for (const key of Object.keys(requirements)) {
-    if (key !== 'category' && key !== 'budget_vnd' && key !== 'use_case') {
+    if (key !== 'category' && key !== 'budget' && key !== 'use_case' && key !== 'product_eligibility') {
       throw new OrchestratorError(
         'SALES_STRUCTURED_INTENT_INVALID',
         `Unknown server-stamped Sales requirement '${key}'.`,
       );
     }
   }
-  const category = requirements.category;
-  const use_case = requirements.use_case;
-  const budget_vnd = requirements.budget_vnd;
-  if (
-    typeof category !== 'string'
-    || category.trim().length === 0
-    || category.trim().length > 64
-    || typeof use_case !== 'string'
-    || use_case.trim().length === 0
-    || use_case.trim().length > 160
-    || typeof budget_vnd !== 'number'
-    || !Number.isSafeInteger(budget_vnd)
-    || budget_vnd <= 0
-  ) {
+
+  const category = parseBoundedRequirementString(requirements.category, 'category', 64, true);
+  const use_case = parseBoundedRequirementString(requirements.use_case, 'use_case', 160, true);
+
+  let budget: SalesAdvisorRequirements['budget'];
+  if (requirements.budget !== undefined) {
+    const rawBudget = requirements.budget;
+    if (typeof rawBudget !== 'object' || rawBudget === null || Array.isArray(rawBudget)) {
+      throw new OrchestratorError(
+        'SALES_STRUCTURED_INTENT_INVALID',
+        'Sales advisor budget must be an object with amount and currency.',
+      );
+    }
+    const budgetRecord = rawBudget as Record<string, unknown>;
+    for (const key of Object.keys(budgetRecord)) {
+      if (key !== 'amount' && key !== 'currency') {
+        throw new OrchestratorError(
+          'SALES_STRUCTURED_INTENT_INVALID',
+          `Unknown server-stamped Sales budget field '${key}'.`,
+        );
+      }
+    }
+    const amount = budgetRecord.amount;
+    const currency = budgetRecord.currency;
+    if (
+      typeof amount !== 'number'
+      || !Number.isSafeInteger(amount)
+      || amount <= 0
+      || typeof currency !== 'string'
+      || !/^[A-Z]{3}$/.test(currency.trim())
+    ) {
+      throw new OrchestratorError(
+        'SALES_STRUCTURED_INTENT_INVALID',
+        'Sales advisor budget must contain a positive safe integer amount and a 3-letter ISO currency.',
+      );
+    }
+    budget = {
+      amount,
+      currency: currency.trim(),
+    };
+  }
+
+  let product_eligibility: SalesAdvisorRequirements['product_eligibility'];
+  if (requirements.product_eligibility !== undefined) {
+    const rawEligibility = requirements.product_eligibility;
+    if (typeof rawEligibility !== 'object' || rawEligibility === null || Array.isArray(rawEligibility)) {
+      throw new OrchestratorError(
+        'SALES_STRUCTURED_INTENT_INVALID',
+        'Sales product eligibility must be an object when provided.',
+      );
+    }
+    const eligibility = rawEligibility as Record<string, unknown>;
+    for (const key of Object.keys(eligibility)) {
+      if (key !== 'sku' && key !== 'category') {
+        throw new OrchestratorError(
+          'SALES_STRUCTURED_INTENT_INVALID',
+          `Unknown server-stamped Sales eligibility field '${key}'.`,
+        );
+      }
+    }
+    const sku = parseBoundedRequirementString(eligibility.sku, 'product eligibility SKU', 128, false);
+    const eligibilityCategory = parseBoundedRequirementString(
+      eligibility.category,
+      'product eligibility category',
+      64,
+      true,
+    );
+    product_eligibility = {
+      ...(sku === undefined ? {} : { sku }),
+      ...(eligibilityCategory === undefined ? {} : { category: eligibilityCategory }),
+    };
+  }
+
+  return {
+    ...(category === undefined ? {} : { category }),
+    ...(budget === undefined ? {} : { budget }),
+    ...(use_case === undefined ? {} : { use_case }),
+    ...(product_eligibility === undefined ? {} : { product_eligibility }),
+  };
+}
+
+function parseBoundedRequirementString(
+  value: unknown,
+  label: string,
+  maxLength: number,
+  lowerCase: boolean,
+): string | undefined {
+  if (value === undefined) return undefined;
+  if (typeof value !== 'string' || value.trim().length === 0 || value.trim().length > maxLength) {
     throw new OrchestratorError(
       'SALES_STRUCTURED_INTENT_INVALID',
-      'Sales advisor requirements must contain bounded category, budget_vnd, and use_case values.',
+      `Sales advisor ${label} must be a bounded non-empty string.`,
     );
   }
-  return {
-    category: category.trim().toLocaleLowerCase(),
-    budget_vnd,
-    use_case: use_case.trim().toLocaleLowerCase(),
-  };
+  const trimmed = value.trim();
+  return lowerCase ? trimmed.toLocaleLowerCase() : trimmed;
+}
+
+function missingAdvisorRequirementLabels(requirements: SalesAdvisorRequirements): readonly string[] {
+  const missing: string[] = [];
+  if (requirements.category === undefined) missing.push('category');
+  if (requirements.budget === undefined) missing.push('budget amount and currency');
+  if (requirements.use_case === undefined) missing.push('use case');
+  return missing;
 }
 export type SalesIntent =
   | 'customer_lookup'
@@ -543,9 +623,9 @@ export class SalesAgentRuntime implements IAgentRuntime {
       intent = 'advisor';
       confidence = 0.95;
       rationaleData = {
-        reason: `Server-stamped Sales advisor requirements for ${advisorRequirements.category} within ${advisorRequirements.budget_vnd} VND.`,
+        reason: 'Server-stamped Sales advisor requirements/proposals received from API gateway.',
         intent: 'advisor',
-        query: advisorRequirements.use_case,
+        ...(advisorRequirements.use_case === undefined ? {} : { query: advisorRequirements.use_case }),
         advisor_requirements: advisorRequirements,
       };
     }
@@ -592,13 +672,17 @@ export class SalesAgentRuntime implements IAgentRuntime {
           rationalization: hypothesis.reasoning,
         };
 
-      case 'advisor':
-        if (rationale?.advisor_requirements === undefined) {
+      case 'advisor': {
+        const requirements = rationale?.advisor_requirements;
+        const missing = requirements === undefined
+          ? ['category', 'budget amount and currency', 'use case']
+          : missingAdvisorRequirementLabels(requirements);
+        if (missing.length > 0) {
           return {
             target_agent: 'SAL-02' as PlatformAgentId,
             requires_clarification: true,
-            clarification_prompt: 'The product requirements are incomplete; please provide category, budget, and use case.',
-            rationalization: 'Server-stamped advisor requirements are missing.',
+            clarification_prompt: `Please provide the missing product requirements: ${missing.join(', ')}.`,
+            rationalization: 'Server-stamped advisor requirements are incomplete.',
           };
         }
         return {
@@ -606,6 +690,7 @@ export class SalesAgentRuntime implements IAgentRuntime {
           requires_clarification: false,
           rationalization: hypothesis.reasoning,
         };
+      }
 
       case 'product_search':
         if (!rationale?.query || rationale.query.trim().length === 0) {
@@ -916,6 +1001,7 @@ export class SalesAgentRuntime implements IAgentRuntime {
       const customerId = customer?.customer_id;
       if (
         requirements === undefined
+        || missingAdvisorRequirementLabels(requirements).length > 0
         || customer === null
         || customer === undefined
         || customerId === undefined
@@ -950,14 +1036,18 @@ export class SalesAgentRuntime implements IAgentRuntime {
         };
       }
 
+      // Eligibility values are API proposals used only to narrow the authoritative catalog search.
+      // The returned catalog SKU remains the sole source for stock and quote bindings.
+      const searchQuery = requirements.product_eligibility?.sku ?? requirements.use_case!;
+      const searchCategory = requirements.product_eligibility?.category ?? requirements.category!;
       const searchStep = this.buildPlannedStep(
         1,
         routing.target_agent,
         searchRow,
         {
           tenant_id: context.tenant_id,
-          query: requirements.use_case,
-          category_id: requirements.category,
+          query: searchQuery,
+          category_id: searchCategory,
           limit: 20,
         },
         [],

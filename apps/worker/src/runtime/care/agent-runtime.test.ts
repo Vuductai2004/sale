@@ -429,8 +429,8 @@ describe('CareAgentRuntime', () => {
     const services = createCareSkillServices({
       erp_read: null,
       env: {
-        CARE_KNOWLEDGE_ROOT: novamart_knowledge_root,
-        CARE_TENANT_IDS: novamart_tenant_id,
+        KNOWLEDGE_ROOT: novamart_knowledge_root,
+        KNOWLEDGE_TENANT_IDS: novamart_tenant_id,
       },
       resolve_correlation_id: async () => 'corr-1',
       resolve_grant: async () => 'AUTH-0',
@@ -511,16 +511,19 @@ describe('CareAgentRuntime', () => {
     };
 
     const hypothesis = await runtime.deriveHypothesis(signal, unverifiedContext);
+    const routing = await runtime.resolveRouting(signal, unverifiedContext, hypothesis);
     expect(hypothesis.intent).toBe('order_lookup_unverified');
 
-    const routing = await runtime.resolveRouting(signal, unverifiedContext, hypothesis);
     expect(routing.target_agent).toBe('CS-01');
-    expect(routing.requires_clarification).toBe(true);
-    expect(routing.clarification_prompt).toBeTruthy();
+    expect(routing.requires_clarification).toBe(false);
+    expect(routing.rationalization).toContain('IDENTITY_UNVERIFIED');
+    expect(JSON.stringify(hypothesis)).not.toContain('554433');
+    expect(JSON.stringify(routing)).not.toContain('554433');
 
-    const plan = await runtime.formulatePlan(routing, unverifiedContext, hypothesis);
-    expect(plan.steps).toHaveLength(0);
-    expect(plan.fallback_strategy).toBe('FAIL_CLOSED');
+    await expect(runtime.formulatePlan(routing, unverifiedContext, hypothesis))
+      .rejects.toMatchObject({ code: 'IDENTITY_UNVERIFIED' });
+    await expect(runtime.formulatePlan(routing, unverifiedContext, hypothesis))
+      .rejects.toThrow(/no order record was read or disclosed/i);
   });
 
   it('refuses order-status intent without a verified identity reference with NO plan', async () => {

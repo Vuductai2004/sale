@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { readFileSync } from 'node:fs';
 import http from 'node:http';
 import { once } from 'node:events';
 import test from 'node:test';
@@ -12,6 +13,7 @@ import { createServer } from '../src/server.mjs';
 const SECRET = 'local-mock-erp-hmac-secret-value';
 const DEMO_TENANT_ID = '99999999-9999-4999-8999-999999999999';
 const SERVER_PATH = fileURLToPath(new URL('../src/server.mjs', import.meta.url));
+const DEMO_PACK_PATH = fileURLToPath(new URL('../src/demo/novamart.json', import.meta.url));
 
 function post(server, path, body, { secret = SECRET, tenant = TENANT_ID, signature } = {}) {
   const raw = JSON.stringify(body);
@@ -107,6 +109,35 @@ test('unknown demo pack is refused without exposing boot secrets', () => {
     (error) => error?.stderr?.includes('[MOCK_ERP_DEMO_PACK]') === true
       && error?.stderr?.includes(SECRET) === false,
   );
+});
+test('NovaMart fixture keeps canonical counts and verified C05/C06 ownership', () => {
+  const pack = JSON.parse(readFileSync(DEMO_PACK_PATH, 'utf8'));
+  for (const [name, count] of Object.entries({
+    products: 24,
+    skus: 28,
+    customers: 12,
+    orders: 20,
+    events: 53,
+    segments: 2,
+    campaigns: 1,
+    engagement_events: 8,
+    cases: 4,
+  })) {
+    assert.equal(pack[name].length, count);
+  }
+
+  const byCode = new Map(pack.customers.map((customer) => [customer.customer_code, customer]));
+  const c05 = byCode.get('C05');
+  const c06 = byCode.get('C06');
+  assert.equal(c05.identity_verified, true);
+  assert.equal(c05.web_chat_identity.channel_identifier, 'sess-novamart-c05');
+  assert.equal(c06.identity_verified, true);
+  assert.equal(c06.web_chat_identity.channel_identifier, 'sess-novamart-c06');
+  assert.notEqual(c05.customer_id, c06.customer_id);
+
+  const order = pack.orders.find((candidate) => candidate.order_number === 'ORD-DEMO-005');
+  assert.equal(order.customer_code, 'C05');
+  assert.equal(order.customer_id, c05.customer_id);
 });
 
 test('local /health returns 200', async () => {
@@ -388,17 +419,23 @@ test('NovaMart order and customer reads stay tenant and customer scoped', async 
     }, { tenant: DEMO_TENANT_ID });
     assert.equal(order.status, 200);
     assert.equal(order.body.order_id, 'ORD-DEMO-005');
+    assert.equal(order.body.customer_code, 'C05');
     assert.equal(order.body.customer_id, '99000000-0000-4000-8000-000000000005');
     assert.equal(order.body.status, 'DELIVERED');
 
-    const wrongCustomer = await post(server, '/api/v1/orders/status', {
+    const c06Status = await post(server, '/api/v1/orders/status', {
       tenant_id: DEMO_TENANT_ID,
       key: 'ORD-DEMO-005',
       customer_id: '99000000-0000-4000-8000-000000000006',
     }, { tenant: DEMO_TENANT_ID });
-    assert.equal(wrongCustomer.status, 404);
-    assert.deepEqual(wrongCustomer.body, { code: 'AUTHORITATIVE_SOURCE_UNAVAILABLE' });
-
+    assert.equal(c06Status.status, 404);
+    assert.deepEqual(c06Status.body, { code: 'AUTHORITATIVE_SOURCE_UNAVAILABLE' });
+    const anonymous = await post(server, '/api/v1/orders/status', {
+      tenant_id: DEMO_TENANT_ID,
+      key: 'ORD-DEMO-005',
+    }, { tenant: DEMO_TENANT_ID });
+    assert.equal(anonymous.status, 404);
+    assert.deepEqual(anonymous.body, { code: 'AUTHORITATIVE_SOURCE_UNAVAILABLE' });
     const wrongTenant = await post(server, '/api/v1/orders/status', {
       tenant_id: TENANT_ID,
       key: 'ORD-DEMO-005',
@@ -412,6 +449,16 @@ test('NovaMart order and customer reads stay tenant and customer scoped', async 
     }, { tenant: DEMO_TENANT_ID });
     assert.equal(customer.status, 200);
     assert.equal(customer.body.customer_tier, 'GOLD');
+    const c06 = await post(server, '/api/v1/customers/lookup', {
+      tenant_id: DEMO_TENANT_ID,
+      customer_id: '99000000-0000-4000-8000-000000000006',
+    }, { tenant: DEMO_TENANT_ID });
+    assert.equal(c06.status, 200);
+    assert.equal(c06.body.customer_code, 'C06');
+    assert.equal(c06.body.identity_verified, true);
+    assert.equal(c06.body.web_chat_identity.channel_identifier, 'sess-novamart-c06');
+    assert.equal(c06.body.web_chat_identity.verified, true);
+    assert.notEqual(c06.body.customer_id, customer.body.customer_id);
 
     const history = await post(server, '/api/v1/customers/sales-history', {
       tenant_id: DEMO_TENANT_ID,

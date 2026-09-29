@@ -55,7 +55,10 @@ export function screenMarketingUntrustedInput(text: string, fieldName: string): 
 }
 
 /**
- * Deterministic MKT-03 content generator.
+ * Explicit deterministic draft helper for offline/runtime compositions that inject it themselves.
+ * The worker's canonical Marketing skill port never installs this helper as a provider fallback:
+ * successful provider-backed content requires an actual Core.LLMContentEngine binding.
+ *
  * Generates channel-specific draft content derived strictly from campaign_theme and product_skus.
  * Avoids inventing offers, prices, or policy claims, and explicitly marks content as a DRAFT.
  */

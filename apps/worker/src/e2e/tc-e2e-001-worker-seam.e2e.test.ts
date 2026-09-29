@@ -231,7 +231,7 @@ describe('TC-E2E-001 worker claim seam', () => {
         SALES_SIGNAL_SOURCE_CHANNELS: `WEB_CHAT,${CROSS_DOMAIN_HANDOFF_CHANNEL}`,
         SALES_SIGNAL_EVENT_TYPES: `message.received,${CROSS_DOMAIN_HANDOFF_EVENT_TYPES.marketing_to_sales}`,
         AUDIT_HMAC_SECRET: AUDIT_SECRET,
-        CARE_TENANT_IDS: TENANT_ID,
+        WORKER_TENANT_IDS: TENANT_ID,
       },
       {
         hmac: () => '',
@@ -251,7 +251,7 @@ describe('TC-E2E-001 worker claim seam', () => {
         careFactoryOptions: {
           ...shared,
           adapterDispatcher,
-          env: { CARE_TENANT_IDS: TENANT_ID },
+          env: { KNOWLEDGE_TENANT_IDS: TENANT_ID },
         },
       },
     );

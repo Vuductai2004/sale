@@ -1,10 +1,7 @@
 import type { SkillToolInvocation, SkillToolPort } from '@agentos/skills';
 
 import { MARKETING_APPROVED_DOCUMENT_ALLOWLIST } from '../knowledge-adapter.js';
-import {
-  auditMarketingBrand,
-  generateMarketingContent,
-} from '../content.js';
+import { auditMarketingBrand } from '../content.js';
 
 import type {
   InputMktAnalyzeSignal,
@@ -46,19 +43,12 @@ async function readApprovedMarketingDocuments(
 /**
  * Creates the unified SkillToolPort for Marketing skills.
  * Routes each skill_id and tool_binding to its injected port, failing closed
- * with UNBOUND_PROVIDER when an owner/provider/connector is not bound.
+ * with UNBOUND_PROVIDER when an owner/provider/connector is not bound. Approved knowledge may
+ * back the brand guard only; content generation never falls back to deterministic local copy.
  */
 export function createMarketingSkillToolPort(
   options: MarketingSkillToolPortOptions,
 ): SkillToolPort {
-  const knowledgeBackedContentEngine = options.knowledge
-    ? {
-        async generateContent(input: InputMktGenerateContent) {
-          const docs = await readApprovedMarketingDocuments(options.knowledge!, input.tenant_id);
-          return generateMarketingContent(input, docs);
-        },
-      }
-    : null;
   const knowledgeBackedBrandGuard = options.knowledge
     ? {
         async auditBrandCompliance(input: InputMktAuditBrand) {
@@ -71,7 +61,6 @@ export function createMarketingSkillToolPort(
         },
       }
     : null;
-  const contentEngine = options.content_engine ?? knowledgeBackedContentEngine;
   const brandGuard = options.brand_guard ?? knowledgeBackedBrandGuard;
   return {
     async invoke<TInput, TOutput>(invocation: SkillToolInvocation<TInput>): Promise<TOutput> {
@@ -156,16 +145,29 @@ export function createMarketingSkillToolPort(
         skill_id === 'skill.mkt.generate_content' &&
         tool_binding === 'Core.LLMContentEngine'
       ) {
-        if (!contentEngine) {
+        if (!options.content_engine) {
           throw new MarketingSkillToolError(
             'UNBOUND_PROVIDER',
             'Core.LLMContentEngine is unbound: no content generation engine is configured',
           );
         }
-        return (await contentEngine.generateContent(
-          input as unknown as InputMktGenerateContent,
-          context,
-        )) as TOutput;
+        try {
+          return (await options.content_engine.generateContent(
+            input as unknown as InputMktGenerateContent,
+            context,
+          )) as TOutput;
+        } catch (error) {
+          if (error instanceof MarketingSkillToolError) throw error;
+          const providerCode = error !== null && typeof error === 'object' && 'code' in error
+            && typeof error.code === 'string'
+            ? error.code
+            : 'PROVIDER_ERROR';
+          throw new MarketingSkillToolError(
+            'PROVIDER_ERROR',
+            `Core.LLMContentEngine provider failed (${providerCode})`,
+            { provider_code: providerCode },
+          );
+        }
       }
 
       // 5. skill.mkt.audit_brand_compliance -> SecondBrain.BrandGuard

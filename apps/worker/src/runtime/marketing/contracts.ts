@@ -159,6 +159,10 @@ export interface MarketingContentOutput {
   };
 }
 
+/**
+ * Explicit content generator for isolated/offline runtime compositions. The canonical worker
+ * Marketing path uses MarketingContentEnginePort through the platform skill port instead.
+ */
 export interface MarketingContentGeneratorPort {
   readonly generate: (
     input: MarketingContentInput,

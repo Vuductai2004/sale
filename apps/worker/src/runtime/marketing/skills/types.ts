@@ -335,7 +335,7 @@ export interface MarketingSkillToolPortOptions {
   readonly consentPort?: MarketingConsentPort | null;
   readonly content_engine?: MarketingContentEnginePort | null;
   readonly brand_guard?: MarketingBrandGuardPort | null;
-  /** Tenant-scoped approved knowledge used by the default content/brand adapters. */
+  /** Tenant-scoped approved knowledge used by the default brand adapter; it never substitutes for Core.LLMContentEngine. */
   readonly knowledge?: MarketingKnowledgePort | null;
   readonly communication?: MarketingCommunicationPort | null;
   readonly analytics?: MarketingAnalyticsPort | null;

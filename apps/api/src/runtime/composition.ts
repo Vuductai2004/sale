@@ -95,6 +95,8 @@ export interface GatewayEnv {
   readonly DEMO_TENANT_OPERATOR_PASSWORD?: string;
   readonly DEMO_MARKETING_APPROVER_PASSWORD?: string;
   readonly DEMO_PLATFORM_ADMIN_PASSWORD?: string;
+  /** Local/CI demo switch that disables provider calls while retaining boot-time schema checks. */
+  readonly DEMO_PROVIDER_MODE?: string;
   readonly OPENAI_API_KEY?: string;
   readonly OPENAI_BASE_URL?: string;
   readonly PRIMARY_REASONING_MODEL?: string;
@@ -413,6 +415,7 @@ export function createGatewayComposition(
       hmac,
     }),
     audit,
+    providerCalls: stageRepository,
     receipts: createReceiptPort(effectGuard),
     effects: effectGuard,
     clock: systemClock,
@@ -427,7 +430,12 @@ export function createGatewayComposition(
     demoMode: demo_enabled,
     readiness: {
       snapshot: async ({ tenant_id }) => {
-        const configuredProvider = Boolean(env.OPENAI_API_KEY && env.OPENAI_BASE_URL && env.PRIMARY_REASONING_MODEL);
+        const providerMode = env.DEMO_PROVIDER_MODE?.trim().toLowerCase();
+        const offlineDemo = env.DEMO_MODE === 'true'
+          && providerMode === 'offline'
+          && (env.APP_ENV === 'local' || env.APP_ENV === 'ci');
+        const configuredProvider = !offlineDemo
+          && Boolean(env.OPENAI_API_KEY && env.OPENAI_BASE_URL && env.PRIMARY_REASONING_MODEL);
         const providerProbe = configuredProvider ? 'NOT_RUN' as const : 'UNBOUND' as const;
         const isMock = env.MOCK_ERP_ENABLED === 'true' && env.ERP_API_BASE_URL?.includes('mock-erp') === true;
         const eventsMock = env.MOCK_ERP_ENABLED === 'true' && env.EVENT_INGESTION_BASE_URL?.includes('mock-erp') === true;

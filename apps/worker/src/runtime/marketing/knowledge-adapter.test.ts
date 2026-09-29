@@ -345,8 +345,8 @@ describe('NovaMart approved corpus preflight', () => {
     const carePort = createCareSkillToolPort({
       erp_read: null,
       env: {
-        CARE_KNOWLEDGE_ROOT: NOVAMART_KNOWLEDGE_ROOT,
-        CARE_TENANT_IDS: NOVAMART_TENANT_ID,
+        KNOWLEDGE_ROOT: NOVAMART_KNOWLEDGE_ROOT,
+        KNOWLEDGE_TENANT_IDS: NOVAMART_TENANT_ID,
       },
       resolve_correlation_id: async () => 'corr-preflight-care-1',
       resolve_grant: async () => 'AUTH-0',
@@ -408,8 +408,8 @@ describe('NovaMart approved corpus preflight', () => {
     const carePort = createCareSkillToolPort({
       erp_read: null,
       env: {
-        CARE_KNOWLEDGE_ROOT: NOVAMART_KNOWLEDGE_ROOT,
-        CARE_TENANT_IDS: NOVAMART_TENANT_ID,
+        KNOWLEDGE_ROOT: NOVAMART_KNOWLEDGE_ROOT,
+        KNOWLEDGE_TENANT_IDS: NOVAMART_TENANT_ID,
       },
       resolve_correlation_id: async () => 'corr-preflight-care-1',
       resolve_grant: async () => 'AUTH-0',
@@ -466,8 +466,8 @@ describe('NovaMart approved corpus preflight', () => {
       const carePort = createCareSkillToolPort({
         erp_read: null,
         env: {
-          CARE_KNOWLEDGE_ROOT: tempDir,
-          CARE_TENANT_IDS: NOVAMART_TENANT_ID,
+          KNOWLEDGE_ROOT: tempDir,
+          KNOWLEDGE_TENANT_IDS: NOVAMART_TENANT_ID,
         },
         resolve_correlation_id: async () => 'corr-preflight-care-1',
         resolve_grant: async () => 'AUTH-0',

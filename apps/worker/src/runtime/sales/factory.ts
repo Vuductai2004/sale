@@ -51,7 +51,6 @@ import {
   EffectReservationRepository,
   EvidenceRepository,
   RunResponseRepository,
-  RunStageEventsRepository,
   withTenantContext,
   type TenantTransactionRunner,
 } from '@agentos/database';
@@ -78,7 +77,6 @@ import {
   createResponseFinalizer,
   createRunResponseStore,
 } from '../shared/response.js';
-import { DurableRunStageRecorder } from '../shared/stage-recorder.js';
 import { createSkillAdapterDispatcher } from '../shared/skill-dispatcher.js';
 import { createSalesPolicyEngine } from './policy-engine.js';
 import { createSalesSkillServices } from './skills/index.js';
@@ -271,12 +269,14 @@ export function createSalesOrchestratorFactory(
 ): (tenant_id: string) => Promise<RevenueOrchestrator> {
   const workerId = options.workerId ?? `sales_worker_${randomUUID().slice(0, 8)}`;
   const now = options.now ?? (() => new Date());
-  const ownsDurableWorkflow = options.workflowRepository === undefined
-    || options.workflowRepository instanceof DurableWorkflowRepository;
+  // Offline compositions stay offline: only an explicit DurableWorkflowRepository opts
+  // into durable PostgreSQL response/stage recording. Production passes that repository;
+  // unit/E2E passes undefined or an isolated fake and receives no live-DB writer.
+  const ownsDurableWorkflow = options.workflowRepository instanceof DurableWorkflowRepository;
   const runResponseRepository = ownsDurableWorkflow ? options.runResponseRepository ?? new RunResponseRepository() : options.runResponseRepository;
   const responseFinalizer = options.responseFinalizer ?? (ownsDurableWorkflow ? createResponseFinalizer(now) : undefined);
   const responseStore = options.responseStore ?? (runResponseRepository === undefined ? undefined : createRunResponseStore(runResponseRepository));
-  const runStageRecorder = options.runStageRecorder ?? (ownsDurableWorkflow ? new DurableRunStageRecorder(new RunStageEventsRepository()) : undefined);
+  const runStageRecorder = options.runStageRecorder;
 
   const auditSecret = options.auditSecret ?? process.env.AUDIT_HMAC_SECRET;
   if (!auditSecret || auditSecret.trim().length === 0) {

@@ -46,11 +46,11 @@ async function defaultFindVerifiedIdentity(
  */
 export function createCareSkillToolPort(options: CareSkillOptions): SkillToolPort {
   const defaultKnowledgeRoot = fileURLToPath(new URL('../../../../../../packages/second-brain', import.meta.url));
-  const configuredRoot = options.env.CARE_KNOWLEDGE_ROOT;
+  const configuredRoot = options.env.KNOWLEDGE_ROOT;
   const knowledgeRoot = configuredRoot === undefined ? defaultKnowledgeRoot : configuredRoot;
   const knowledgeRootResolver = createTenantKnowledgeRootResolver({
     root_dir: knowledgeRoot,
-    tenant_ids: parseTenantAllowlist(options.env.CARE_TENANT_IDS),
+    tenant_ids: parseTenantAllowlist(options.env.KNOWLEDGE_TENANT_IDS),
     // The shipped package root is intentionally retained for non-demo tests. It
     // contains draft documents, and handleFaqEngine still applies approved filtering.
     allow_unbound: configuredRoot === undefined,

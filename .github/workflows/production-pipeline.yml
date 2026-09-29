@@ -347,6 +347,7 @@ jobs:
           APP_ENV: ci
           NODE_ENV: test
           DATABASE_URL: postgresql://agentos_app:agentos_app_password@127.0.0.1:5432/agent_os_rehearsal
+          WORKER_TENANT_IDS: 11111111-1111-1111-1111-111111111111
           CARE_TENANT_IDS: 11111111-1111-1111-1111-111111111111
           # The Sales smoke is scoped to the tenant the mock system of record's fixtures are bound
           # to (services/mock-erp/src/fixtures.mjs); Care keeps its own pilot tenant above, so the

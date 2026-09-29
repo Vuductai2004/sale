@@ -4,7 +4,7 @@ import type { FastifyInstance } from 'fastify';
 import { correlationIdOf, fail, replyFailure } from '../../gateway/http.js';
 import { authenticate, requireOperator } from '../../gateway/principal.js';
 import type { GatewayRuntime } from '../../gateway/ports.js';
-import type { DemoCredentialStore } from '../../runtime/demo-auth.js';
+import { DEMO_TENANT_ID, type DemoCredentialStore } from '../../runtime/demo-auth.js';
 
 interface WidgetMintDependencies {
   readonly demoAuth: DemoCredentialStore;
@@ -23,6 +23,38 @@ interface CatalogItem {
   readonly is_active: true;
 }
 
+/** Customer personas that may be minted by the local/CI demo widget launcher. */
+const DEMO_PERSONA_SESSIONS = Object.freeze({
+  C05: 'sess-novamart-c05',
+  C06: 'sess-novamart-c06',
+} as const);
+
+type DemoPersona = keyof typeof DEMO_PERSONA_SESSIONS;
+
+function isDemoPersona(value: string): value is DemoPersona {
+  return Object.hasOwn(DEMO_PERSONA_SESSIONS, value);
+}
+
+function sessionIdForPersona(persona: unknown): string {
+  if (persona === undefined || persona === 'anonymous') return `demo-anon-${randomUUID()}`;
+  if (typeof persona !== 'string' || !isDemoPersona(persona)) {
+    fail('VALIDATION_FAILED', 'the demo persona is not supported');
+  }
+  return DEMO_PERSONA_SESSIONS[persona];
+}
+
+function requireDemoEnvironment(): void {
+  if (process.env.DEMO_MODE !== 'true' || !['local', 'ci'].includes(process.env.APP_ENV ?? '')) {
+    fail('CAPABILITY_NOT_ENABLED', 'the demo widget is available only in local or CI demo mode');
+  }
+}
+
+function requireCanonicalDemoTenant(tenant_id: string): void {
+  if (tenant_id !== DEMO_TENANT_ID) {
+    fail('AUTHENTICATION_FAILED', 'the demo widget is restricted to the canonical demo tenant');
+  }
+}
+
 function projectCatalogItem(value: unknown): CatalogItem | null {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
   const item = value as Record<string, unknown>;
@@ -38,12 +70,14 @@ function projectCatalogItem(value: unknown): CatalogItem | null {
   };
 }
 
-/** An operator may launch only a fresh anonymous session or the seeded, verified C05 persona. */
+/** An operator may launch only a fresh anonymous session or a seeded, verified C05/C06 persona. */
 export function registerDemoWidgetRoutes(app: FastifyInstance, deps: WidgetMintDependencies): void {
   app.post('/demo/widget-session', { preHandler: authenticate({ credentials: deps.demoAuth, runtime: deps.runtime }) },
     async (request, reply) => {
       try {
-        requireOperator(request, 'conversation:takeover');
+        const principal = requireOperator(request, 'conversation:takeover');
+        requireDemoEnvironment();
+        requireCanonicalDemoTenant(principal.tenant_id);
         const origin = request.headers.origin;
         const allowed = (process.env.DEMO_WIDGET_ORIGINS ?? '').split(',').map((value) => value.trim());
         if (typeof origin !== 'string' || !allowed.includes(origin) || !/^https?:\/\/[^/]+$/.test(origin)) {
@@ -54,11 +88,8 @@ export function registerDemoWidgetRoutes(app: FastifyInstance, deps: WidgetMintD
           Object.keys(body).some((key) => key !== 'persona')) {
           fail('VALIDATION_FAILED', 'only a demo persona may be selected');
         }
-        const persona = (body as { persona?: unknown }).persona;
-        if (persona !== undefined && persona !== 'anonymous' && persona !== 'C05') {
-          fail('VALIDATION_FAILED', 'the demo persona is not supported');
-        }
-        const session_id = persona === 'C05' ? 'sess-novamart-c05' : `demo-anon-${randomUUID()}`;
+        const persona = 'persona' in body ? body.persona : undefined;
+        const session_id = sessionIdForPersona(persona);
         const issued = deps.demoAuth.issueWidget(session_id, origin);
         return reply.code(201).header('cache-control', 'no-store').send(issued);
       } catch (error) {
@@ -69,6 +100,8 @@ export function registerDemoWidgetRoutes(app: FastifyInstance, deps: WidgetMintD
     async (request, reply) => {
       try {
         const principal = requireOperator(request, 'conversation:takeover');
+        requireDemoEnvironment();
+        requireCanonicalDemoTenant(principal.tenant_id);
         const secret = process.env.MOCK_SECRET_KEY;
         const configured = process.env.ERP_API_BASE_URL;
         if (!secret || !configured || process.env.MOCK_ERP_ENABLED !== 'true') {

@@ -13,7 +13,6 @@ x-qdrant-api-key: &qdrant-api-key ${QDRANT_API_KEY:?QDRANT_API_KEY is required}
 services:
   postgres:
     image: pgvector/pgvector:pg16
-    container_name: ${COMPOSE_CONTAINER_PREFIX:-agentos}-postgres
     restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-agentos_dev}
@@ -39,7 +38,6 @@ services:
 
   redis:
     image: redis:7.2-alpine
-    container_name: ${COMPOSE_CONTAINER_PREFIX:-agentos}-redis
     restart: unless-stopped
     environment:
       REDIS_PASSWORD: ${REDIS_PASSWORD:?REDIS_PASSWORD is required}
@@ -70,7 +68,6 @@ services:
 
   qdrant:
     image: qdrant/qdrant:v1.9.2
-    container_name: ${COMPOSE_CONTAINER_PREFIX:-agentos}-qdrant
     restart: unless-stopped
     ports:
       - "${QDRANT__SERVICE__HTTP_PORT:-6333}:6333"
@@ -96,7 +93,6 @@ services:
     build:
       context: ./services/mock-erp
       dockerfile: Dockerfile
-    container_name: ${COMPOSE_CONTAINER_PREFIX:-agentos}-mock-erp
     restart: unless-stopped
     labels:
       agentos.deploy: local-ci-only
@@ -124,7 +120,6 @@ services:
   temporal:
     profiles: ["workflows"]
     image: temporalio/auto-setup:1.23.0
-    container_name: ${COMPOSE_CONTAINER_PREFIX:-agentos}-temporal
     restart: unless-stopped
     depends_on:
       postgres:
@@ -144,7 +139,6 @@ services:
   temporal-ui:
     profiles: ["workflows"]
     image: temporalio/ui:2.26.2
-    container_name: ${COMPOSE_CONTAINER_PREFIX:-agentos}-temporal-ui
     restart: unless-stopped
     depends_on:
       - temporal
@@ -160,7 +154,6 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.api
-    container_name: ${COMPOSE_CONTAINER_PREFIX:-agentos}-api
     restart: unless-stopped
     ports:
       - "${PORT:-4000}:4000"
@@ -188,6 +181,7 @@ services:
       SALES_SIGNAL_EVENT_TYPES: ${SALES_SIGNAL_EVENT_TYPES:-}
       MARKETING_SIGNAL_SOURCE_CHANNELS: ${MARKETING_SIGNAL_SOURCE_CHANNELS:-}
       MARKETING_SIGNAL_EVENT_TYPES: ${MARKETING_SIGNAL_EVENT_TYPES:-}
+      DEMO_PROVIDER_MODE: ${DEMO_PROVIDER_MODE:-offline}
       DEMO_MODE: ${DEMO_MODE:-false}
       DEMO_TENANT_ID: ${DEMO_TENANT_ID:-99999999-9999-4999-8999-999999999999}
       DEMO_TENANT_OPERATOR_PASSWORD: ${DEMO_TENANT_OPERATOR_PASSWORD:-}
@@ -240,14 +234,13 @@ services:
     build:
       context: .
       dockerfile: docker/Dockerfile.worker
-    container_name: ${COMPOSE_CONTAINER_PREFIX:-agentos}-worker
     restart: unless-stopped
     environment:
       NODE_ENV: ${NODE_ENV:?NODE_ENV is required}
       APP_ENV: ${APP_ENV:?APP_ENV is required}
       WORKER_HEALTH_PORT: ${WORKER_HEALTH_PORT:-4001}
-      # Explicit tenant schedule scope; blank disables Care polling rather than bypassing RLS.
-      CARE_TENANT_IDS: ${CARE_TENANT_IDS:-}
+      # Explicit tenant schedule scope; blank disables worker polling rather than bypassing RLS.
+      WORKER_TENANT_IDS: ${WORKER_TENANT_IDS:-}
       SERVICE_NAME: agentos-worker
       API_BASE_URL: ${API_BASE_URL:?API_BASE_URL is required}
       WEB_BASE_URL: ${WEB_BASE_URL:?WEB_BASE_URL is required}
@@ -267,10 +260,11 @@ services:
       SALES_SIGNAL_SOURCE_CHANNELS: ${SALES_SIGNAL_SOURCE_CHANNELS:-}
       SALES_SIGNAL_EVENT_TYPES: ${SALES_SIGNAL_EVENT_TYPES:-}
       MARKETING_SIGNAL_SOURCE_CHANNELS: ${MARKETING_SIGNAL_SOURCE_CHANNELS:-}
+      DEMO_PROVIDER_MODE: ${DEMO_PROVIDER_MODE:-offline}
       MARKETING_SIGNAL_EVENT_TYPES: ${MARKETING_SIGNAL_EVENT_TYPES:-}
-      # Approved Second Brain root. It must be an absolute path: the container's WORKDIR is /repo,
-      # so the image ships the corpus at /repo/packages/second-brain/demo/novamart.
-      CARE_KNOWLEDGE_ROOT: ${CARE_KNOWLEDGE_ROOT:-/repo/packages/second-brain/demo/novamart}
+      # Shared approved Second Brain root and tenant fence. The path is container-absolute.
+      KNOWLEDGE_ROOT: ${KNOWLEDGE_ROOT:-/repo/packages/second-brain/demo/novamart}
+      KNOWLEDGE_TENANT_IDS: ${KNOWLEDGE_TENANT_IDS:-}
       ERP_API_BASE_URL: http://mock-erp:8081/api/v1
       # The shared secret the platform signs API-001 calls with; the mock-erp container verifies
       # the same value. Required only while MOCK_ERP_ENABLED is true.
@@ -322,7 +316,6 @@ services:
       dockerfile: docker/Dockerfile.tenant-console
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL is required}
-    container_name: ${COMPOSE_CONTAINER_PREFIX:-agentos}-tenant-console
     restart: unless-stopped
     ports:
       - "${WEB_PORT:-3000}:3000"
@@ -359,7 +352,6 @@ services:
       dockerfile: docker/Dockerfile.platform-admin
       args:
         NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL is required}
-    container_name: ${COMPOSE_CONTAINER_PREFIX:-agentos}-platform-admin
     restart: unless-stopped
     ports:
       - "${PLATFORM_ADMIN_PORT:-3001}:3001"
