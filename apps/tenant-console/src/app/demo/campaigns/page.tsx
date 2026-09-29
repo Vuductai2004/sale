@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-
+import { DemoBadge } from '../../../components/ui/Primitives';
 type Role = 'tenant_operator' | 'marketing_approver';
 type Session = { readonly role?: Role; readonly operator_id?: string };
 type Approval = {
@@ -262,11 +262,11 @@ export default function CampaignsPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 px-4 py-6 text-slate-100 sm:px-6 lg:px-8">
+    <div className="min-h-full px-4 py-6 text-slate-100 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-6xl">
         <header className="flex flex-col gap-4 border-b border-slate-800 pb-5 sm:flex-row sm:items-end sm:justify-between">
-          <div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-400">NovaMart marketing</p><h1 className="mt-1 text-2xl font-semibold tracking-tight">Campaign drafts & approvals</h1><p className="mt-1 text-sm text-slate-400">Drafts stop at human approval; no synthetic send status is shown.</p></div>
-          <div className="flex flex-wrap gap-2"><a href="/" className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:border-slate-500 hover:text-white">Executive</a><a href="/demo/operations" className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:border-slate-500 hover:text-white">Operations</a><button type="button" onClick={() => void handleLogout()} className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:border-slate-500 hover:text-white">Sign out</button></div>
+          <div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand">NovaMart marketing</p><div className="mt-2 flex flex-wrap items-center gap-2"><h1 className="text-2xl font-semibold tracking-tight text-ink">Campaign drafts & approvals</h1><DemoBadge /></div><p className="mt-1 text-sm text-muted">Demo drafts stop at human approval; no synthetic send status is shown.</p></div>
+          <div className="flex flex-wrap gap-2"><a href="/" className="ui-button ui-button--secondary">Company overview</a><a href="/takeover" className="ui-button ui-button--secondary">Customer care</a><button type="button" onClick={() => void handleLogout()} className="ui-button ui-button--quiet">Sign out</button></div>
         </header>
 
         {error && <div role="alert" className="mt-5 rounded-lg border border-rose-800/80 bg-rose-950/40 p-3 text-sm text-rose-200">{error}</div>}
@@ -288,6 +288,6 @@ export default function CampaignsPage() {
           </section>
         ) : <section role="alert" className="mt-8 rounded-xl border border-rose-800/80 bg-rose-950/30 p-6"><p className="font-mono text-xs text-rose-300">permission_denied</p><h2 className="mt-2 text-lg font-semibold">No campaign role is available</h2><p className="mt-1 text-sm text-slate-300">Sign in with a tenant operator or marketing approver session.</p></section>}
       </div>
-    </main>
+    </div>
   );
 }

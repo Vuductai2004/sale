@@ -111,6 +111,7 @@ export class TenantConsoleClient extends HttpClient {
       headers: { Accept: 'application/json' },
       credentials: 'same-origin',
     });
+    if (!response.ok) throw new Error(`Demo session request failed (${response.status})`);
     return response.json() as Promise<DemoSessionResponse>;
   }
 

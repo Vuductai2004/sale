@@ -120,28 +120,28 @@ export default function AuthPage() {
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 px-4 py-10 text-slate-100 sm:px-6 lg:px-8">
+    <main className="min-h-screen bg-canvas px-4 py-10 text-ink sm:px-6 lg:px-8">
       <div className="mx-auto flex min-h-[70vh] max-w-md items-center">
-        <section className="w-full rounded-xl border border-slate-800 bg-slate-900/70 p-6 shadow-xl sm:p-8">
+        <section className="ui-section-card w-full p-6 shadow-lg sm:p-8">
           <div className="mb-8">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-400">NovaMart demo</p>
-            <h1 className="mt-2 text-2xl font-semibold tracking-tight">Sign in to the operator console</h1>
-            <p className="mt-2 text-sm leading-6 text-slate-400">
+            <div className="flex flex-wrap items-center gap-3"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand">NovaMart demo</p><span className="ui-status ui-status--demo-only">Demo only</span></div>
+            <h1 className="mt-2 text-2xl font-semibold tracking-tight text-ink">Sign in to the operator console</h1>
+            <p className="mt-2 text-sm leading-6 text-muted">
               Choose the role supplied by your local demo environment. Credentials stay server-side.
             </p>
           </div>
 
           {error && (
-            <div role="alert" className="mb-5 rounded-lg border border-rose-800/80 bg-rose-950/40 p-3 text-sm text-rose-200">
+            <div role="alert" className="ui-state ui-state--error mb-5">
               {error}
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <fieldset disabled={isLoading || isSubmitting} className="space-y-4">
-              <legend className="text-sm font-medium text-slate-200">Role</legend>
+              <legend className="text-sm font-medium text-ink">Role</legend>
               <div className="grid gap-3 sm:grid-cols-2">
-                <label className={`cursor-pointer rounded-lg border p-3 transition ${role === 'tenant_operator' ? 'border-sky-500 bg-sky-950/40' : 'border-slate-700 bg-slate-950/40 hover:border-slate-600'}`}>
+                <label className={`cursor-pointer rounded-lg border p-3 transition ${role === 'tenant_operator' ? 'border-brand bg-brand-soft' : 'border-line bg-surface hover:border-brand'}`}>
                   <input
                     className="sr-only"
                     type="radio"
@@ -150,10 +150,10 @@ export default function AuthPage() {
                     checked={role === 'tenant_operator'}
                     onChange={() => setRole('tenant_operator')}
                   />
-                  <span className="block text-sm font-semibold">Tenant operator</span>
-                  <span className="mt-1 block text-xs text-slate-400">Conversations, takeover, Customer 360</span>
+                  <span className="block text-sm font-semibold text-ink">Tenant operator</span>
+                  <span className="mt-1 block text-xs text-muted">Conversations, takeover, Customer 360</span>
                 </label>
-                <label className={`cursor-pointer rounded-lg border p-3 transition ${role === 'marketing_approver' ? 'border-sky-500 bg-sky-950/40' : 'border-slate-700 bg-slate-950/40 hover:border-slate-600'}`}>
+                <label className={`cursor-pointer rounded-lg border p-3 transition ${role === 'marketing_approver' ? 'border-brand bg-brand-soft' : 'border-line bg-surface hover:border-brand'}`}>
                   <input
                     className="sr-only"
                     type="radio"
@@ -162,13 +162,13 @@ export default function AuthPage() {
                     checked={role === 'marketing_approver'}
                     onChange={() => setRole('marketing_approver')}
                   />
-                  <span className="block text-sm font-semibold">Marketing approver</span>
-                  <span className="mt-1 block text-xs text-slate-400">Review pending AUTH-4 campaign drafts</span>
+                  <span className="block text-sm font-semibold text-ink">Marketing approver</span>
+                  <span className="mt-1 block text-xs text-muted">Review pending AUTH-4 campaign drafts</span>
                 </label>
               </div>
 
               <div>
-                <label htmlFor="demo-password" className="mb-2 block text-sm font-medium text-slate-200">Password</label>
+                <label htmlFor="demo-password" className="mb-2 block text-sm font-medium text-ink">Password</label>
                 <input
                   id="demo-password"
                   type="password"
@@ -177,7 +177,7 @@ export default function AuthPage() {
                   onChange={(event) => setPassword(event.target.value)}
                   required
                   maxLength={512}
-                  className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm text-slate-100 outline-none transition placeholder:text-slate-600 focus:border-sky-500 focus:ring-2 focus:ring-sky-500/30"
+                  className="ui-input"
                 />
               </div>
             </fieldset>
@@ -185,7 +185,7 @@ export default function AuthPage() {
             <button
               type="submit"
               disabled={isLoading || isSubmitting || password.length === 0}
-              className="w-full rounded-lg bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-sky-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400 disabled:cursor-not-allowed disabled:opacity-50"
+              className="ui-button ui-button--primary w-full"
             >
               {isLoading ? 'Checking session…' : isSubmitting ? 'Signing in…' : 'Sign in'}
             </button>

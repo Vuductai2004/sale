@@ -5,14 +5,10 @@
 import { AgentOperationsConsole } from '../../../components/operations/AgentOperationsConsole';
 
 export const metadata = {
-  title: 'Agent Operations | AgentOS Platform Admin',
-  description: 'Operational run history, authority inspection, and safe retry controls.',
+  title: 'Operations | AgentOS Platform',
+  description: 'Tenant-scoped run history, trace inspection, and safe retry controls.',
 };
 
 export default function OperationsPage() {
-  return (
-    <main className="min-h-screen bg-slate-950 text-slate-100">
-      <AgentOperationsConsole />
-    </main>
-  );
+  return <AgentOperationsConsole />;
 }

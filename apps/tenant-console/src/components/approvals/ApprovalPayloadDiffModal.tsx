@@ -4,7 +4,7 @@
  */
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import type {
   ApprovalItem,
   ApprovalDecision,
@@ -51,6 +51,13 @@ export function ApprovalPayloadDiffModal({
   } | null>(null);
 
   const [decisionReceipt, setDecisionReceipt] = useState<ApprovalDecisionResponse | null>(null);
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
+  const isSubmittingRef = useRef(false);
+  const onCloseRef = useRef(onClose);
+  isSubmittingRef.current = isSubmitting;
+  onCloseRef.current = onClose;
 
   const currentItemId = item?.id;
   useEffect(() => {
@@ -63,6 +70,37 @@ export function ApprovalPayloadDiffModal({
       setSubmissionError(null);
       setDecisionReceipt(null);
     }
+  }, [currentItemId]);
+
+  useEffect(() => {
+    if (!item) return;
+    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    closeButtonRef.current?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && !isSubmittingRef.current) {
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const focusable = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>('button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled])') ?? []);
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (!first || !last) return;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      previousFocusRef.current?.focus();
+      previousFocusRef.current = null;
+    };
   }, [currentItemId]);
 
   if (!item) return null;
@@ -150,10 +188,12 @@ export function ApprovalPayloadDiffModal({
 
   return (
     <div
-      className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4"
+      ref={dialogRef}
+      className="fixed inset-0 bg-black/20 backdrop-blur-sm flex items-center justify-center z-50 p-4"
       role="dialog"
       aria-modal="true"
       aria-labelledby="approval-modal-title"
+      aria-describedby="approval-modal-description"
     >
       <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-3xl w-full p-6 shadow-2xl overflow-hidden flex flex-col max-h-[92vh]">
         {/* Header */}
@@ -182,12 +222,14 @@ export function ApprovalPayloadDiffModal({
                   : 'AWAITING_HUMAN'}
               </span>
             </div>
-            <p className="text-xs text-slate-400">
+            <p id="approval-modal-description" className="text-xs text-slate-400">
               Agent: <strong className="text-slate-200">{item.agentId}</strong> | Operator Session:{' '}
               <strong className="text-slate-200">{operatorId}</strong>
             </p>
           </div>
           <button
+            ref={closeButtonRef}
+            type="button"
             onClick={onClose}
             disabled={isSubmitting}
             className="text-slate-400 hover:text-slate-200 text-sm px-2 py-1 rounded bg-slate-800 hover:bg-slate-750 transition-colors disabled:opacity-50"

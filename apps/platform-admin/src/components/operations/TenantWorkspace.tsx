@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ApiError } from '@agentos/ui-foundation';
+import { ConfirmDialog } from '../ui/Primitives';
 import { adminOperationsClient } from '../../lib/admin-operations-client';
 import type {
   AutonomyInspectionResponse,
@@ -20,7 +21,13 @@ type ConnectorState = (typeof CONNECTOR_STATES)[number];
 type PolicyRow = { readonly skillId: string; readonly state: string };
 
 type ActionName = 'pause' | 'resume' | 'demote';
-
+type PendingAction = {
+  readonly name: ActionName;
+  readonly operation: () => Promise<unknown>;
+  readonly success: string;
+  readonly title: string;
+  readonly detail: string;
+};
 function displayText(value: unknown): string {
   return typeof value === 'string' && value.trim().length > 0 ? value : UNAVAILABLE;
 }
@@ -166,11 +173,14 @@ export function TenantWorkspace() {
   const [action, setAction] = useState<ActionName | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [demoteSkillId, setDemoteSkillId] = useState('');
   const [demoteReason, setDemoteReason] = useState('');
 
   const loadWorkspace = useCallback(async () => {
     setLoading(true);
+    setTenant(null);
+    setInspection(null);
     setNotice(null);
     try {
       const [tenantResult, autonomyResult] = await Promise.allSettled([
@@ -217,15 +227,28 @@ export function TenantWorkspace() {
     }
   };
 
+  const requestAction = (next: PendingAction) => {
+    setPendingAction(next);
+  };
+
+  const confirmPendingAction = () => {
+    if (!pendingAction) return;
+    const current = pendingAction;
+    setPendingAction(null);
+    void runAction(current.name, current.operation, current.success);
+  };
+
   const submitDemotion = () => {
     const skillId = demoteSkillId.trim();
     const reason = demoteReason.trim();
     if (skillId.length === 0 || reason.length === 0) return;
-    void runAction(
-      'demote',
-      () => adminOperationsClient.demoteAutonomy({ skill_id: skillId, reason }),
-      'Demotion applied; server state reloaded.',
-    );
+    requestAction({
+      name: 'demote',
+      operation: () => adminOperationsClient.demoteAutonomy({ skill_id: skillId, reason }),
+      success: 'Demotion applied; server state reloaded.',
+      title: 'Confirm autonomy demotion',
+      detail: `Demote ${skillId} with the recorded reason “${reason}”? This changes server-owned autonomy state.`,
+    });
   };
 
   return (
@@ -308,13 +331,13 @@ export function TenantWorkspace() {
             <button
               type="button"
               disabled={loading || inspection === null || action !== null}
-              onClick={() =>
-                void runAction(
-                  isPaused ? 'resume' : 'pause',
-                  isPaused ? () => adminOperationsClient.resumeAutonomy() : () => adminOperationsClient.pauseAutonomy(),
-                  `${isPaused ? 'Resume' : 'Pause'} applied; server state reloaded.`,
-                )
-              }
+              onClick={() => requestAction({
+                name: isPaused ? 'resume' : 'pause',
+                operation: isPaused ? () => adminOperationsClient.resumeAutonomy() : () => adminOperationsClient.pauseAutonomy(),
+                success: `${isPaused ? 'Resume' : 'Pause'} applied; server state reloaded.`,
+                title: `Confirm ${isPaused ? 'autonomy resume' : 'autonomy pause'}`,
+                detail: `This will ${isPaused ? 'resume' : 'pause'} autonomy for the current tenant. The server response is authoritative.`,
+              })}
               className="rounded-md border border-sky-700 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-sky-200 transition hover:bg-sky-950 disabled:cursor-not-allowed disabled:opacity-50"
             >
               {action === 'pause' || action === 'resume' ? 'Updating…' : isPaused ? 'Resume autonomy' : 'Pause autonomy'}
@@ -393,6 +416,15 @@ export function TenantWorkspace() {
           )}
         </PanelSection>
       </div>
+      <ConfirmDialog
+        open={pendingAction !== null}
+        title={pendingAction?.title ?? 'Confirm autonomy change'}
+        detail={pendingAction?.detail ?? ''}
+        confirmLabel="Apply change"
+        busy={action !== null}
+        onConfirm={confirmPendingAction}
+        onCancel={() => setPendingAction(null)}
+      />
     </div>
   );
 }

@@ -17,45 +17,37 @@ import { ApprovalQueueList } from './ApprovalQueueList';
 import { ApprovalPayloadDiffModal } from './ApprovalPayloadDiffModal';
 
 interface ApprovalCenterProps {
-  readonly initialOperatorId?: string | undefined;
-  readonly operatorId?: string | undefined;
   readonly onSelectCustomer?: ((customerId: string) => void) | undefined;
 }
 
-export function ApprovalCenter({
-  initialOperatorId,
-  operatorId: propOperatorId,
-  onSelectCustomer,
-}: ApprovalCenterProps) {
+export function ApprovalCenter({ onSelectCustomer }: ApprovalCenterProps) {
   const [items, setItems] = useState<Record<string, ApprovalItem>>({});
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
-  const [operatorId, setOperatorId] = useState<string>(() => {
-    return (
-      propOperatorId?.trim() ||
-      initialOperatorId?.trim() ||
-      (typeof window !== 'undefined'
-        ? new URLSearchParams(window.location.search).get('operator_id')?.trim() ||
-          new URLSearchParams(window.location.search).get('operatorId')?.trim() ||
-          ''
-        : '')
-    );
-  });
+  const [operatorId, setOperatorId] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [queueError, setQueueError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fromContext =
-      propOperatorId?.trim() ||
-      initialOperatorId?.trim() ||
-      (typeof window !== 'undefined'
-        ? new URLSearchParams(window.location.search).get('operator_id')?.trim() ||
-          new URLSearchParams(window.location.search).get('operatorId')?.trim() ||
-          ''
-        : '');
-    if (fromContext && fromContext !== operatorId) {
-      setOperatorId(fromContext);
-    }
-  }, [propOperatorId, initialOperatorId, operatorId]);
+    let active = true;
+    void tenantConsoleClient.getDemoSession()
+      .then((session) => {
+        if (!active) return;
+        const validRole = session.role === 'marketing_approver';
+        const validOperator = typeof session.operator_id === 'string' && session.operator_id.trim().length > 0;
+        if (!validRole || !validOperator) {
+          setQueueError('permission_denied: the current session is not a marketing approver.');
+          setOperatorId('');
+          return;
+        }
+        setOperatorId(session.operator_id as string);
+      })
+      .catch(() => {
+        if (!active) return;
+        setQueueError('permission_denied: sign in with an authorized marketing approver session.');
+        setOperatorId('');
+      });
+    return () => { active = false; };
+  }, []);
   // Normalizes an approval object from R14 list or supplemental detail read
   const normalizeApprovalItem = useCallback((raw: Record<string, unknown>): ApprovalItem => {
     const id = String(raw.approval_id || raw.id || '');
@@ -132,7 +124,6 @@ export function ApprovalCenter({
     try {
       const data = await tenantConsoleClient.getApprovals(
         { status: 'PENDING' },
-        { operatorId: operatorId.trim() },
       );
       const rawData: unknown = data;
       const rawList: Record<string, unknown>[] = [];
@@ -215,11 +206,10 @@ export function ApprovalCenter({
         ...(decision === 'MODIFY' && modifiedPayload ? { modified_payload: modifiedPayload } : {}),
       };
 
-      // The shared transport preserves the API's 202 receipt and ApiError status/code on 403/409.
+      // The BFF binds the operator identity to the authenticated session; no browser header override is sent.
       const responseReceipt = await tenantConsoleClient.submitApprovalDecision(
         id,
         requestBody,
-        { operatorId: operatorId.trim() },
       );
 
       // Update local item status based on server receipt.
@@ -300,15 +290,9 @@ export function ApprovalCenter({
             )}
           </div>
 
-          <div className="flex items-center gap-1.5 text-xs font-mono bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800">
+          <div className="flex items-center gap-1.5 text-xs font-mono bg-slate-950 px-2.5 py-1 rounded-lg border border-slate-800" aria-label="Verified operator identity">
             <span className="text-slate-400">Operator:</span>
-            <input
-              type="text"
-              value={operatorId}
-              onChange={(e) => setOperatorId(e.target.value)}
-              className="bg-transparent border-none text-slate-200 outline-none w-28 font-mono text-xs"
-              title="Operator ID sent to decision endpoint"
-            />
+            <span className="text-slate-200" title="Resolved from the authenticated session">{operatorId}</span>
           </div>
 
           <button

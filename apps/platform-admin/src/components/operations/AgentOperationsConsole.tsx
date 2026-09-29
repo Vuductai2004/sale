@@ -13,7 +13,7 @@ import { RunFilterControls } from './RunFilterControls';
 import { RunTable } from './RunTable';
 import { RunInspectionDrawer } from './RunInspectionDrawer';
 import { RetryRunModal } from './RetryRunModal';
-
+import { PageHeader, StatusBadge, type StatusTone } from '../ui/Primitives';
 const DEFAULT_FILTERS: RunFilters = {
   agent_id: '',
   state: '',
@@ -22,6 +22,20 @@ const DEFAULT_FILTERS: RunFilters = {
   to: '',
   limit: 20,
 };
+
+function stateTone(state: SharedUiState): StatusTone {
+  switch (state) {
+    case 'loading': return 'loading';
+    case 'empty': return 'no-data';
+    case 'permission_denied': return 'permission-denied';
+    case 'dependency_unavailable': return 'dependency-unavailable';
+    case 'version_conflict': return 'version-conflict';
+    case 'fail_closed': return 'fail-closed';
+    case 'stale': return 'stale';
+    case 'partial': return 'partial';
+    default: return 'neutral';
+  }
+}
 
 export function AgentOperationsConsole() {
   const [runs, setRuns] = useState<readonly AgentRunProjection[]>([]);
@@ -123,26 +137,8 @@ export function AgentOperationsConsole() {
   };
 
   return (
-    <div className="flex flex-col gap-5 p-6 max-w-7xl mx-auto">
-      <div className="flex flex-col gap-1 border-b border-slate-800 pb-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-xl font-bold font-mono text-slate-100">SCR-002: Agent Operations Console</h1>
-          <p className="text-xs text-slate-400">R16 run telemetry inspection &amp; R13 verified safe retry control</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-mono text-slate-500 uppercase">State:</span>
-          <span className={`px-2 py-0.5 rounded text-xs font-mono font-semibold border ${
-            uiState === 'loading' ? 'bg-sky-950 text-sky-300 border-sky-800' :
-            uiState === 'empty' ? 'bg-slate-800 text-slate-400 border-slate-700' :
-            uiState === 'permission_denied' ? 'bg-rose-950 text-rose-300 border-rose-800' :
-            uiState === 'dependency_unavailable' ? 'bg-orange-950 text-orange-300 border-orange-800' :
-            uiState === 'fail_closed' ? 'bg-red-950 text-red-200 border-red-700' :
-            'bg-slate-900 text-slate-300 border-slate-800'
-          }`}>
-            {uiState}
-          </span>
-        </div>
-      </div>
+    <div className="space-y-5">
+      <PageHeader eyebrow="Platform operations" title="Operations hub" description="Tenant-scoped run inspection, cursor filters, and verified safe retry controls." actions={<StatusBadge label={`State: ${uiState.replaceAll('_', ' ')}`} tone={stateTone(uiState)} />} />
 
       {statusMessage && (
         <div role="status" className={`rounded p-3 text-xs font-mono border ${

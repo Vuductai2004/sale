@@ -1,16 +1,18 @@
-import { redirect } from 'next/navigation';
+import { PageHeader, SectionCard, StatusBadge } from '../../../components/ui/Primitives';
 
-// Resolve the deployment-specific origin at request time, never during image build.
-export const dynamic = 'force-dynamic';
+export const metadata = {
+  title: 'Settings | AgentOS',
+  description: 'Tenant settings capability state.',
+};
 
-function platformAdminUrl(path: string): string {
-  const origin = process.env.PLATFORM_ADMIN_URL;
-  if (!origin) {
-    throw new Error('PLATFORM_ADMIN_URL is required for tenant-console redirects.');
-  }
-  return new URL(path, origin).toString();
-}
-
-export default function SettingsRedirectPage() {
-  redirect(platformAdminUrl('/'));
+export default function SettingsPage() {
+  return (
+    <div className="space-y-6">
+      <PageHeader eyebrow="Company workspace" title="Settings" description="This surface reports tenant settings availability without redirecting into platform authority." />
+      <SectionCard title="Tenant settings" description="No tenant-facing settings contract is currently exposed through the BFF.">
+        <div className="flex flex-wrap items-center gap-3"><StatusBadge label="Not integrated" tone="not-integrated" /><span className="text-sm text-muted">Read-only capability state</span></div>
+        <p className="mt-4 max-w-2xl text-sm leading-6 text-muted">Workspace identity, connector mutation, knowledge management, and membership switching remain server-owned capabilities. No editable controls are shown.</p>
+      </SectionCard>
+    </div>
+  );
 }

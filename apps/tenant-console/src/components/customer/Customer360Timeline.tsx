@@ -17,18 +17,16 @@ import type {
   EvidenceCard,
 } from './types';
 import { EvidenceCardDrawer } from './EvidenceCardDrawer';
+import { StatusBadge } from '../ui/Primitives';
 
 interface Customer360TimelineProps {
   readonly initialCustomerId?: string | undefined;
-  readonly onCustomerIdChange?: ((customerId: string) => void) | undefined;
 }
 
 export function Customer360Timeline({
   initialCustomerId = '',
-  onCustomerIdChange,
 }: Customer360TimelineProps) {
   const [customerId, setCustomerId] = useState<string>(initialCustomerId);
-  const [searchInput, setSearchInput] = useState<string>(initialCustomerId);
 
   const [customerProfile, setCustomerProfile] = useState<CustomerProfile | null>(null);
   const [events, setEvents] = useState<readonly TimelineEvent[]>([]);
@@ -52,7 +50,6 @@ export function Customer360Timeline({
   useEffect(() => {
     if (initialCustomerId && initialCustomerId !== customerId) {
       setCustomerId(initialCustomerId);
-      setSearchInput(initialCustomerId);
     }
   }, [initialCustomerId, customerId]);
 
@@ -290,16 +287,6 @@ export function Customer360Timeline({
     }
   }, [customerId, fetchTimeline]);
 
-  const handleSearchSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const trimmed = searchInput.trim();
-    if (trimmed && trimmed !== customerId) {
-      setCustomerId(trimmed);
-      if (onCustomerIdChange) {
-        onCustomerIdChange(trimmed);
-      }
-    }
-  };
 
   const handleLoadMore = () => {
     if (nextCursor && customerId && !isLoadingMore) {
@@ -364,35 +351,19 @@ export function Customer360Timeline({
 
   return (
     <div className="space-y-6">
-      {/* Search & Header */}
-      <div className="bg-slate-900/70 border border-slate-800 rounded-2xl p-5">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+      {/* Header */}
+      <div className="ui-section-card p-5">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
-            <h1 className="text-xl font-bold text-slate-100">SCR-004: Customer 360</h1>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Ten-stage unified timeline & five-tier evidence separation (FR-C360-003).
-            </p>
+            <h1 className="text-xl font-bold text-ink">Customer 360</h1>
+            <p className="mt-1 text-xs leading-5 text-muted">Verified customer timeline with five-tier evidence separation.</p>
           </div>
-
-          {/* Customer Search Bar */}
-          <form onSubmit={handleSearchSubmit} className="flex items-center gap-2 w-full md:w-auto">
-            <div className="relative flex-1 md:w-72">
-              <input
-                type="text"
-                value={searchInput}
-                onChange={(e) => setSearchInput(e.target.value)}
-                placeholder="Enter customer ID (e.g. CUST-TW-88219)"
-                className="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs font-mono text-slate-200 outline-none focus:border-sky-500"
-              />
+          {customerId ? (
+            <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-surface-low px-3 py-2 text-xs">
+              <span className="font-semibold text-ink">Verified customer record</span>
+              <code className="font-mono text-muted">{customerId}</code>
             </div>
-            <button
-              type="submit"
-              disabled={isLoading || !searchInput.trim()}
-              className="px-3.5 py-1.5 bg-sky-600 hover:bg-sky-500 text-white rounded-lg text-xs font-semibold transition-colors disabled:opacity-50"
-            >
-              Lookup
-            </button>
-          </form>
+          ) : <StatusBadge label="Select a verified customer" tone="no-data" />}
         </div>
 
         {/* Customer Profile Banner (only rendered when returned) */}
@@ -456,7 +427,7 @@ export function Customer360Timeline({
         <div className="p-12 text-center bg-slate-900/30 border border-dashed border-slate-800 rounded-2xl">
           <p className="text-sm font-semibold text-slate-300 mb-1">No Customer Selected</p>
           <p className="text-xs text-slate-500 font-mono">
-            Enter a customer ID in the search box above or pass ?customer_id=... in the URL.
+            Select a verified customer from an authorized approval or conversation record. Direct URL customer IDs are ignored.
           </p>
         </div>
       ) : isLoading ? (

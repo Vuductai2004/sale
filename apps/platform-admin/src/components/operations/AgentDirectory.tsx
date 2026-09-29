@@ -97,14 +97,14 @@ export function AgentDirectory({
 
   return (
     <section
-      aria-label="Observed Agent Directory"
+      aria-label="Observed run actors"
       className="rounded-lg border border-slate-800 bg-slate-900/60 p-4"
     >
       <div className="mb-3 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <h2 className="text-sm font-semibold text-slate-200">Observed Agent Directory</h2>
+          <h2 className="text-sm font-semibold text-slate-200">Observed run actors</h2>
           <span className="rounded bg-slate-800 px-2 py-0.5 text-xs font-mono text-slate-400">
-            {directory.length} Active
+            {directory.length} observed
           </span>
         </div>
         {selectedAgentId && (
@@ -123,10 +123,7 @@ export function AgentDirectory({
           No agent identities observed in the currently returned run dataset.
         </div>
       ) : (
-        <div
-          role="list"
-          className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4"
-        >
+        <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {directory.map((agent) => {
             const isSelected = selectedAgentId === agent.agent_id;
             const successRate =
@@ -135,19 +132,12 @@ export function AgentDirectory({
                 : 0;
 
             return (
-              <div
+              <button
                 key={agent.agent_id}
-                role="listitem"
-                tabIndex={0}
+                type="button"
                 aria-pressed={isSelected}
                 onClick={() => onSelectAgent(isSelected ? '' : agent.agent_id)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' || e.key === ' ') {
-                    e.preventDefault();
-                    onSelectAgent(isSelected ? '' : agent.agent_id);
-                  }
-                }}
-                className={`cursor-pointer rounded border p-3 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 ${
+                className={`w-full cursor-pointer rounded border p-3 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500 ${
                   isSelected
                     ? 'border-sky-500 bg-sky-950/40 text-slate-100 shadow-sm'
                     : 'border-slate-800 bg-slate-900/80 text-slate-300 hover:border-slate-700 hover:bg-slate-800/60'
@@ -189,7 +179,7 @@ export function AgentDirectory({
                     </span>
                   </div>
                 </div>
-              </div>
+              </button>
             );
           })}
         </div>

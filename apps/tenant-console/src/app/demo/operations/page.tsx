@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { Customer360Timeline } from '../../../components/customer/Customer360Timeline';
+import { DemoBadge } from '../../../components/ui/Primitives';
 
 type DemoRole = 'tenant_operator' | 'marketing_approver';
 type Session = { readonly role: DemoRole; readonly operator_id?: string };
@@ -293,23 +294,23 @@ export default function OperationsPage() {
 
   if (session?.role && session.role !== 'tenant_operator') {
     return (
-      <main className="min-h-screen bg-slate-950 px-4 py-10 text-slate-100 sm:px-6 lg:px-8">
+      <div className="min-h-full px-4 py-10 text-slate-100 sm:px-6 lg:px-8">
         <section className="mx-auto max-w-xl rounded-xl border border-rose-800/80 bg-rose-950/30 p-6" role="alert">
           <p className="text-xs font-mono uppercase tracking-wider text-rose-300">403 · permission_denied</p>
           <h1 className="mt-2 text-xl font-semibold">Tenant operator access required</h1>
           <p className="mt-2 text-sm text-slate-300">Sign in with the tenant operator role to manage conversations and takeover leases.</p>
           <button type="button" onClick={() => void handleLogout()} className="mt-5 rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold hover:bg-slate-700">Sign out</button>
         </section>
-      </main>
+      </div>
     );
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 px-4 py-6 text-slate-100 sm:px-6 lg:px-8">
+    <div className="min-h-full px-4 py-6 text-slate-100 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-7xl">
         <header className="flex flex-col gap-4 border-b border-slate-800 pb-5 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-400">NovaMart operations</p>
+            <div className="flex flex-wrap items-center gap-2"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-400">NovaMart operations</p><DemoBadge /></div>
             <h1 className="mt-1 text-2xl font-semibold tracking-tight">Conversation operations</h1>
             <p className="mt-1 text-sm text-slate-400">Tenant-scoped history, human takeover, and Customer 360 evidence.</p>
           </div>
@@ -375,6 +376,6 @@ export default function OperationsPage() {
           </section>
         </div>
       </div>
-    </main>
+    </div>
   );
 }

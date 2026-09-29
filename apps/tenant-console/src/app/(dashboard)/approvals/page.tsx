@@ -1,11 +1,10 @@
 /**
- * Tenant-console page hosting SCR-003 Approval Center and SCR-004 Customer 360.
- * Supports URL search params (`customer_id`, `customerId`, `tab`), tab navigation,
- * and direct cross-navigation from approval action payloads to customer timelines.
+ * Tenant-console page hosting Approval Center and Customer 360.
+ * Customer timelines open only from tenant-scoped records returned by the approval or conversation APIs.
  */
 'use client';
 
-import React, { Suspense, useState, useEffect } from 'react';
+import React, { Suspense, useState } from 'react';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { ApprovalCenter } from '../../../components/approvals/ApprovalCenter';
 import { Customer360Timeline } from '../../../components/customer/Customer360Timeline';
@@ -17,35 +16,17 @@ function ApprovalsDashboardContent() {
   const router = useRouter();
   const pathname = usePathname();
 
-  const customerIdParam = searchParams.get('customer_id') || searchParams.get('customerId') || '';
   const tabParam = searchParams.get('tab');
 
-  const [activeTab, setActiveTab] = useState<ActiveTab>(() => {
-    if (tabParam === 'customer' || (Boolean(customerIdParam) && tabParam !== 'approvals')) {
-      return 'customer';
-    }
-    return 'approvals';
-  });
-
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string>(customerIdParam);
-
-  // Synchronize when URL searchParams change
-  useEffect(() => {
-    if (customerIdParam && customerIdParam !== selectedCustomerId) {
-      setSelectedCustomerId(customerIdParam);
-      if (tabParam !== 'approvals') {
-        setActiveTab('customer');
-      }
-    }
-  }, [customerIdParam, tabParam, selectedCustomerId]);
+  const [activeTab, setActiveTab] = useState<ActiveTab>(tabParam === 'customer' ? 'customer' : 'approvals');
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>('');
 
   const handleTabChange = (newTab: ActiveTab) => {
     setActiveTab(newTab);
     const params = new URLSearchParams(searchParams.toString());
     params.set('tab', newTab);
-    if (newTab === 'customer' && selectedCustomerId) {
-      params.set('customer_id', selectedCustomerId);
-    }
+    params.delete('customer_id');
+    params.delete('customerId');
     router.replace(`${pathname}?${params.toString()}`);
   };
 
@@ -54,21 +35,22 @@ function ApprovalsDashboardContent() {
     setActiveTab('customer');
     const params = new URLSearchParams(searchParams.toString());
     params.set('tab', 'customer');
-    params.set('customer_id', newCustomerId);
+    params.delete('customer_id');
+    params.delete('customerId');
     router.replace(`${pathname}?${params.toString()}`);
   };
 
   return (
-    <main className="min-h-screen bg-slate-950 text-slate-100 p-4 sm:p-6 lg:p-8">
+    <div className="space-y-6" aria-label="Approvals and customer timelines">
       {/* View Switcher Tabs */}
-      <div className="flex items-center gap-2 mb-6 border-b border-slate-800 pb-3 flex-wrap">
+      <div className="flex flex-wrap items-center gap-2 border-b border-line pb-3">
         <button
           type="button"
           onClick={() => handleTabChange('approvals')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+          className={`ui-button ${
             activeTab === 'approvals'
-              ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-950/40'
-              : 'bg-slate-900 text-slate-400 hover:text-slate-200 hover:bg-slate-850 border border-slate-800'
+              ? 'bg-brand-soft text-brand-deep'
+              : 'border border-line bg-surface text-muted hover:bg-surface-low hover:text-ink'
           }`}
         >
           SCR-003: Approval Center
@@ -77,10 +59,10 @@ function ApprovalsDashboardContent() {
         <button
           type="button"
           onClick={() => handleTabChange('customer')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 ${
+          className={`ui-button ${
             activeTab === 'customer'
-              ? 'bg-sky-500 text-slate-950 shadow-md shadow-sky-950/40'
-              : 'bg-slate-900 text-slate-400 hover:text-slate-200 hover:bg-slate-850 border border-slate-800'
+              ? 'bg-brand-soft text-brand-deep'
+              : 'border border-line bg-surface text-muted hover:bg-surface-low hover:text-ink'
           }`}
         >
           <span>SCR-004: Customer 360</span>
@@ -100,18 +82,9 @@ function ApprovalsDashboardContent() {
       {activeTab === 'approvals' ? (
         <ApprovalCenter onSelectCustomer={handleSelectCustomer} />
       ) : (
-        <Customer360Timeline
-          initialCustomerId={selectedCustomerId}
-          onCustomerIdChange={(newId) => {
-            setSelectedCustomerId(newId);
-            const params = new URLSearchParams(searchParams.toString());
-            params.set('customer_id', newId);
-            params.set('tab', 'customer');
-            router.replace(`${pathname}?${params.toString()}`);
-          }}
-        />
+        <Customer360Timeline initialCustomerId={selectedCustomerId} />
       )}
-    </main>
+    </div>
   );
 }
 
@@ -119,8 +92,8 @@ export default function ApprovalsPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen bg-slate-950 text-slate-400 p-8 flex items-center justify-center font-mono text-xs">
-          loading: Initializing governance and customer consoles…
+        <div className="state-panel" aria-busy="true" aria-label="Loading approvals and customer timeline">
+          loading: Initializing scoped governance and customer views…
         </div>
       }
     >

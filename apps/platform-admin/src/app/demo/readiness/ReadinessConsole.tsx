@@ -107,23 +107,20 @@ async function getJson(path: string): Promise<{ readonly response: Response; rea
 function StatusBadge({ value, kind = 'status' }: { readonly value: unknown; readonly kind?: 'status' | 'probe' }) {
   const raw = stringValue(value);
   const normalized = raw.toUpperCase();
-  const isGood = normalized === 'LIVE' || normalized === 'DEMO_MOCK' || normalized === 'PASS' || normalized === 'OBSERVED';
+  const isDemo = normalized === 'DEMO_MOCK';
+  const isLive = normalized === 'LIVE' || normalized === 'PASS' || normalized === 'OBSERVED';
   const isBad = normalized === 'FAILED' || normalized === 'UNBOUND' || normalized === 'UNAVAILABLE';
-  const label = kind === 'probe' && normalized === 'FAILED' ? 'probe_failed' : raw;
-  return (
-    <span className={`inline-flex items-center rounded border px-2 py-0.5 font-mono text-[11px] font-semibold tracking-wide ${
-      isGood ? 'border-emerald-800 bg-emerald-950/50 text-emerald-300' : isBad ? 'border-rose-900 bg-rose-950/50 text-rose-300' : 'border-slate-700 bg-slate-900 text-slate-300'
-    }`}>
-      {label}
-    </span>
-  );
+  const tone = isDemo ? 'demo-only' : isLive ? 'live' : isBad ? 'danger' : 'neutral';
+  const label = kind === 'probe' && normalized === 'FAILED' ? 'probe_failed' : isDemo ? 'demo_mock' : raw;
+  return <span className={`ui-status ui-status--${tone}`} role="status">{label}</span>;
 }
+
 function Panel({ title, children, description }: { readonly title: string; readonly children: ReactNode; readonly description?: string }) {
   const titleId = `${title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-title`;
   return (
-    <section className="rounded-lg border border-slate-800 bg-slate-900/50 p-4 sm:p-5" aria-labelledby={titleId}>
-      <h2 id={titleId} className="text-sm font-semibold uppercase tracking-[0.16em] text-slate-300">{title}</h2>
-      {description ? <p className="mt-2 text-xs leading-5 text-slate-500">{description}</p> : null}
+    <section className="ui-section-card p-4 sm:p-5" aria-labelledby={titleId}>
+      <h2 id={titleId} className="text-sm font-semibold uppercase tracking-[0.16em] text-ink">{title}</h2>
+      {description ? <p className="mt-2 text-xs leading-5 text-muted">{description}</p> : null}
       <div className="mt-4">{children}</div>
     </section>
   );
@@ -260,13 +257,13 @@ export function ReadinessConsole() {
     <div className="mx-auto flex w-full max-w-7xl flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
       <header className="flex flex-col gap-4 border-b border-slate-800 pb-5 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-sky-400">Platform Admin / Demo Readiness</p>
-          <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-100 sm:text-3xl">Runtime readiness</h1>
-          <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">Observed capability state for the local demo. Provider content, prompts, credentials, and customer data are never shown here.</p>
+          <p className="font-mono text-[11px] uppercase tracking-[0.18em] text-brand">Platform operations / Demo readiness</p>
+          <div className="mt-2 flex flex-wrap items-center gap-3"><h1 className="text-2xl font-semibold tracking-tight text-ink sm:text-3xl">Runtime readiness</h1><span className="ui-status ui-status--demo-only" role="status">Demo only</span></div>
+          <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">Observed capability state for the local demo. Provider content, prompts, credentials, and customer data are never shown here.</p>
         </div>
         <div className="flex items-center gap-3">
-          <span className="font-mono text-xs text-slate-500">{formatDate(snapshot?.observed_at)}</span>
-          <button type="button" onClick={() => void logout()} className="rounded-md border border-slate-700 px-3 py-2 text-xs font-semibold uppercase tracking-wider text-slate-300 hover:bg-slate-800 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400">Sign out</button>
+          <span className="font-mono text-xs text-muted">{formatDate(snapshot?.observed_at)}</span>
+          <button type="button" onClick={() => void logout()} className="ui-button ui-button--quiet">Sign out</button>
         </div>
       </header>
 

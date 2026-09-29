@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-
+import { DemoBadge } from '../../../components/ui/Primitives';
 type Persona = 'anonymous' | 'C05' | 'C06';
 const PERSONAS = ['anonymous', 'C05', 'C06'] as const;
 type ViewState = 'loading' | 'ready' | 'empty' | 'unauthenticated' | 'permission_denied' | 'error';
@@ -522,17 +522,17 @@ export default function StorefrontDemoPage() {
   const sessionReady = sessionState === 'ready';
 
   return (
-    <main className="min-h-[calc(100vh-7rem)] bg-slate-950 px-4 py-6 text-slate-100 sm:px-6 lg:px-8" aria-labelledby="storefront-title">
+    <div className="min-h-full px-4 py-6 text-slate-100 sm:px-6 lg:px-8" aria-labelledby="storefront-title">
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-col gap-5 border-b border-slate-800 pb-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-sky-400">NovaMart / Demo Storefront</p>
-            <h1 id="storefront-title" className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">Shop with an evidenced assistant</h1>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-400">Browse the tenant-scoped catalog, then ask about products, returns, or an order. Replies appear only after the gateway task reaches a recorded state.</p>
+            <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-brand">NovaMart / Demo Storefront</p>
+            <div className="mt-2 flex flex-wrap items-center gap-3"><h1 id="storefront-title" className="text-2xl font-semibold tracking-tight text-ink sm:text-3xl">Shop with an evidenced assistant</h1><DemoBadge /></div>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">Browse the tenant-scoped catalog, then ask about products, returns, or an order. Replies appear only after the gateway task reaches a recorded state.</p>
           </div>
-          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
-            <span className="rounded-full border border-slate-800 bg-slate-900 px-3 py-1.5 font-mono">VND / vi-VN</span>
-            <Link href="/" className="rounded-md px-3 py-1.5 text-slate-300 hover:bg-slate-900 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500">Back to console</Link>
+          <div className="flex flex-wrap items-center gap-3 text-xs text-muted">
+            <span className="rounded-full border border-line bg-surface-low px-3 py-1.5 font-mono">VND / vi-VN</span>
+            <Link href="/" className="ui-button ui-button--quiet">Back to console</Link>
           </div>
         </header>
 
@@ -639,7 +639,7 @@ export default function StorefrontDemoPage() {
           </div>
         )}
       </div>
-    </main>
+    </div>
   );
 }
 

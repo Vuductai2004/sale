@@ -206,23 +206,23 @@ function TraceConsole() {
 
   if (!isSessionLoading && session === null && error) {
     return (
-      <main className="min-h-screen bg-slate-950 px-4 py-10 text-slate-100">
+      <div className="min-h-full px-4 py-10 text-slate-100">
         <section className="mx-auto max-w-xl rounded-xl border border-rose-800/80 bg-rose-950/30 p-6" role="alert">
           <p className="font-mono text-xs uppercase tracking-wider text-rose-300">Session unavailable</p>
           <h1 className="mt-2 text-xl font-semibold">Run trace cannot be loaded</h1>
           <p className="mt-2 text-sm text-slate-300">{error}</p>
           <button type="button" onClick={() => router.replace('/sign-in')} className="mt-5 rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold hover:bg-slate-700">Return to sign in</button>
         </section>
-      </main>
+      </div>
     );
   }
 
   if (!isSessionLoading && session?.role !== 'tenant_operator' && session?.role !== 'marketing_approver') {
-    return <main className="min-h-screen bg-slate-950 px-4 py-10 text-slate-100"><section className="mx-auto max-w-xl rounded-xl border border-rose-800/80 bg-rose-950/30 p-6" role="alert"><p className="font-mono text-xs text-rose-300">403 · permission_denied</p><h1 className="mt-2 text-xl font-semibold">Trace access requires an authenticated operator</h1><button type="button" onClick={() => void logout()} className="mt-5 rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold hover:bg-slate-700">Sign out</button></section></main>;
+    return <div className="min-h-full px-4 py-10 text-slate-100"><section className="mx-auto max-w-xl rounded-xl border border-rose-800/80 bg-rose-950/30 p-6" role="alert"><p className="font-mono text-xs text-rose-300">403 · permission_denied</p><h1 className="mt-2 text-xl font-semibold">Trace access requires an authenticated operator</h1><button type="button" onClick={() => void logout()} className="mt-5 rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold hover:bg-slate-700">Sign out</button></section></div>;
   }
 
   return (
-    <main className="min-h-screen bg-slate-950 px-4 py-6 text-slate-100 sm:px-6 lg:px-8">
+    <div className="min-h-full px-4 py-6 text-slate-100 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-6xl">
         <header className="flex flex-col gap-4 border-b border-slate-800 pb-5 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-400">NovaMart observability</p><h1 className="mt-1 text-2xl font-semibold tracking-tight">Run trace</h1><p className="mt-1 text-sm text-slate-400">Reads the durable R03 projection and redacted stage records only.</p></div><div className="flex flex-wrap gap-2"><a href="/" className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:border-slate-500 hover:text-white">Executive</a><a href="/demo/operations" className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:border-slate-500 hover:text-white">Operations</a><button type="button" onClick={() => void logout()} className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:border-slate-500 hover:text-white">Sign out</button></div></header>
 
@@ -271,7 +271,7 @@ function TraceConsole() {
           ) : <section role="status" className="rounded-xl border border-slate-800 bg-slate-900/60 p-5"><h2 className="text-base font-semibold">Trace projection unavailable</h2><p className="mt-2 text-sm text-slate-400">R03 returned the durable run state, but stage evidence is not available yet. No evidence is fabricated.</p></section>}
         </div>}
       </div>
-    </main>
+    </div>
   );
 }
 
@@ -282,7 +282,7 @@ function TraceConsole() {
  */
 export default function TracePage() {
   return (
-    <Suspense fallback={<main className="min-h-[calc(100vh-7rem)] bg-slate-950 px-4 py-6 text-slate-100"><p className="text-sm text-slate-400">Loading run trace…</p></main>}>
+    <Suspense fallback={<div className="min-h-full px-4 py-6 text-slate-100"><p className="text-sm text-slate-400">Loading run trace…</p></div>}>
       <TraceConsole />
     </Suspense>
   );

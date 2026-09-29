@@ -2,7 +2,7 @@
  * Drawer panel providing deep inspection of R16 step authority verdicts, latencies, and evidence.
  */
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useRef } from 'react';
 import type { AgentRunProjection } from './types';
 import { getRetryEligibility } from './retry-helpers';
 
@@ -19,16 +19,38 @@ export function RunInspectionDrawer({
   onClose,
   onRetry,
 }: RunInspectionDrawerProps) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const previousFocusRef = useRef<HTMLElement | null>(null);
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
+    if (!isOpen) return;
+    previousFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    closeButtonRef.current?.focus();
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
         onClose();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+      const focusable = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>('button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled])') ?? []);
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable.at(-1);
+      if (!first || !last) return;
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault();
+        first.focus();
       }
     };
-    if (isOpen) {
-      window.addEventListener('keydown', handleKeyDown);
-    }
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      previousFocusRef.current?.focus();
+      previousFocusRef.current = null;
+    };
   }, [isOpen, onClose]);
 
   if (!isOpen || !run) return null;
@@ -37,6 +59,7 @@ export function RunInspectionDrawer({
 
   return (
     <div
+      ref={dialogRef}
       role="dialog"
       aria-modal="true"
       aria-label={`Run inspection for ${run.run_id}`}
@@ -48,6 +71,7 @@ export function RunInspectionDrawer({
           <h2 className="text-base font-mono font-bold text-sky-400 break-all">{run.run_id}</h2>
         </div>
         <button
+          ref={closeButtonRef}
           type="button"
           onClick={onClose}
           aria-label="Close inspection panel"
