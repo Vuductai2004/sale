@@ -25,6 +25,11 @@ function hangsUntilAborted(invocation: SkillToolInvocation): Promise<unknown> {
   });
 }
 
+/** An adapter that ignores the deadline signal and never settles on its own. */
+function ignoresAbort(): Promise<unknown> {
+  return new Promise(() => undefined);
+}
+
 /** An adapter that fails with a transient provider code the row does not list as non-retryable. */
 function alwaysTransient(): Promise<unknown> {
   return Promise.reject(Object.assign(new Error('provider 503'), { code: 'PROVIDER_5XX' }));
@@ -75,6 +80,52 @@ describe('bounded skill execution', () => {
     await expectRefusalAsync(harness.engine.dispatch(dispatchRequest()), 'EFFECT_UNKNOWN');
     // Exactly one provider call: the outcome is unconfirmed and reconciliation is not a resend.
     expect(harness.invocations).toHaveLength(1);
+  });
+
+  it('enforces a hard deadline for abort-ignoring tools', async () => {
+    let resolveLate!: (output: unknown) => void;
+    const lateResponse = new Promise<unknown>((resolve) => {
+      resolveLate = resolve;
+    });
+
+    const effectHarness = createHarness({
+      respond: () => lateResponse,
+      row: {
+        effect_class: 'EFFECT',
+        timeout_ms: 5,
+        retry_policy: {
+          max_retries: 2,
+          initial_interval_ms: 0,
+          backoff_multiplier: 2,
+          retry_on_timeout: false,
+          non_retryable_errors: [],
+        },
+      },
+    });
+
+    await expectRefusalAsync(effectHarness.engine.dispatch(dispatchRequest()), 'EFFECT_UNKNOWN');
+    expect(effectHarness.invocations).toHaveLength(1);
+    // Resolving the abandoned adapter later must not alter the already-recorded refusal.
+    resolveLate({ sku_id: 'SKU-1' });
+    await lateResponse;
+
+    const readHarness = createHarness({
+      respond: ignoresAbort,
+      row: {
+        effect_class: 'READ',
+        timeout_ms: 5,
+        retry_policy: {
+          max_retries: 0,
+          initial_interval_ms: 0,
+          backoff_multiplier: 2,
+          retry_on_timeout: true,
+          non_retryable_errors: [],
+        },
+      },
+    });
+
+    await expectRefusalAsync(readHarness.engine.dispatch(dispatchRequest()), 'SKILL_EXECUTION_FAILED');
+    expect(readHarness.invocations).toHaveLength(1);
   });
 
   it('reserves a retried dispatch under one effect identity and never regenerates it', async () => {
