@@ -33,10 +33,24 @@ export function salesRequirementsFor(message: string): SalesTurnRequirements | u
   const category = /\b(laptop|notebook|computer)\b|may tinh/i.test(normalized) ? 'laptops'
     : /\b(phone|smartphone)\b|dien thoai/i.test(normalized) ? 'phones'
     : undefined;
-  const budgetMatch = normalized.match(/(?:under|below|budget|duoi|duoi muc|less than)\s*(?:vnd|₫)?\s*([0-9]+(?:[.,][0-9]+)?)\s*(m|million|trieu|k)?/i);
-  const rawBudget = budgetMatch?.[1]?.replace(',', '.');
+  const budgetMatch = normalized.match(
+    /(?:under|below|budget|duoi|duoi muc|less than)\s*(?:vnd|₫)?\s*([0-9]{1,3}(?:[.,][0-9]{3})+(?!\d)|[0-9]+(?:[.,][0-9]+)?)\s*(m|million|trieu|tr|k)?/i,
+  );
+  const rawBudget = budgetMatch?.[1];
   const unit = budgetMatch?.[2]?.toLowerCase();
-  const parsed = rawBudget === undefined ? undefined : Number(rawBudget) * (unit === 'm' || unit === 'million' || unit === 'trieu' ? 1_000_000 : unit === 'k' ? 1_000 : 1);
+  let parsed: number | undefined;
+  if (rawBudget !== undefined) {
+    if (/^[0-9]{1,3}(?:[.,][0-9]{3})+$/.test(rawBudget)) {
+      parsed = Number(rawBudget.replace(/[.,]/g, ''));
+    } else {
+      const num = Number(rawBudget.replace(',', '.'));
+      parsed = unit === 'm' || unit === 'million' || unit === 'trieu' || unit === 'tr'
+        ? Math.round(num * 1_000_000)
+        : unit === 'k'
+          ? Math.round(num * 1_000)
+          : num;
+    }
+  }
   const use_case = /\b(graphic design|design|creator)\b|do hoa/i.test(normalized) ? 'graphic design'
     : /\b(gaming|game)\b|choi game/i.test(normalized) ? 'gaming'
     : undefined;

@@ -34,6 +34,16 @@ describe('salesRequirementsFor', () => {
       budget_vnd: 20_000_000,
       use_case: 'gaming',
     });
+    expect(salesRequirementsFor('Tư vấn laptop dưới 20tr làm đồ họa')).toEqual({
+      category: 'laptops',
+      budget_vnd: 20_000_000,
+      use_case: 'graphic design',
+    });
+    expect(salesRequirementsFor('Tư vấn laptop dưới 20.000.000 làm đồ họa')).toEqual({
+      category: 'laptops',
+      budget_vnd: 20_000_000,
+      use_case: 'graphic design',
+    });
   });
 
   it('fails closed when a required requirement is absent', () => {

@@ -32,6 +32,7 @@ type OperatorConversationPort = {
     readonly sender_type: 'operator';
     readonly sender_id: string;
     readonly content: string;
+    readonly request_id?: string;
   }): Promise<string>;
 };
 
