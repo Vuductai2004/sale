@@ -150,7 +150,8 @@ export async function handleSearchProduct(
         .filter((value): value is string => typeof value === 'string')
         .join(' ')
         .toLocaleLowerCase();
-      return searchable.includes(query);
+      const terms = query.split(/\s+/).filter(Boolean);
+      return terms.length > 0 && terms.every((term) => searchable.includes(term));
     })
     .sort((left, right) => {
       if (advisorRequirements !== undefined) {

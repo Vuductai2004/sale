@@ -59,12 +59,14 @@ function isAllowedPath(path: string, method: string): boolean {
 }
 
 function requestHeaders(request: Request, token: string, path: string): Headers {
-  const headers = new Headers({ Authorization: `Bearer ${token}` });
+  const isStorefront = path.startsWith('storefront/') || path.startsWith('tasks/');
+  const customAuth = isStorefront ? request.headers.get('authorization') : null;
+  const headers = new Headers({ Authorization: customAuth ?? `Bearer ${token}` });
   for (const name of FORWARDED_REQUEST_HEADERS) {
     const value = request.headers.get(name);
     if (value) headers.set(name, value);
   }
-  if (path === 'demo/widget-session') {
+  if (path === 'demo/widget-session' || isStorefront) {
     const origin = request.headers.get('origin');
     if (origin) headers.set('origin', origin);
   }
@@ -120,7 +122,7 @@ async function proxy(request: Request, context: RouteContext): Promise<Response>
     return jsonResponse({ error: 'API_UNAVAILABLE' }, 502);
   }
 
-  if (upstream.status === 401 || upstream.status === 403) {
+  if (upstream.status === 401 && !path.startsWith('storefront/') && !path.startsWith('tasks/')) {
     deleteDemoSession(request);
     const response = new Response(upstream.body, {
       status: upstream.status,

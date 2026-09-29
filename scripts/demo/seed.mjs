@@ -268,7 +268,7 @@ export async function seedNovaMart(env = process.env) {
   return { tenant_id: NOVAMART_TENANT_ID, counts: COUNTS, agent_count: AGENTS.length };
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === fileURLToPath(new URL(`file:///${process.argv[1].replaceAll('\\', '/')}`))) {
+if (process.argv[1]?.replaceAll('\\', '/').endsWith('/scripts/demo/seed.mjs')) {
   if (typeof process.loadEnvFile === 'function') {
     try { process.loadEnvFile(); } catch { /* ignore if .env is missing */ }
   }

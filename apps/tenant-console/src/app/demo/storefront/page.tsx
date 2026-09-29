@@ -70,9 +70,9 @@ const MAX_POLL_MS = 90_000;
 const MAX_RECEIPT_BYTES = 32 * 1024;
 const SIGN_IN_HREF = '/sign-in?next=%2Fdemo%2Fstorefront';
 
-function configuredApiV1Url(): string | null {
+function configuredApiV1Url(): string {
   const raw = process.env.NEXT_PUBLIC_API_URL?.trim();
-  if (!raw) return null;
+  if (!raw) return '/api/v1';
   const base = raw.replace(/\/+$/, '');
   return base.endsWith('/api/v1') ? base : `${base}/api/v1`;
 }

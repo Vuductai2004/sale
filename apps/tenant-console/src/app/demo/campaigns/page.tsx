@@ -184,7 +184,21 @@ export default function CampaignsPage() {
     approval: Approval,
     decision: 'APPROVE' | 'REJECT' | 'PAUSE' | 'CANCEL',
   ) {
-    if (!approval.payload_sha256) {
+    let expectedDigest = approval.payload_sha256;
+    if (!expectedDigest) {
+      try {
+        const detailResult = await apiFetch(`/api/v1/approvals/${encodeURIComponent(approval.approval_id)}`);
+        if (detailResult.response.ok) {
+          const detailDigest = detailResult.payload.payload_sha256 ?? detailResult.payload.payloadSha256;
+          if (typeof detailDigest === 'string' && detailDigest.length > 0) {
+            expectedDigest = detailDigest;
+          }
+        }
+      } catch {
+        // detail fetch failed, will fall through to guard check below
+      }
+    }
+    if (!expectedDigest) {
       setError('The approval payload digest is unavailable; decision refused until the authoritative detail is loaded.');
       return;
     }
@@ -204,7 +218,7 @@ export default function CampaignsPage() {
               : decision === 'PAUSE'
               ? 'Campaign approval paused for further review.'
               : 'Campaign draft cancelled by approver.',
-          expected_payload_sha256: approval.payload_sha256,
+          expected_payload_sha256: expectedDigest,
         }),
       });
       if (response.status === 401) {

@@ -1083,4 +1083,28 @@ describe('SalesSkillServices - read, recommendation and customer skills', () => 
     const recommendationPayload = recommendation as unknown as Record<string, unknown>;
     expect(recommendationPayload['product']).toMatchObject({ sku: 'SKU-1', price: 100 });
   });
+
+  it('matches multi-term catalog search queries regardless of word order', async () => {
+    const services = createFullyBoundServices();
+
+    const searchResult = await services.tool_port.invoke({
+      skill_id: 'skill.sales.search_product',
+      tool_binding: 'API-001.CatalogConnector',
+      input: { tenant_id: TENANT_ID, query: 'accessory SKU-1', limit: 5 },
+      context: {
+        run_id: 'run-search-order',
+        tenant_id: TENANT_ID,
+        caller_agent: 'SAL-02' as const,
+        correlation_id: 'corr-search-order',
+        granted_authority: 'AUTH-0' as const,
+        effect_key: 'effect-search-order',
+      },
+    });
+
+    const payload = searchResult as unknown as Record<string, unknown>;
+    expect(payload['products']).toEqual([
+      expect.objectContaining({ sku: 'SKU-1' }),
+    ]);
+  });
 });
+
