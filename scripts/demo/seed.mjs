@@ -269,6 +269,9 @@ export async function seedNovaMart(env = process.env) {
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === fileURLToPath(new URL(`file:///${process.argv[1].replaceAll('\\', '/')}`))) {
+  if (typeof process.loadEnvFile === 'function') {
+    try { process.loadEnvFile(); } catch { /* ignore if .env is missing */ }
+  }
   seedNovaMart().then(({ tenant_id, counts, agent_count }) => {
     console.log(`NovaMart demo seeded for ${tenant_id}: ${JSON.stringify(counts)}, agents=${agent_count}`);
   }).catch((error) => {

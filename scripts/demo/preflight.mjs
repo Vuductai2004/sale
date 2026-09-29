@@ -38,6 +38,9 @@ export async function runDemoPreflight(env = process.env) {
 }
 
 if (process.argv[1]?.replaceAll('\\', '/').endsWith('/scripts/demo/preflight.mjs')) {
+  if (typeof process.loadEnvFile === 'function') {
+    try { process.loadEnvFile(); } catch { /* ignore if .env is missing */ }
+  }
   runDemoPreflight().then((result) => {
     console.log(`NovaMart demo preflight passed: ${JSON.stringify(result)}`);
   }).catch((error) => {
