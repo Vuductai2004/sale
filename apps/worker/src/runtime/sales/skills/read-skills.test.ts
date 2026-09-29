@@ -11,6 +11,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { type Customer360Fact } from '@agentos/core-engine/contracts';
 import { type CustomerEventTimeline } from '@agentos/database';
 import { type ErpReadPort } from '../../connectors.js';
+import { SalesAdvisorExecutionState } from '../advisor-adapters.js';
 import { type AssignableAuthority } from '@agentos/core-engine/contracts';
 import { createSalesSkillServices, GATE_SALES_SKILLS, computeQuoteToken, type SalesCartPort, type SalesCommunicationPort, type SalesConsentPort, type SalesCustomer360Fact, type SalesFrequencyCapConfig, type SalesFrequencyCapPort, type SalesOrderPort, type SalesPaymentPolicyPort, type SalesPriceFloorApproved, type SalesPriceFloorDecision, type SalesPriceFloorPort, type SalesPriceFloorRefused, type SalesQuotePort, type SalesRecommendationRevenueEvidencePort, type SalesReplenishmentPolicyPort } from './index.js';
 
@@ -255,6 +256,7 @@ function createServices(overrides: {
   resolve_grant?: ((tenant_id: string, agent_id: string) => Promise<AssignableAuthority | null>) | undefined;
   quote_signing_secret?: string | undefined;
   now?: (() => Date) | undefined;
+  advisor_state?: SalesAdvisorExecutionState | undefined;
 } = {}) {
   const quote_signing_secret = overrides.quote_signing_secret !== undefined
     ? overrides.quote_signing_secret
@@ -278,6 +280,7 @@ function createServices(overrides: {
     ...(overrides.payment_policy === undefined ? {} : { payment_policy: overrides.payment_policy }),
     ...(overrides.is_takeover_active === undefined ? {} : { is_takeover_active: overrides.is_takeover_active }),
     ...(overrides.takeover_active === undefined ? {} : { takeover_active: overrides.takeover_active }),
+    ...(overrides.advisor_state === undefined ? {} : { advisor_state: overrides.advisor_state }),
     ...(quote_signing_secret === undefined ? {} : { quote_signing_secret }),
     resolve_correlation_id: vi.fn(async () => CORRELATION_ID),
     resolve_grant: overrides.resolve_grant ?? vi.fn(async () => 'AUTH-1'),
@@ -299,6 +302,7 @@ function createFullyBoundServices(overrides: {
   cartOverrides?: { subtotal?: number; currency?: string; quote_token?: string; quote_expires_at?: string } | undefined;
   quote_signing_secret?: string | undefined;
   now?: (() => Date) | undefined;
+  advisor_state?: SalesAdvisorExecutionState | undefined;
 } = {}) {
   const revenue_evidence: SalesRecommendationRevenueEvidencePort = {
     read: vi.fn(async () => ({
@@ -325,6 +329,7 @@ function createFullyBoundServices(overrides: {
     takeover_active: overrides.takeoverActive !== undefined ? overrides.takeoverActive : false,
     ...(overrides.customer !== undefined ? { customer: overrides.customer } : {}),
     ...(overrides.timeline !== undefined ? { timeline: overrides.timeline } : {}),
+    ...(overrides.advisor_state !== undefined ? { advisor_state: overrides.advisor_state } : {}),
     resolve_grant: vi.fn(async () => 'AUTH-3'),
     quote_signing_secret: overrides.quote_signing_secret ?? TEST_QUOTE_SECRET,
   });
@@ -990,5 +995,92 @@ describe('SalesSkillServices - read, recommendation and customer skills', () => 
       rfm_segment: 'LOYAL',
       last_order_date: '2026-09-24T15:30:00.000Z',
     });
+  });
+
+  it('binds an advisor recommendation to the SKU this run actually searched and verified', async () => {
+    const advisor_state = new SalesAdvisorExecutionState();
+    advisor_state.setRequirements(TENANT_ID, CORRELATION_ID, {
+      category: 'accessories',
+      budget_vnd: 100,
+      use_case: 'accessories',
+    });
+    const erp_read: ErpReadPort = {
+      read: vi.fn(async ({ resource, tenant_id, key }) => ({
+        resource,
+        tenant_id,
+        observed_at: SNAPSHOT_AT,
+        value: resource === 'products'
+          ? {
+              tenant_id,
+              snapshot_at: SNAPSHOT_AT,
+              items: [
+                {
+                  tenant_id,
+                  product_id: 'product-alpha',
+                  sku: 'AAA-1',
+                  name: 'Alpha Misc',
+                  currency: 'TWD',
+                  original_list_price: 100,
+                  is_active: true,
+                  categories: ['misc'],
+                },
+                {
+                  tenant_id,
+                  product_id: 'product-1',
+                  sku: 'SKU-1',
+                  name: 'Accessory',
+                  currency: 'TWD',
+                  original_list_price: 100,
+                  is_active: true,
+                  categories: ['accessories'],
+                },
+              ],
+            }
+          : {
+              tenant_id,
+              snapshot_at: SNAPSHOT_AT,
+              items: [{ tenant_id, sku_id: key, total_available_to_promise: 3 }],
+            },
+      })),
+    };
+    const services = createFullyBoundServices({ erp_read, advisor_state });
+
+    const search = await services.tool_port.invoke({
+      skill_id: 'skill.sales.search_product',
+      tool_binding: 'API-001.CatalogConnector',
+      input: { tenant_id: TENANT_ID, query: 'accessory', category_id: 'accessories', limit: 20 },
+      context: {
+        run_id: 'run-advisor-1',
+        tenant_id: TENANT_ID,
+        caller_agent: 'SAL-02' as const,
+        correlation_id: CORRELATION_ID,
+        granted_authority: 'AUTH-1' as const,
+        effect_key: 'effect-advisor-search',
+      },
+    });
+    const searchPayload = search as unknown as Record<string, unknown>;
+    expect(searchPayload['products']).toEqual([
+      expect.objectContaining({ sku: 'SKU-1', in_stock: true }),
+    ]);
+    expect(advisor_state.candidateSkuFor(TENANT_ID, CORRELATION_ID)).toBe('SKU-1');
+
+    const recommendation = await services.tool_port.invoke({
+      skill_id: 'skill.sales.recommend_product',
+      tool_binding: 'Core.RecommendationEngine',
+      input: { tenant_id: TENANT_ID, customer_id: CUSTOMER_ID, current_cart_skus: [] },
+      context: {
+        run_id: 'run-advisor-1',
+        tenant_id: TENANT_ID,
+        caller_agent: 'SAL-02' as const,
+        correlation_id: CORRELATION_ID,
+        granted_authority: 'AUTH-1' as const,
+        effect_key: 'effect-advisor-recommend',
+      },
+    });
+
+    // The alphabetically first catalog row is `AAA-1`; the recommendation must not leave the
+    // evidence trail this run actually verified, so it stays on `SKU-1`.
+    const recommendationPayload = recommendation as unknown as Record<string, unknown>;
+    expect(recommendationPayload['product']).toMatchObject({ sku: 'SKU-1', price: 100 });
   });
 });

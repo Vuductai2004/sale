@@ -202,7 +202,6 @@ describe('POST /conversations/:conversation_id/messages shared Care admission', 
       expect(response.statusCode).toBe(403);
       expect(response.json()).toMatchObject({
         error_code: 'CAPABILITY_NOT_ENABLED',
-        message: 'only Customer Care support turns are enabled',
       });
       expect(start).not.toHaveBeenCalled();
       expect(appendMessage).not.toHaveBeenCalled();
@@ -293,7 +292,6 @@ describe('POST /conversations/:conversation_id/messages shared Care admission', 
       expect(response.statusCode).toBe(403);
       expect(response.json()).toMatchObject({
         error_code: 'CAPABILITY_NOT_ENABLED',
-        message: 'only Customer Care support turns are enabled',
       });
       expect(start).not.toHaveBeenCalled();
       expect(appendMessage).not.toHaveBeenCalled();

@@ -252,4 +252,64 @@ describe('default Marketing context aggregation', () => {
       reason: 'Marketing leg completed for a verified customer; Sales consultation is the next leg',
     });
   });
+
+  it('plans an operator campaign as segment → content → brand → AUTH-4 dispatch with no per-customer step', async () => {
+    const orchestrator = await makeFactory()(TENANT);
+    const { contextAggregator, agentRuntime } = internals(orchestrator).dependencies;
+    // The subject the gateway stamps for an operator command: the operator session, under the
+    // Marketing contract's own channel — never the browser WEB_CHAT turn the file defaults to.
+    const campaignSubject = {
+      session_id: 'demo-tenant-operator',
+      channel_type: 'MARKETING_CAMPAIGN',
+      channel_identifier: 'demo-tenant-operator',
+    };
+    const context = await contextAggregator.hydrateContext(TENANT, campaignSubject, 'correlation-campaign-plan');
+
+    // The shape the gateway stamps for an operator campaign draft: the normalized envelope under
+    // `input`, `module: 'marketing'`, and the Marketing contract's own source channel.
+    const campaign: SignalEnvelope = {
+      signal_id: 'signal-campaign-plan',
+      tenant_id: TENANT,
+      correlation_id: 'correlation-campaign-plan',
+      source_channel: 'MARKETING_CAMPAIGN',
+      event_type: 'campaign.requested',
+      subject: campaignSubject,
+      timestamp: '2026-01-01T00:00:00.000Z',
+      payload: {
+        module: 'marketing',
+        skill_id: 'skill.mkt.generate_content',
+        input: {
+          objective: 'winback',
+          segment_id: 'inactive_90d',
+          instruction: 'Reactivate the 90-day inactive segment.',
+          content_constraints: { channel: 'EMAIL_HTML', locale: 'vi-VN' },
+        },
+      },
+    };
+
+    const hypothesis = await agentRuntime.deriveHypothesis(campaign, context);
+    const routing = await agentRuntime.resolveRouting(campaign, context, hypothesis);
+    const plan = await agentRuntime.formulatePlan(routing, context, hypothesis);
+
+    // Contiguous steps, and the approval gate is on the dispatch step itself: the plan parks in
+    // SCR-003 as AUTH-4 before any provider call.
+    expect(plan.steps.map((step) => step.step_index)).toEqual([1, 2, 3, 4]);
+    const dispatch = plan.steps[3]!;
+    expect(dispatch.skill_id).toBe('skill.mkt.dispatch_campaign');
+    expect(dispatch.required_authority).toBe('AUTH-4');
+    expect(dispatch.mutating).toBe(true);
+    expect(dispatch.depends_on_steps).toEqual([1, 2, 3]);
+    expect(dispatch.input_bindings).toEqual({
+      segment_id: { source_step_index: 1, response_path: 'segment_id' },
+      approved_content_id: { source_step_index: 2, response_path: 'draft_id' },
+    });
+
+    // No pre-approval per-customer consent step: a segment identifier is not a customer identity,
+    // and no step may assert one. Consent is re-read per recipient by the dispatch tool itself.
+    expect(plan.steps.some((step) => step.skill_id === 'skill.mkt.check_consent')).toBe(false);
+    for (const step of plan.steps) {
+      expect(Object.keys(step.input_bindings ?? {})).not.toContain('customer_id');
+      expect(Object.keys(step.input_parameters)).not.toContain('customer_id');
+    }
+  });
 });

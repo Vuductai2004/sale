@@ -1,6 +1,5 @@
 import { once } from 'node:events';
 import type { Server } from 'node:http';
-import { fileURLToPath } from 'node:url';
 
 import { describe, expect, it } from 'vitest';
 
@@ -26,8 +25,8 @@ interface MockErpModule {
   ): Server & { address(): { port: number } | null };
 }
 
-const MOCK_ERP_MODULE = fileURLToPath(new URL('../../../../services/mock-erp/src/server.mjs', import.meta.url));
-const mockErp = (await import(MOCK_ERP_MODULE)) as MockErpModule;
+// @ts-expect-error mock-erp is untyped JS outside rootDir
+const mockErp = (await import('../../../../services/mock-erp/src/server.mjs')) as MockErpModule;
 
 const SECRET = 'worker-mock-erp-secret-value-1234';
 const TENANT = '00000000-0000-4000-8000-000000000001';

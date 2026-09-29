@@ -224,13 +224,16 @@ export class Api001ErpConnector implements AdapterPort {
     }
 
     const route = ERP_RESOURCE_ROUTES[resource];
-    // API-001 inventory lookup accepts a SKU list, while other resource groups retain the
-    // connector's generic key envelope. Keep the projection here at the named route boundary.
+    // Each route publishes the body its own resource expects: inventory takes a SKU list, prices
+    // takes a single `sku_id`, and the remaining groups use the connector's generic key envelope.
+    // Sending one group's shape to another is what a provider answers with a 404 for an unknown key.
     const body = input.key === undefined
       ? null
       : resource === 'inventory'
         ? { tenant_id: input.tenant_id, sku_ids: [input.key] }
-        : { key: input.key };
+        : resource === 'prices'
+          ? { tenant_id: input.tenant_id, sku_id: input.key }
+          : { key: input.key };
     const result = await this.transport.request(
       requestOf({ method: route.method, path: route.path, tenant_id: input.tenant_id }, body),
     );

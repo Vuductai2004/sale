@@ -9,6 +9,7 @@ import type {
   SkillRegistry,
   SkillToolPort,
 } from '@agentos/skills';
+import type { MarketingKnowledgePort } from '../contracts.js';
 
 export type {
   AssignableAuthority,
@@ -21,6 +22,7 @@ export type {
   SkillRegistry,
   SkillToolPort,
 } from '@agentos/skills';
+export type { MarketingKnowledgePort } from '../contracts.js';
 
 /**
  * §4.1 Skill 1: skill.mkt.analyze_market_signal
@@ -201,6 +203,21 @@ export interface MarketingConsentPort {
 }
 
 /**
+ * Tenant-scoped aggregate consent guard used by operator campaign plans. It is distinct from
+ * `checkConsent`, which remains a single verified-customer check for conversational calls.
+ */
+export interface MarketingAudienceConsentPort {
+  readonly checkAudienceConsent: (
+    input: {
+      readonly tenant_id: string;
+      readonly segment_id: string;
+      readonly channel: InputMktCheckConsent['channel'];
+    },
+    context: ExecutionContext,
+  ) => Promise<OutputMktCheckConsent>;
+}
+
+/**
  * Injected port for LLM content generation (Core.LLMContentEngine).
  */
 export interface MarketingContentEnginePort {
@@ -318,8 +335,11 @@ export interface MarketingSkillToolPortOptions {
   readonly consentPort?: MarketingConsentPort | null;
   readonly content_engine?: MarketingContentEnginePort | null;
   readonly brand_guard?: MarketingBrandGuardPort | null;
+  /** Tenant-scoped approved knowledge used by the default content/brand adapters. */
+  readonly knowledge?: MarketingKnowledgePort | null;
   readonly communication?: MarketingCommunicationPort | null;
   readonly analytics?: MarketingAnalyticsPort | null;
+  readonly audience_consent?: MarketingAudienceConsentPort | null;
   readonly audience_resolver?: MarketingAudienceResolver | null;
   readonly audienceResolver?: MarketingAudienceResolver | null;
 }

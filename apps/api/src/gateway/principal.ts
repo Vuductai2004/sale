@@ -286,6 +286,13 @@ export function authenticate(deps: {
         'the presented credential did not resolve to a known principal; no unauthenticated request reaches a route handler',
       );
     }
+    if (principal.kind === 'WIDGET_SESSION') {
+      const widget = credentials.resolveWidgetSession(presented.token);
+      const origin = headerValue(request, 'origin');
+      if (widget === null || origin === null || origin !== widget.origin) {
+        fail('AUTHENTICATION_FAILED', 'the widget credential is not valid for this request origin');
+      }
+    }
 
     enforceTenantBinding(principal, tenantAssertions(request, presented));
 

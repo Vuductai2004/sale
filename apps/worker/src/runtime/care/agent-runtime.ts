@@ -1,10 +1,15 @@
 /**
- * @file Deterministic Customer Care intent routing (implement/04 §3.2, implement/06 §8.1).
+ * @file Customer Care intent routing (implement/04 §3.2, implement/06 §8.1).
  *
- * Intent recognition covers the ten SRS §8 FR-CS-001 groups without an LLM. Dispatch remains
- * narrower: only approved-knowledge retrieval, server-verified order reads, and human escalation
- * are routed to their canonical skills. Unsupported transactional capabilities never fall back to
- * an invented answer or an unregistered skill.
+ * Intent recognition accepts the API's server-stamped, bounded Care intent when one is present.
+ * The runtime never trusts a browser-authored skill, customer, authority, source, or receipt field:
+ * only `care_intent` and `care_requirements` are consumed, and only after closed validation.
+ * Deterministic classification remains available for scheduled/offline signals and compatibility
+ * with existing callers.
+ *
+ * Dispatch remains narrower: only approved-knowledge retrieval, server-verified order reads, and
+ * human escalation are routed to their canonical skills. Unsupported transactional capabilities
+ * never fall back to an invented answer or an unregistered skill.
  */
 
 import { randomUUID } from 'node:crypto';
@@ -179,6 +184,115 @@ type CareIntent =
   | 'requires_clarification';
 
 /**
+ * The only provider-derived fields accepted by the Care worker. The API stamps these fields after
+ * validating the gateway proposal; a browser payload is never allowed to set them directly.
+ *
+ * `order_lookup` is accepted as the explicit structured spelling and is normalized to the
+ * server-side `order_status` intent before identity/receipt planning.
+ */
+export const CARE_STRUCTURED_INTENTS = Object.freeze([
+  'faq_search',
+  'order_status',
+  'order_lookup',
+  'shipping',
+  'return_refund',
+  'payment',
+  'product_info',
+  'price',
+  'stock',
+  'usage',
+  'complaint',
+  'human_escalation',
+  'requires_clarification',
+] as const);
+
+export type CareStructuredIntent = (typeof CARE_STRUCTURED_INTENTS)[number];
+
+export interface CareStructuredRequirements {
+  readonly order_reference?: string;
+  readonly question?: string;
+}
+
+export interface CareStructuredProposal {
+  readonly intent: CareStructuredIntent;
+  readonly requirements: CareStructuredRequirements;
+}
+
+type ParsedCareIntent = CareIntent | 'faq_search' | 'order_lookup';
+
+
+
+/**
+ * Reads only the server-stamped structured proposal fields. Presence of any structured field
+ * makes the proposal mandatory: malformed/unknown provider output refuses rather than falling
+ * back to text matching, which could turn an invalid provider response into an unintended action.
+ */
+function readStructuredProposal(signal: SignalEnvelope): CareStructuredProposal | null {
+  const rawPayload = signal.payload;
+  if (rawPayload === null || typeof rawPayload !== 'object' || Array.isArray(rawPayload)) {
+    throw new OrchestratorError(
+      'CARE_STRUCTURED_INTENT_INVALID',
+      'Care signal payload must be an object.',
+    );
+  }
+  const payload = rawPayload as Record<string, unknown>;
+  const hasStructuredFields = Object.hasOwn(payload, 'care_intent')
+    || Object.hasOwn(payload, 'care_requirements');
+  if (!hasStructuredFields) return null;
+
+  const rawIntent = payload['care_intent'];
+  const rawRequirements = payload['care_requirements'];
+  if (
+    typeof rawIntent !== 'string'
+    || !CARE_STRUCTURED_INTENTS.includes(rawIntent as CareStructuredIntent)
+    || typeof rawRequirements !== 'object'
+    || rawRequirements === null
+    || Array.isArray(rawRequirements)
+  ) {
+    throw new OrchestratorError(
+      'CARE_STRUCTURED_INTENT_INVALID',
+      'Server-stamped Care intent requires a known intent and requirements object.',
+    );
+  }
+
+  const requirements: { order_reference?: string; question?: string } = {};
+  const structuredRequirements = rawRequirements as Record<string, unknown>;
+  for (const key of Object.keys(structuredRequirements)) {
+    if (key !== 'order_reference' && key !== 'question') {
+      throw new OrchestratorError(
+        'CARE_STRUCTURED_INTENT_INVALID',
+        `Unknown server-stamped Care requirement '${key}'.`,
+      );
+    }
+  }
+  const orderReference = structuredRequirements['order_reference'];
+  if (orderReference !== undefined) {
+    if (typeof orderReference !== 'string' || orderReference.trim().length === 0 || orderReference.length > 128) {
+      throw new OrchestratorError(
+        'CARE_STRUCTURED_INTENT_INVALID',
+        'Care order_reference must be a non-empty string no longer than 128 characters.',
+      );
+    }
+    requirements.order_reference = orderReference.trim();
+  }
+  const question = structuredRequirements['question'];
+  if (question !== undefined) {
+    if (typeof question !== 'string' || question.trim().length === 0 || question.length > 2000) {
+      throw new OrchestratorError(
+        'CARE_STRUCTURED_INTENT_INVALID',
+        'Care question must be a non-empty string no longer than 2000 characters.',
+      );
+    }
+    requirements.question = question.trim();
+  }
+
+  return {
+    intent: rawIntent as CareStructuredIntent,
+    requirements,
+  };
+}
+
+/**
  * The journey leg an admitted handoff run is for, or `null` for an ordinary customer signal.
  *
  * The package is written by the broker into the target run's own signal; nothing a customer sends
@@ -290,7 +404,7 @@ export interface ParsedRationale {
   readonly reason: string;
   readonly orderRef?: string;
   readonly faqQuery?: string;
-  readonly careIntent?: CareIntent;
+  readonly careIntent?: ParsedCareIntent;
   /** The journey leg this run was admitted for, when it arrived through a brokered handoff. */
   readonly handoffTarget?: string;
 }
@@ -333,38 +447,56 @@ export class CareAgentRuntime implements IAgentRuntime {
       };
     }
 
+    const structured = readStructuredProposal(signal);
     const text = extractMessageContent(signal);
-    const careIntent = classifyCareIntent(text);
-    const orderRef = careIntent === 'order_status' || careIntent === 'shipping'
-      ? extractOrderReference(text)
-      : null;
+    const deterministicIntent = classifyCareIntent(text);
+    const careIntent: ParsedCareIntent = structured?.intent ?? deterministicIntent;
+    const structuredOrderRef =
+      careIntent === 'order_status' || careIntent === 'shipping' || careIntent === 'order_lookup'
+        ? structured?.requirements.order_reference
+        : undefined;
+    const orderRef = structured === null
+      ? (structuredOrderRef ?? ((careIntent === 'order_status' || careIntent === 'shipping' || careIntent === 'order_lookup')
+        ? extractOrderReference(text)
+        : null))
+      : (structuredOrderRef ?? null);
     let intent: CareIntent | 'order_lookup' | 'order_lookup_unverified' | 'faq_search' = careIntent;
-    if (careIntent === 'return_refund' && /\b(policy|how do i|what is|what are|when can)\b/i.test(normalizeIntentText(text))) {
+    if (
+      careIntent === 'return_refund'
+      && !structured
+      && /\b(policy|how do i|what is|what are|when can)\b/i.test(normalizeIntentText(text))
+    ) {
       intent = 'faq_search';
     }
     let confidence = careIntent === 'requires_clarification' ? 0.3 : 0.9;
-    let reason = `Deterministic Customer Care classification: ${careIntent}.`;
+    let reason = structured
+      ? `Server-stamped Customer Care intent: ${careIntent}.`
+      : `Deterministic Customer Care classification: ${careIntent}.`;
     const rationaleData: ParsedRationale = {
       reason,
       careIntent,
-      ...(handoffTarget === null ? {} : { handoffTarget }),
-      ...(careIntent === 'product_info' || careIntent === 'price' || careIntent === 'stock'
-        || careIntent === 'return_refund' || careIntent === 'usage'
-        ? { faqQuery: text }
-        : {}),
+      ...(structured?.requirements.question
+        ? { faqQuery: structured.requirements.question }
+        : (careIntent === 'product_info' || careIntent === 'price' || careIntent === 'stock'
+          || careIntent === 'return_refund' || careIntent === 'usage'
+          ? { faqQuery: text }
+          : {})),
       ...(orderRef ? { orderRef } : {}),
+      ...(handoffTarget === null ? {} : { handoffTarget }),
     };
 
-    if (careIntent === 'order_status' && !orderRef) {
+    if ((careIntent === 'order_status' || careIntent === 'order_lookup') && !orderRef) {
       reason = 'Order status request without an extractable order reference requires clarification.';
       confidence = 0.3;
-    } else if (careIntent === 'order_status' && !context.customer) {
+    } else if ((careIntent === 'order_status' || careIntent === 'order_lookup') && !context.customer) {
       intent = 'order_lookup_unverified';
       reason = 'Order status request has a reference but no server-verified customer binding.';
       confidence = 0.5;
-    } else if (careIntent === 'order_status' && orderRef) {
+    } else if ((careIntent === 'order_status' || careIntent === 'order_lookup') && orderRef) {
       intent = 'order_lookup';
-      reason = `Order status request with extracted order ref '${orderRef}' and server-bound customer context.`;
+      reason = structured
+        ? `Server-stamped order lookup for '${orderRef}' with server-bound customer context.`
+        : `Order status request with extracted order ref '${orderRef}' and server-bound customer context.`;
       confidence = 0.95;
     } else if (orderRef) {
       reason = `Order-related Care request with extracted reference '${orderRef}'.`;
@@ -506,6 +638,13 @@ export class CareAgentRuntime implements IAgentRuntime {
     context: HydratedContext,
     hypothesis: HypothesisRecord,
   ): Promise<ExecutionPlan> {
+
+    if (context.working_memory.takeover_active) {
+      throw new OrchestratorError(
+        'CONVERSATION_LOCKED',
+        'Customer Care automation is paused while a human operator owns this conversation.',
+      );
+    }
     const plan_id = `plan_${randomUUID().slice(0, 8)}`;
 
     // A run admitted for the Care ONBOARDING leg has no message to classify: its itinerary is a
@@ -592,7 +731,10 @@ export class CareAgentRuntime implements IAgentRuntime {
       return { plan_id, steps: [step], fallback_strategy: 'ESCALATE_HUMAN' };
     }
 
-    if (intent === 'order_status' && hypothesis.intent === 'order_lookup') {
+    if (
+      (intent === 'order_status' || intent === 'order_lookup')
+      && hypothesis.intent === 'order_lookup'
+    ) {
       const orderRef = this.extractOrderRef(hypothesis);
       const customer_id = context.customer?.customer_id;
       const verification_reference = resolveVerificationReference(this.verificationResolver, context.correlation_id);

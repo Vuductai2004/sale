@@ -18,6 +18,13 @@ export async function handleOrderConnector<TOutput>(
     readonly verification_reference: string;
     readonly verification_status: string;
   };
+  const contextTenantId = invocation.context?.tenant_id;
+  if (typeof contextTenantId !== 'string' || contextTenantId.length === 0 || input.tenant_id !== contextTenantId) {
+    throw new CareSkillToolError(
+      'TENANT_SCOPE_MISMATCH',
+      'order lookup tenant_id must match the orchestrator-bound tenant',
+    );
+  }
 
   // 1. Server-side verification FIRST (ZERO connector calls made if this fails)
   if (input.verification_status !== 'VERIFIED') {

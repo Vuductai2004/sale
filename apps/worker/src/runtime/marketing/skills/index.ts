@@ -30,11 +30,13 @@ export type {
   InputMktGenerateContent,
   InputMktSegmentAudience,
   MarketingAnalyticsPort,
+  MarketingAudienceConsentPort,
   MarketingBrandGuardPort,
   MarketingCommunicationPort,
   MarketingConsentPort,
   MarketingContentEnginePort,
   MarketingCustomer360Port,
+  MarketingKnowledgePort,
   MarketingReconcileFn,
   MarketingReconcileInput,
   MarketingSignalReadPort,
@@ -135,10 +137,10 @@ export function createMarketingSkillServices(
   if (!options.consent) {
     unbound.push('API-002.ConsentStore: no consent store connector is bound');
   }
-  if (!options.content_engine) {
+  if (!options.content_engine && !options.knowledge) {
     unbound.push('Core.LLMContentEngine: no content generation engine is bound');
   }
-  if (!options.brand_guard) {
+  if (!options.brand_guard && !options.knowledge) {
     unbound.push('SecondBrain.BrandGuard: no BrandGuard compliance engine is bound');
   }
   if (!options.communication) {

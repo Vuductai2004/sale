@@ -55,6 +55,38 @@ interface CheckPriceInput {
 const INJECTION_MARKERS = /(?:--|\/\*|\*\/|;|<script\b|ignore\s+previous|system\s*:|assistant\s*:|developer\s*:)/i;
 const RECOMMENDATION_TYPES = ['CROSS_SELL', 'UPSELL', 'SUBSTITUTE', 'BUNDLE', 'REPLENISHMENT'] as const;
 const RECOMMENDATION_THRESHOLD = 0.65;
+function normalizedProductText(product: {
+  readonly use_case?: string;
+  readonly key_attribute?: string;
+  readonly description?: string;
+  readonly categories?: readonly string[];
+  readonly tags?: readonly string[];
+  readonly attributes?: Readonly<Record<string, unknown>>;
+}): string {
+  const attributes = product.attributes === undefined
+    ? []
+    : Object.values(product.attributes).filter((value): value is string => typeof value === 'string');
+  return [
+    product.use_case,
+    product.key_attribute,
+    product.description,
+    ...(product.categories ?? []),
+    ...(product.tags ?? []),
+    ...attributes,
+  ]
+    .filter((value): value is string => typeof value === 'string')
+    .join(' ')
+    .toLocaleLowerCase();
+}
+
+function advisorUseCaseMatches(
+  product: Parameters<typeof normalizedProductText>[0],
+  use_case: string,
+): boolean {
+  const requiredTerms = use_case.toLocaleLowerCase().split(/\s+/).filter((term) => term.length > 0);
+  const searchable = normalizedProductText(product);
+  return requiredTerms.length > 0 && requiredTerms.every((term) => searchable.includes(term));
+}
 
 
 function eventText(event: CustomerEventTimeline['items'][number]): string {
@@ -97,6 +129,7 @@ export async function handleSearchProduct(
   }
 
   const catalog = await readCatalogFromSor(options, tenant_id);
+  const advisorRequirements = options.advisor_state?.requirementsFor(tenant_id, invocation.context.correlation_id);
   const matched = catalog.items
     .filter((product) => {
       if (
@@ -106,19 +139,33 @@ export async function handleSearchProduct(
       ) {
         return false;
       }
+      if (advisorRequirements !== undefined && !advisorUseCaseMatches(product, advisorRequirements.use_case)) {
+        return false;
+      }
       const searchable = [
         productSku(product),
         productName(product),
-        product.description,
-        ...(product.categories ?? []),
-        ...(product.tags ?? []),
+        normalizedProductText(product),
       ]
         .filter((value): value is string => typeof value === 'string')
         .join(' ')
         .toLocaleLowerCase();
       return searchable.includes(query);
     })
-    .sort((left, right) => (productSku(left) ?? '').localeCompare(productSku(right) ?? ''));
+    .sort((left, right) => {
+      if (advisorRequirements !== undefined) {
+        const requiredUseCase = advisorRequirements.use_case;
+        const leftUseCase = left.use_case?.trim().toLocaleLowerCase();
+        const rightUseCase = right.use_case?.trim().toLocaleLowerCase();
+        const leftAffinity = leftUseCase === requiredUseCase ? 2 : 1;
+        const rightAffinity = rightUseCase === requiredUseCase ? 2 : 1;
+        if (leftAffinity !== rightAffinity) return rightAffinity - leftAffinity;
+        const leftPrice = productListPrice(left) ?? Number.POSITIVE_INFINITY;
+        const rightPrice = productListPrice(right) ?? Number.POSITIVE_INFINITY;
+        if (leftPrice !== rightPrice) return leftPrice - rightPrice;
+      }
+      return (productSku(left) ?? '').localeCompare(productSku(right) ?? '');
+    });
 
   const products: Array<Record<string, unknown>> = [];
   for (const product of matched.slice(0, limit)) {
@@ -140,22 +187,35 @@ export async function handleSearchProduct(
         'Authoritative catalog record is incomplete or invalid',
       );
     }
+    if (advisorRequirements !== undefined && list_price > advisorRequirements.budget_vnd) {
+      continue;
+    }
 
     const inventory = await readInventoryFromSor(options, tenant_id, sku);
+    const available = inventory.item.total_available_to_promise ?? 0;
+    if (advisorRequirements !== undefined && available <= 0) {
+      continue;
+    }
+    if (advisorRequirements !== undefined && products.length === 0) {
+      // The advisor chain's first ranked candidate is the SKU whose stock and quote the later steps
+      // verify; recording it here keeps the recommendation bound to this run's own evidence.
+      options.advisor_state?.recordCandidateSku(tenant_id, invocation.context.correlation_id, sku);
+    }
     products.push({
       product_id,
       sku,
       name,
       list_price,
       currency: product.currency,
-      in_stock: inventory.item.total_available_to_promise! > 0,
+      in_stock: available > 0,
     });
   }
 
   return {
     products,
-    total_found: matched.length,
+    total_found: products.length,
   };
+
 }
 
 export async function handleCheckStock(
@@ -173,6 +233,7 @@ export async function handleCheckStock(
 
   const inventory = await readInventoryFromSor(options, tenant_id, input.sku_id);
   const available_quantity = inventory.item.total_available_to_promise!;
+  options.advisor_state?.recordStock(tenant_id, invocation.context.correlation_id, input.sku_id, available_quantity);
   return {
     sku_id: input.sku_id,
     available_quantity,
@@ -291,6 +352,16 @@ export async function handleRecommendProduct(
   }
 
   const catalog = await readCatalogFromSor(options, tenant_id);
+  const advisorRequirements = options.advisor_state?.requirementsFor(tenant_id, correlation_id);
+  const advisorSku = advisorRequirements === undefined
+    ? undefined
+    : options.advisor_state?.candidateSkuFor(tenant_id, correlation_id);
+  if (advisorRequirements !== undefined && (advisorSku === undefined || advisorSku.trim().length === 0)) {
+    throw new SalesSkillToolError(
+      'EVIDENCE_REQUIRED',
+      'Advisor recommendation requires the SKU selected by this run’s verified catalog search',
+    );
+  }
   const cartSkus = new Set(input.current_cart_skus);
   const eventTextValue = timeline?.items.map(eventText).join(' ') ?? '';
   const candidates = catalog.items
@@ -300,6 +371,7 @@ export async function handleRecommendProduct(
         isActiveProduct(product)
         && product.tenant_id === tenant_id
         && sku !== undefined
+        && (advisorSku === undefined || sku === advisorSku)
         && !cartSkus.has(sku)
       );
     })
@@ -319,6 +391,9 @@ export async function handleRecommendProduct(
       || currency === undefined
       || currency.length === 0
     ) {
+      continue;
+    }
+    if (advisorRequirements !== undefined && list_price > advisorRequirements.budget_vnd) {
       continue;
     }
 
@@ -406,7 +481,7 @@ export async function handleCheckPrice(
   options: SalesSkillToolPortOptions,
   invocation: SkillToolInvocation<CheckPriceInput>,
 ): Promise<Record<string, unknown>> {
-  const { tenant_id } = invocation.context;
+  const { tenant_id, correlation_id } = invocation.context;
   const input = invocation.input;
 
   if (input.tenant_id !== tenant_id) {
@@ -414,6 +489,34 @@ export async function handleCheckPrice(
       'IDENTITY_UNVERIFIED',
       'Check price request tenant does not match the server-bound tenant',
     );
+  }
+
+  const advisorRequirements = options.advisor_state?.requirementsFor(tenant_id, correlation_id);
+  if (advisorRequirements !== undefined) {
+    const verifiedCustomer = await options.context.verifiedCustomerFor(tenant_id, correlation_id);
+    if (
+      verifiedCustomer === null
+      || verifiedCustomer.tenant_id !== tenant_id
+      || verifiedCustomer.customer_id !== input.customer_id
+    ) {
+      throw new SalesSkillToolError(
+        'IDENTITY_UNVERIFIED',
+        'Price quote requires the server-verified customer for this session',
+      );
+    }
+    if (verifiedCustomer.consent_marketing !== true || verifiedCustomer.suppression_active) {
+      throw new SalesSkillToolError(
+        'CONSENT_REQUIRED',
+        'Price quote is unavailable without current customer consent',
+      );
+    }
+    const available = options.advisor_state?.stockFor(tenant_id, correlation_id, input.sku_id);
+    if (available === undefined || available <= 0) {
+      throw new SalesSkillToolError(
+        'OUT_OF_STOCK',
+        `Price quote requires a successful in-stock check for SKU ${input.sku_id}`,
+      );
+    }
   }
 
   const priceFloorPort = options.price_floor;
@@ -489,6 +592,12 @@ export async function handleCheckPrice(
     );
   }
 
+  if (advisorRequirements !== undefined && decision.list_price > advisorRequirements.budget_vnd) {
+    throw new SalesSkillToolError(
+      'BUDGET_EXCEEDED',
+      `Verified API-001 price exceeds the server-stamped budget for SKU ${input.sku_id}`,
+    );
+  }
   const clock = options.now ?? (() => new Date());
   const quote_expires_at = new Date(clock().getTime() + decision.quote_ttl_seconds * 1000).toISOString();
 

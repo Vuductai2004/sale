@@ -237,6 +237,9 @@ describe('PILOT-01 through the shared P2 runtime', () => {
           now: () => new Date('2026-03-01T09:00:00.000Z'),
           resolve_grant: async () => 'AUTH-3',
           resolve_correlation_id: async () => PILOT_01_CORRELATION_ID,
+          // A supplied repository double keeps the composition from installing durable
+          // PostgreSQL-backed stage/response defaults this unit test never exercises.
+          workflowRepository: workflowRepository as unknown as DurableWorkflowRepository,
           workflowEngine,
           evidenceLogger,
           auditTrail,

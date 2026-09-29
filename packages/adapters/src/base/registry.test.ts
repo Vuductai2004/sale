@@ -298,6 +298,32 @@ describe('Api001ErpConnector', () => {
     expect(result.observed_at).toBe('2026-09-22T01:02:03.000Z');
   });
 
+  it('maps price keys to the API-001 tenant-scoped price lookup DTO', async () => {
+    const { transport, calls } = createTransportDouble([
+      {
+        ok: true,
+        status: 200,
+        body: {
+          snapshot_at: '2026-09-22T01:02:03.000Z',
+          tenant_id: 'tenant-fixture',
+          sku_id: 'SKU-1',
+          list_price: 100,
+        },
+      },
+    ]);
+    const connector = new Api001ErpConnector({ transport, authority: createAuthorityDouble(true).authority });
+
+    await connector.read({ tenant_id: 'tenant-fixture', resource: 'prices', key: 'SKU-1' });
+
+    expect(calls).toEqual([
+      {
+        method: 'POST',
+        path: '/api/v1/prices/lookup',
+        body: { tenant_id: 'tenant-fixture', sku_id: 'SKU-1' },
+      },
+    ]);
+  });
+
   it('refuses a dispatch with no server-side authority without touching the transport', async () => {
     const { transport, calls } = createTransportDouble([
       { ok: true, status: 200, body: { document_number: 'SO-1001' } },

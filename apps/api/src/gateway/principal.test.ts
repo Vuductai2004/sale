@@ -302,11 +302,24 @@ describe('authenticate', () => {
     const response = await app.inject({
       method: 'POST',
       url: '/api/v1/probe',
-      headers: bearer(WIDGET_TOKEN),
+      headers: { ...bearer(WIDGET_TOKEN), origin: WIDGET.origin },
     });
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ kind: 'WIDGET_SESSION', tenant_id: TENANT_A });
+    await app.close();
+  });
+
+  it('refuses widget credentials from absent or different origins', async () => {
+    const app = createApp(testCredentials(), createTestRuntime());
+    for (const origin of [undefined, 'https://other.example.test']) {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/api/v1/probe',
+        headers: { ...bearer(WIDGET_TOKEN), ...(origin === undefined ? {} : { origin }) },
+      });
+      expect(response.statusCode).toBe(401);
+    }
     await app.close();
   });
 });

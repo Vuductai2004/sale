@@ -24,6 +24,9 @@ import type {
   IContextAggregator,
   IEffectGuard,
   IPolicyEngine,
+  IResponseFinalizer,
+  IRunResponseStore,
+  IRunStageRecorder,
   IStatefulWorkflowEngine,
   PlatformAgentId,
   RoutingDecision,
@@ -39,6 +42,7 @@ import type {
   IAuditTrail,
   ICrossDomainHandoffBroker,
   IEvidenceLogger,
+  IPlanInputResolver,
   ISessionControl,
 } from '@agentos/core-engine/contracts';
 import {
@@ -48,16 +52,24 @@ import {
   DurableWorkflowRepository,
   EffectReservationRepository,
   EvidenceRepository,
+  RunResponseRepository,
+  RunStageEventsRepository,
   getProfile as dbGetProfile,
   type CustomerProfileRow,
 } from '@agentos/database';
 
 import {
   createDurableAdapters,
+  DEFAULT_PLAN_INPUT_RESOLVER,
   type DurableAdapters,
 } from '../shared/adapters.js';
-import { createPolicyAuditSink } from '../shared/policy-audit.js';
+import {
+  createResponseFinalizer,
+  createRunResponseStore,
+} from '../shared/response.js';
+import { DurableRunStageRecorder } from '../shared/stage-recorder.js';
 import { DomainPolicyEngine } from '../shared/policy-engine.js';
+import { createPolicyAuditSink } from '../shared/policy-audit.js';
 import {
   defaultResolveCorrelationId,
   defaultResolveGrant,
@@ -67,6 +79,7 @@ import {
   type MarketingSkillOptions,
   type MarketingSkillServices,
 } from './skills/index.js';
+import { createMarketingKnowledgePort } from './knowledge-adapter.js';
 
 const MARKETING_AGENT_BY_SKILL: Readonly<Record<string, PlatformAgentId>> = Object.freeze({
   'skill.mkt.analyze_market_signal': 'MKT-01',
@@ -139,6 +152,164 @@ function skillId(signal: SignalEnvelope): string {
   }
   return value;
 }
+function isCampaignRequest(signal: SignalEnvelope): boolean {
+  const payload = asRecord(signal.payload['input']) ?? signal.payload;
+  if (typeof payload['objective'] !== 'string') return false;
+  return signal.event_type === 'campaign.requested' || payload['module'] === 'marketing';
+}
+
+interface NormalizedCampaignRequest {
+  readonly campaign_id: string;
+  readonly segment_id: string;
+  readonly objective: 'reactivation';
+  readonly min_days_inactive: number;
+  readonly instruction: string;
+}
+
+function normalizedCampaignRequest(signal: SignalEnvelope, tenant_id: string): NormalizedCampaignRequest {
+  const raw = signalInput(signal, tenant_id);
+  const objective = raw['objective'];
+  if (objective !== 'reactivation' && objective !== 'winback') {
+    throw new OrchestratorError(
+      'MARKETING_CAMPAIGN_INVALID',
+      'campaign.requested objective must be reactivation or its server-normalized winback alias',
+    );
+  }
+  const segment_id = raw['segment_id'];
+  if (typeof segment_id !== 'string' || !/^inactive_[1-9][0-9]*d$/.test(segment_id)) {
+    throw new OrchestratorError(
+      'MARKETING_CAMPAIGN_INVALID',
+      'campaign.requested segment_id must be a server-normalized inactive_Nd segment',
+    );
+  }
+  const parsedDays = Number(segment_id.slice('inactive_'.length, -1));
+  const rawDays = raw['min_days_inactive'];
+  const min_days_inactive = rawDays === undefined ? parsedDays : rawDays;
+  if (
+    typeof min_days_inactive !== 'number'
+    || !Number.isSafeInteger(min_days_inactive)
+    || min_days_inactive !== parsedDays
+    || min_days_inactive < 1
+  ) {
+    throw new OrchestratorError(
+      'MARKETING_CAMPAIGN_INVALID',
+      'campaign.requested inactivity threshold is not bound to its segment identifier',
+    );
+  }
+  const instruction = raw['instruction'];
+  if (instruction !== undefined && (typeof instruction !== 'string' || instruction.trim().length === 0 || instruction.length > 500)) {
+    throw new OrchestratorError(
+      'MARKETING_CAMPAIGN_INVALID',
+      'campaign.requested instruction must be a bounded non-empty string when supplied',
+    );
+  }
+  const campaign_id = raw['campaign_id'];
+  return {
+    campaign_id: typeof campaign_id === 'string' && campaign_id.trim().length > 0
+      ? campaign_id
+      : `campaign-${signal.signal_id}`,
+    segment_id,
+    objective: 'reactivation',
+    min_days_inactive,
+    instruction: typeof instruction === 'string'
+      ? instruction.trim()
+      : `NovaMart ${min_days_inactive}-day customer reactivation`,
+  };
+}
+
+function campaignPlan(
+  signal: SignalEnvelope,
+  context: HydratedContext,
+): ExecutionPlan {
+  const campaign = normalizedCampaignRequest(signal, context.tenant_id);
+  const channel = 'EMAIL_HTML' as const;
+  const dispatchChannel = 'EMAIL' as const;
+  return {
+    plan_id: 'plan_' + signal.signal_id,
+    steps: [
+      {
+        step_index: 1,
+        agent_id: 'MKT-02',
+        skill_id: 'skill.mkt.segment_audience',
+        adapter_target: 'PostgreSQL.Customer360Store',
+        input_parameters: {
+          tenant_id: context.tenant_id,
+          rfm_criteria: 'HIBERNATING',
+          min_days_inactive: campaign.min_days_inactive,
+          // Demo policy cap: the tenant's reactivation audience never exceeds 100 customers.
+          max_segment_size: 100,
+        },
+        required_authority: 'AUTH-1',
+        mutating: false,
+        price_bearing: false,
+        idempotent: true,
+        timeout_ms: MARKETING_TIMEOUT_MS['skill.mkt.segment_audience']!,
+      },
+      {
+        step_index: 2,
+        agent_id: 'MKT-03',
+        skill_id: 'skill.mkt.generate_content',
+        adapter_target: 'Core.LLMContentEngine',
+        input_parameters: {
+          tenant_id: context.tenant_id,
+          campaign_theme: campaign.instruction,
+          channel,
+          locale: 'vi-VN',
+        },
+        required_authority: 'AUTH-2',
+        mutating: false,
+        price_bearing: false,
+        idempotent: true,
+        timeout_ms: MARKETING_TIMEOUT_MS['skill.mkt.generate_content']!,
+        depends_on_steps: [1],
+      },
+      {
+        step_index: 3,
+        agent_id: 'MKT-04',
+        skill_id: 'skill.mkt.audit_brand_compliance',
+        adapter_target: 'SecondBrain.BrandGuard',
+        input_parameters: {
+          tenant_id: context.tenant_id,
+          draft_text: '',
+          channel,
+        },
+        required_authority: 'AUTH-1',
+        mutating: false,
+        price_bearing: false,
+        idempotent: true,
+        timeout_ms: MARKETING_TIMEOUT_MS['skill.mkt.audit_brand_compliance']!,
+        depends_on_steps: [2],
+        input_bindings: {
+          draft_text: { source_step_index: 2, response_path: 'body_content' },
+        },
+      },
+      {
+        step_index: 4,
+        agent_id: 'MKT-05',
+        skill_id: 'skill.mkt.dispatch_campaign',
+        adapter_target: 'API-003.CommunicationConnector',
+        input_parameters: {
+          tenant_id: context.tenant_id,
+          campaign_id: campaign.campaign_id,
+          segment_id: '',
+          channel: dispatchChannel,
+          approved_content_id: '',
+        },
+        required_authority: 'AUTH-4',
+        mutating: true,
+        price_bearing: false,
+        idempotent: false,
+        timeout_ms: MARKETING_TIMEOUT_MS['skill.mkt.dispatch_campaign']!,
+        depends_on_steps: [1, 2, 3],
+        input_bindings: {
+          segment_id: { source_step_index: 1, response_path: 'segment_id' },
+          approved_content_id: { source_step_index: 2, response_path: 'draft_id' },
+        },
+      },
+    ],
+    fallback_strategy: 'FAIL_CLOSED',
+  };
+}
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -204,7 +375,7 @@ class MarketingAgentRuntime implements IAgentRuntime {
   constructor(private readonly journeyEntry: boolean = false) {}
 
   async deriveHypothesis(signal: SignalEnvelope, _context: HydratedContext): Promise<HypothesisRecord> {
-    const id = skillId(signal);
+    const id = isCampaignRequest(signal) ? 'campaign.requested' : skillId(signal);
     this.signals.set(signal.signal_id, signal);
     return {
       classification: 'HYPOTHESIS',
@@ -212,7 +383,9 @@ class MarketingAgentRuntime implements IAgentRuntime {
       confidence: 1,
       churn_risk_score: 0,
       purchase_propensity: 0,
-      reasoning: 'Marketing routing is selected from the server-validated canonical skill id.',
+      reasoning: isCampaignRequest(signal)
+        ? 'Server-normalized campaign request enters the fixed segment/content/brand/approval plan.'
+        : 'Marketing routing is selected from the server-validated canonical skill id.',
       derived_from_signals: [signal.signal_id],
     };
   }
@@ -222,6 +395,13 @@ class MarketingAgentRuntime implements IAgentRuntime {
     _context: HydratedContext,
     _hypothesis: HypothesisRecord,
   ): Promise<RoutingDecision> {
+    if (isCampaignRequest(signal)) {
+      return {
+        target_agent: 'MKT-02',
+        requires_clarification: false,
+        rationalization: 'Server-normalized campaign request enters the fixed Marketing campaign plan.',
+      };
+    }
     const id = skillId(signal);
     return {
       target_agent: MARKETING_AGENT_BY_SKILL[id]!,
@@ -241,6 +421,9 @@ class MarketingAgentRuntime implements IAgentRuntime {
       throw new OrchestratorError('MARKETING_SIGNAL_CONTEXT_LOST', 'signal was not retained across shared planning stages');
     }
     this.signals.delete(signal.signal_id);
+    if (isCampaignRequest(signal)) {
+      return campaignPlan(signal, context);
+    }
     const id = skillId(signal);
     const agent_id = MARKETING_AGENT_BY_SKILL[id]!;
     const input_parameters = signalInput(signal, context.tenant_id);
@@ -472,6 +655,13 @@ export interface MarketingOrchestratorFactoryOptions {
   readonly autonomy?: AutonomyAdmissionPort;
   readonly workflowEngine?: IStatefulWorkflowEngine;
   readonly evidenceLogger?: IEvidenceLogger;
+  /** Optional override for the canonical receipt-binding resolver. */
+  readonly planInputResolver?: IPlanInputResolver;
+  readonly responseFinalizer?: IResponseFinalizer;
+  readonly responseStore?: IRunResponseStore;
+  /** Durable response repository; when supplied, grounded defaults are installed. */
+  readonly runResponseRepository?: RunResponseRepository;
+  readonly runStageRecorder?: IRunStageRecorder;
   readonly auditTrail?: IAuditTrail;
   readonly sessionControl?: ISessionControl;
   readonly leaseManager?: DurableLeaseManager;
@@ -485,6 +675,19 @@ export interface MarketingOrchestratorFactoryOptions {
   readonly adapterDispatcher?: IAdapterDispatcher;
   readonly skillServices?: MarketingSkillServices;
   readonly skillOptions?: Partial<MarketingSkillOptions>;
+  readonly knowledge_root_dir?: string;
+  /** Alias retained for callers that name the configured root `knowledge_root`. */
+  readonly knowledge_root?: string;
+  readonly knowledge_tenant_ids?: readonly string[];
+  readonly knowledge_tenant_id?: string;
+  /**
+   * Optional tenant-bound skill adapter factory. The callback is invoked with the orchestrator's
+   * server-resolved tenant and may return the seven connector ports plus the aggregate consent
+   * guard. No provider or tenant is inferred when it is absent.
+   */
+  readonly tenantSkillOptions?: (
+    tenant_id: string,
+  ) => Partial<MarketingSkillOptions> | Promise<Partial<MarketingSkillOptions>>;
   readonly adapters?: DurableAdapters;
   readonly workflowRepository?: DurableWorkflowRepository;
   readonly approvalRepository?: ApprovalRepository;
@@ -513,9 +716,17 @@ export function createMarketingOrchestratorFactory(
   }
 
   const now = options.now ?? (() => new Date());
+  const ownsDurableWorkflow = options.workflowRepository === undefined
+    || options.workflowRepository instanceof DurableWorkflowRepository;
+  const runResponseRepository = ownsDurableWorkflow ? options.runResponseRepository ?? new RunResponseRepository() : options.runResponseRepository;
+  const responseFinalizer = options.responseFinalizer ?? (ownsDurableWorkflow ? createResponseFinalizer(now) : undefined);
+  const responseStore = options.responseStore ?? (runResponseRepository === undefined ? undefined : createRunResponseStore(runResponseRepository));
+  const runStageRecorder = options.runStageRecorder ?? (ownsDurableWorkflow ? new DurableRunStageRecorder(new RunStageEventsRepository()) : undefined);
+
   const workflowRepository = options.workflowRepository ?? new DurableWorkflowRepository();
   let workflowEngine = options.workflowEngine ?? options.adapters?.workflowEngine;
   let evidenceLogger = options.evidenceLogger ?? options.adapters?.evidenceLogger;
+  let planInputResolver = options.planInputResolver ?? options.adapters?.planInputResolver;
   let auditTrail = options.auditTrail ?? options.adapters?.auditTrail;
   let sessionControl = options.sessionControl ?? options.adapters?.sessionControl;
   let leaseManager = options.leaseManager ?? options.adapters?.leaseManager;
@@ -528,30 +739,52 @@ export function createMarketingOrchestratorFactory(
       auditRepository: options.auditRepository ?? new AuditRepository(),
       conversationRepository: options.conversationRepository ?? new ConversationRepository(),
       auditSecret,
+      ...(options.planInputResolver === undefined ? {} : { planInputResolver: options.planInputResolver }),
       now,
     });
     workflowEngine ??= durable.workflowEngine;
     evidenceLogger ??= durable.evidenceLogger;
+    planInputResolver ??= durable.planInputResolver;
     auditTrail ??= durable.auditTrail;
     sessionControl ??= durable.sessionControl;
     leaseManager ??= durable.leaseManager;
   }
 
+  planInputResolver ??= DEFAULT_PLAN_INPUT_RESOLVER;
+
   const effectGuard = options.effectGuard ?? new EffectGuard({
     repository: options.effectReservationRepository ?? new EffectReservationRepository(),
   });
+  const configuredKnowledgeRoot = options.knowledge_root_dir ?? options.knowledge_root;
+  if (
+    options.knowledge_root_dir !== undefined
+    && options.knowledge_root !== undefined
+    && options.knowledge_root_dir !== options.knowledge_root
+  ) {
+    throw new Error('MARKETING_KNOWLEDGE_ROOT_CONFLICT: knowledge_root_dir and knowledge_root differ');
+  }
+  const configuredKnowledge = options.skillOptions?.knowledge;
+  const knowledgePort = configuredKnowledge === undefined
+    && configuredKnowledgeRoot !== undefined
+    && options.skillServices === undefined
+    ? createMarketingKnowledgePort({
+        root_dir: configuredKnowledgeRoot,
+        ...(options.knowledge_tenant_ids === undefined ? {} : { tenant_ids: options.knowledge_tenant_ids }),
+        ...(options.knowledge_tenant_id === undefined ? {} : { tenant_id: options.knowledge_tenant_id }),
+      })
+    : configuredKnowledge;
   const resolveGrant = options.resolve_grant ?? defaultResolveGrant;
   const resolveCorrelationId = options.resolve_correlation_id
-    ?? ((tenant_id, run_id) => defaultResolveCorrelationId(tenant_id, run_id, workflowRepository));
+    ?? ((tenant_id: string, run_id: string) => defaultResolveCorrelationId(tenant_id, run_id, workflowRepository));
 
   const skillOptions: MarketingSkillOptions = {
     ...(options.skillOptions ?? {}),
+    ...(knowledgePort === undefined ? {} : { knowledge: knowledgePort }),
     resolve_correlation_id: resolveCorrelationId,
     resolve_grant: resolveGrant,
     ...(options.now === undefined ? {} : { now }),
   };
   const services = options.skillServices ?? createMarketingSkillServices(skillOptions);
-  const adapterDispatcher = options.adapterDispatcher ?? services.dispatcher;
   const contextAggregator = options.contextAggregator ?? new MarketingContextAggregator();
   const agentRuntime = options.agentRuntime
     ?? new MarketingAgentRuntime(options.crossDomainHandoff !== undefined);
@@ -576,17 +809,28 @@ export function createMarketingOrchestratorFactory(
     if (!workflowEngine || !evidenceLogger || !auditTrail || !sessionControl || !leaseManager) {
       throw new Error('MARKETING_ORCHESTRATOR_UNBOUND: missing shared durable workflow/evidence adapters.');
     }
+    const tenantOptions = options.tenantSkillOptions === undefined
+      ? undefined
+      : await options.tenantSkillOptions(_tenant_id);
+    const tenantServices = options.skillServices === undefined && tenantOptions !== undefined
+      ? createMarketingSkillServices({ ...skillOptions, ...tenantOptions })
+      : services;
+    const tenantAdapterDispatcher = options.adapterDispatcher ?? tenantServices.dispatcher;
     return new RevenueOrchestrator({
       contextAggregator,
       agentRuntime,
       policyEngine,
       workflowEngine,
       evidenceLogger,
+      planInputResolver,
       auditTrail,
-      adapterDispatcher,
+      adapterDispatcher: tenantAdapterDispatcher,
       effectGuard,
       sessionControl,
       leaseManager,
+      ...(responseFinalizer === undefined ? {} : { responseFinalizer }),
+      ...(responseStore === undefined ? {} : { responseStore }),
+      ...(runStageRecorder === undefined ? {} : { runStageRecorder }),
       ...(options.workerId === undefined ? {} : { workerId: options.workerId }),
       ...(options.crossDomainHandoff === undefined
         ? {}

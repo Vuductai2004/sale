@@ -1,6 +1,6 @@
+import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-
 import { listApprovedKnowledge } from '@agentos/core-engine';
 import type { SkillToolInvocation } from '@agentos/skills';
 
@@ -43,6 +43,7 @@ export async function handleFaqEngine<TOutput>(
   }
 
   const corpus = parseFaqMarkdown(rawContent, approvedFaq.path);
+  const source_version = createHash('sha256').update(rawContent).digest('hex');
   if (corpus.entries.length === 0) {
     throw new CareSkillToolError('CORPUS_UNAVAILABLE', 'Approved FAQ file contains no parseable entries');
   }
@@ -69,6 +70,7 @@ export async function handleFaqEngine<TOutput>(
     return {
       answers: [],
       match_confidence: 0,
+      source_version,
     } as TOutput;
   }
 
@@ -79,5 +81,6 @@ export async function handleFaqEngine<TOutput>(
   return {
     answers: topMatches.map((m) => m.faq),
     match_confidence: highestConfidence,
+    source_version,
   } as TOutput;
 }

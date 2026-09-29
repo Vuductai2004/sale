@@ -33,7 +33,11 @@ import type {
   IContextAggregator,
   IEffectGuard,
   IEvidenceLogger,
+  IPlanInputResolver,
   IPolicyEngine,
+  IResponseFinalizer,
+  IRunResponseStore,
+  IRunStageRecorder,
   ISessionControl,
   IStatefulWorkflowEngine,
 } from '@agentos/core-engine/contracts';
@@ -44,6 +48,8 @@ import {
   DurableWorkflowRepository,
   EffectReservationRepository,
   EvidenceRepository,
+  RunResponseRepository,
+  RunStageEventsRepository,
   withTenantContext,
   type TenantTransactionRunner,
 } from '@agentos/database';
@@ -51,7 +57,16 @@ import { DEFAULT_P0_PLATFORM_SKILL_ENABLEMENT } from '@agentos/skills';
 
 import { CareAgentRuntime, type SkillRegistryResolver } from './agent-runtime.js';
 import { CareContextAggregator, type CareContextAggregatorRepositories } from './context-aggregator.js';
-import { createDurableAdapters, type DurableAdapters } from '../shared/adapters.js';
+import {
+  createDurableAdapters,
+  DEFAULT_PLAN_INPUT_RESOLVER,
+  type DurableAdapters,
+} from '../shared/adapters.js';
+import {
+  createResponseFinalizer,
+  createRunResponseStore,
+} from '../shared/response.js';
+import { DurableRunStageRecorder } from '../shared/stage-recorder.js';
 import {
   createPolicyAuditSink,
 } from '../shared/policy-audit.js';
@@ -86,6 +101,13 @@ export interface CareOrchestratorFactoryOptions {
   readonly autonomy?: AutonomyAdmissionPort | undefined;
   readonly workflowEngine?: IStatefulWorkflowEngine | undefined;
   readonly evidenceLogger?: IEvidenceLogger | undefined;
+  /** Optional override for the canonical receipt-binding resolver. */
+  readonly planInputResolver?: IPlanInputResolver | undefined;
+  readonly responseFinalizer?: IResponseFinalizer | undefined;
+  readonly responseStore?: IRunResponseStore | undefined;
+  /** Durable response repository; when supplied, grounded defaults are installed. */
+  readonly runResponseRepository?: RunResponseRepository | undefined;
+  readonly runStageRecorder?: IRunStageRecorder | undefined;
   readonly auditTrail?: IAuditTrail | undefined;
   readonly adapterDispatcher?: IAdapterDispatcher | undefined;
   readonly effectGuard?: IEffectGuard | undefined;
@@ -250,7 +272,14 @@ export function createCareOrchestratorFactory(
 ): (tenant_id: string) => Promise<RevenueOrchestrator> {
   const workerId = options.workerId ?? `care_worker_${randomUUID().slice(0, 8)}`;
   const now = options.now ?? (() => new Date());
-
+  // An injected workflow repository may be an isolated non-PostgreSQL implementation. Do not
+  // attach a separate live-DB response/trace writer to that unrelated task store.
+  const ownsDurableWorkflow = options.workflowRepository === undefined
+    || options.workflowRepository instanceof DurableWorkflowRepository;
+  const runResponseRepository = ownsDurableWorkflow ? options.runResponseRepository ?? new RunResponseRepository() : options.runResponseRepository;
+  const responseFinalizer = options.responseFinalizer ?? (ownsDurableWorkflow ? createResponseFinalizer(now) : undefined);
+  const responseStore = options.responseStore ?? (runResponseRepository === undefined ? undefined : createRunResponseStore(runResponseRepository));
+  const runStageRecorder = options.runStageRecorder ?? (ownsDurableWorkflow ? new DurableRunStageRecorder(new RunStageEventsRepository()) : undefined);
   const auditSecret = options.auditSecret ?? process.env.AUDIT_HMAC_SECRET;
   if (!auditSecret || auditSecret.trim().length === 0) {
     throw new Error('CARE_AUDIT_SECRET_REQUIRED: audit HMAC secret must be provided or configured in AUDIT_HMAC_SECRET environment variable.');
@@ -259,6 +288,7 @@ export function createCareOrchestratorFactory(
   // 1. Adapters from createDurableAdapters if not supplied directly
   let workflowEngine = options.workflowEngine ?? options.adapters?.workflowEngine;
   let evidenceLogger = options.evidenceLogger ?? options.adapters?.evidenceLogger;
+  let planInputResolver = options.planInputResolver ?? options.adapters?.planInputResolver;
   let auditTrail = options.auditTrail ?? options.adapters?.auditTrail;
   let sessionControl = options.sessionControl ?? options.adapters?.sessionControl;
   let leaseManager = options.leaseManager ?? options.adapters?.leaseManager;
@@ -271,15 +301,19 @@ export function createCareOrchestratorFactory(
       auditRepository: options.auditRepository ?? new AuditRepository(),
       conversationRepository: options.conversationRepository ?? new ConversationRepository(),
       auditSecret,
+      ...(options.planInputResolver === undefined ? {} : { planInputResolver: options.planInputResolver }),
       now,
     });
 
     workflowEngine ??= generatedAdapters.workflowEngine;
     evidenceLogger ??= generatedAdapters.evidenceLogger;
+    planInputResolver ??= generatedAdapters.planInputResolver;
     auditTrail ??= generatedAdapters.auditTrail;
     sessionControl ??= generatedAdapters.sessionControl;
     leaseManager ??= generatedAdapters.leaseManager;
   }
+
+  planInputResolver ??= DEFAULT_PLAN_INPUT_RESOLVER;
 
   // 2. EffectGuard over EffectReservationRepository
   const effectGuard: IEffectGuard = options.effectGuard ?? new EffectGuard({
@@ -353,11 +387,15 @@ export function createCareOrchestratorFactory(
       policyEngine,
       workflowEngine,
       evidenceLogger,
+      planInputResolver,
       auditTrail,
       adapterDispatcher,
       effectGuard,
       sessionControl,
       leaseManager,
+      ...(responseFinalizer === undefined ? {} : { responseFinalizer }),
+      ...(responseStore === undefined ? {} : { responseStore }),
+      ...(runStageRecorder === undefined ? {} : { runStageRecorder }),
       workerId,
       ...(options.crossDomainHandoff === undefined
         ? {}

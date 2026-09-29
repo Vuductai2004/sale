@@ -221,6 +221,55 @@ export interface RoutingDecision {
   readonly rationalization: string;
 }
 
+
+/**
+ * One server-authored input substitution. `response_path` is relative to the predecessor
+ * ExecutionReceipt's `response_payload`; it is deliberately a bounded dotted field path, not
+ * JSONPath or executable/model-authored code.
+ */
+export interface PlanInputBinding {
+  readonly source_step_index: number;
+  readonly response_path: string;
+}
+
+/** Destination input field -> one verified predecessor receipt field. */
+export type PlannedStepInputBindings = Readonly<Record<string, PlanInputBinding>>;
+
+/** One source citation exposed with a grounded conversational response. */
+export interface RunResponseSource {
+  readonly source_record_id: string;
+  readonly source_version: string;
+  readonly source_file: string;
+}
+
+/** A response assembled solely from verified, immutable step evidence. */
+export interface FinalResponse {
+  readonly answer: string;
+  readonly sources: readonly RunResponseSource[];
+  readonly model?: string;
+  readonly usage?: Readonly<Record<string, unknown>> | null;
+}
+
+/** Trusted inputs supplied to the response assembler; caller text is intentionally absent. */
+export interface ResponseFinalizationInput {
+  readonly tenant_id: string;
+  readonly run_id: string;
+  readonly conversation_id?: string;
+  readonly domain: string;
+  readonly context: HydratedContext;
+  readonly successful_receipts: readonly VerifiedStepReceipt[];
+}
+
+/** One verified immutable evidence record and the successful adapter receipt it contains. */
+export interface VerifiedStepReceipt {
+  readonly evidence: ImmutableEvidenceRecord;
+  readonly receipt: ExecutionReceipt;
+}
+
+/** Receipt values exposed to an input resolver; evidence identity remains internal to the engine. */
+export type PreviousStepReceipts = Readonly<Record<string, ExecutionReceipt>>;
+
+/** One action in a server-authored execution DAG. */
 export interface PlannedStep {
   readonly step_index: number;
   readonly agent_id: PlatformAgentId;
@@ -238,6 +287,8 @@ export interface PlannedStep {
   readonly timeout_ms: number;
   /** Predecessor step indexes. Absent or empty means the step follows sequential index order. */
   readonly depends_on_steps?: number[];
+  /** Server-authored receipt substitutions applied immediately before this step is drafted. */
+  readonly input_bindings?: PlannedStepInputBindings;
   readonly computed_price_floor?: number;
   readonly floor_source?: string;
   readonly proposed_price?: number;
@@ -322,6 +373,11 @@ export interface ImmutableEvidenceRecord {
   readonly chain_hash: string;     // SHA-256(previous | payload_sha256 | effect_key | step_index)
   readonly signature: string;      // HMAC-SHA256 over chain_hash
   readonly created_at: string;
+  /**
+   * Server-produced receipt projection used by receipt-bound plan inputs. It is present only when
+   * the immutable record was created from a successful ExecutionReceipt; callers never supply it.
+   */
+  readonly receipt?: ExecutionReceipt;
 }
 
 /** SRS §17 / §08 4.1 canonical 18-field Agent Run record. */
@@ -365,6 +421,8 @@ export interface OrchestratorRunResult {
   readonly lifecycle_state: TaskLifecycleState;
   readonly evidence?: ImmutableEvidenceRecord;
   readonly message?: string;
+  /** Grounded response persisted before a conversational run is marked completed. */
+  readonly response?: FinalResponse;
   /**
    * The brokered handoff this run produced, when its plan declared one and the durable admission
    * completed (implement/04 §8). Absent for a run that completes without a next leg — and never
@@ -401,6 +459,12 @@ export interface DurableTaskCheckpoint {
   readonly context: HydratedContext;
   readonly previous_evidence_hash: string;
   readonly request_id: string;
+  /**
+   * The admitted signal the run was queued with. The orchestrator writes it into the checkpoint so a
+   * resumed or recovered run replays the exact signal it was admitted for; a queued task refuses to
+   * start when the provided signal does not match this stored one.
+   */
+  readonly signal?: SignalEnvelope;
 }
 
 /* ------------------------------------------------------------------------------------------------
@@ -617,6 +681,11 @@ export interface DurableTaskSnapshot {
   readonly state: TaskLifecycleState;
   readonly correlation_id: string;
   readonly state_payload: unknown;
+  /**
+   * Number of durable retries already consumed. Older in-memory/test bindings may omit this;
+   * callers treat an omitted counter as zero while database-backed tasks always provide it.
+   */
+  readonly retry_count?: number;
   readonly lease_owner?: string | null;
   readonly lease_expires_at?: string | null;
 }
@@ -727,6 +796,12 @@ export interface IEvidenceLogger {
     payload: Record<string, unknown>;
   }): Promise<ImmutableEvidenceRecord>;
   findImmutableRecord?(params: { tenant_id: string; run_id: string; effect_key: string; step_index: number }): Promise<ImmutableEvidenceRecord | null>;
+  /** Durable lookup used when action_revision is not inferable from a planned step. */
+  findImmutableRecordByStep?(params: {
+    tenant_id: string;
+    run_id: string;
+    step_index: number;
+  }): Promise<ImmutableEvidenceRecord | null>;
   initializeOutcomeWatch(params: { tenant_id: string; run_id: string; effect_key: string; skill_id: string }): Promise<void>;
   logAgentRun(runLog: AgentRunLogRecord): Promise<void>;
 }

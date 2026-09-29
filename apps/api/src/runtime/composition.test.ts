@@ -62,4 +62,19 @@ describe('createGatewayComposition', () => {
 
     await composition.close();
   });
+  it('reports an unbound provider without inventing an empty model or ledger counts', async () => {
+    const composition = createGatewayComposition({
+      ...ENV,
+      APP_ENV: 'local',
+      DEMO_MODE: 'true',
+      DEMO_TENANT_OPERATOR_PASSWORD: 'tenant-password',
+      DEMO_MARKETING_APPROVER_PASSWORD: 'marketing-password',
+      DEMO_PLATFORM_ADMIN_PASSWORD: 'platform-password',
+    });
+    const snapshot = await composition.readiness.snapshot({ tenant_id: '99999999-9999-4999-8999-999999999999' });
+    expect(snapshot.provider.configured).toBe(false);
+    expect(snapshot.provider.models).toEqual([]);
+    expect(snapshot.ledger).toEqual({ status: 'UNAVAILABLE', stage_event_count: null, provider_call_count: null });
+    await composition.close();
+  });
 });

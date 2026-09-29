@@ -186,6 +186,7 @@ export class MemoryWorkflowEngine implements IStatefulWorkflowEngine {
     state: TaskLifecycleState;
     correlation_id: string;
     state_payload: DurableTaskCheckpoint | null;
+    retry_count: number;
   } | null> {
     const row = this.lookupTask(tenant_id, run_id);
     if (row === undefined) {
@@ -196,6 +197,7 @@ export class MemoryWorkflowEngine implements IStatefulWorkflowEngine {
       state: row.state,
       correlation_id: row.correlation_id,
       state_payload: row.state_payload,
+      retry_count: row.retry_count,
     };
   }
 

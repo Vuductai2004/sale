@@ -148,6 +148,44 @@ async function waitForTurnReceipt(input: {
   fail('RUN_LEASE_HELD', 'another delivery still owns this turn; retry after its durable receipt is settled');
 }
 
+import { salesRequirementsFor } from './turn-classifier.js';
+import type { TurnIntentPort } from '../../runtime/bindings/turn-intent.js';
+
+/**
+ * Provider failures raised while proposing a Care intent, mapped onto the gateway's own vocabulary.
+ * The proposal is a live provider call, so its failure is reported as what it is — an upstream
+ * refusal or timeout — instead of a generic server fault the caller cannot act on.
+ */
+const PROVIDER_FAILURE_CODES: Record<string, {
+  readonly code: 'PROVIDER_REJECTED' | 'PROVIDER_TIMEOUT' | 'RATE_LIMITED';
+  readonly message: string;
+}> = {
+  LLM_AUTH_FAILED: { code: 'PROVIDER_REJECTED', message: 'the intent provider rejected the platform credential' },
+  LLM_INVALID_RESPONSE: { code: 'PROVIDER_REJECTED', message: 'the intent provider returned an unusable response' },
+  LLM_RATE_LIMITED: { code: 'RATE_LIMITED', message: 'the intent provider rate-limited this turn' },
+  LLM_TIMEOUT: { code: 'PROVIDER_TIMEOUT', message: 'the intent provider did not answer before the deadline' },
+  LLM_CANCELLED: { code: 'PROVIDER_TIMEOUT', message: 'the intent provider call was cancelled' },
+  LLM_UNAVAILABLE: { code: 'PROVIDER_TIMEOUT', message: 'the intent provider is currently unreachable' },
+};
+
+/** Proposes the Care intent, refusing truthfully when the provider cannot answer. */
+async function proposeCareIntent(
+  proposer: TurnIntentPort,
+  message: string,
+  correlation_id: string,
+) {
+  try {
+    return await proposer.propose({ message, correlation_id });
+  } catch (error) {
+    const code = typeof error === 'object' && error !== null
+      ? (error as { readonly code?: unknown }).code
+      : undefined;
+    const mapped = typeof code === 'string' ? PROVIDER_FAILURE_CODES[code] : undefined;
+    if (mapped === undefined) throw error;
+    return fail(mapped.code, `${mapped.message}; the turn is refused rather than answered from an unvalidated classification`);
+  }
+}
+
 export async function admitCareTurn(input: {
   readonly runtime: GatewayRuntime;
   readonly principal: GatewayPrincipal;
@@ -159,6 +197,7 @@ export async function admitCareTurn(input: {
   readonly event_type?: string;
   readonly attachments?: readonly string[];
   readonly operation: string;
+  readonly intentProposer?: TurnIntentPort;
 }): Promise<CareTurnAdmission> {
   const { runtime, principal, conversation } = input;
   const tenant_id = principal.tenant_id;
@@ -215,6 +254,11 @@ export async function admitCareTurn(input: {
     };
   }
 
+  const careProposal = input.module === 'support' && input.intentProposer !== undefined
+    ? await proposeCareIntent(input.intentProposer, input.message, input.correlation_id)
+    : undefined;
+  const salesRequirements = input.module === 'sales' ? salesRequirementsFor(input.message) : undefined;
+
   const session_id = principal.session_id ?? conversation.external_thread_id;
   const started = await runtime.runs.start({
     tenant_id,
@@ -231,6 +275,15 @@ export async function admitCareTurn(input: {
       conversation_id,
       module: input.module,
       ...(input.attachments === undefined ? {} : { attachments: [...input.attachments] }),
+      ...(careProposal === undefined ? {} : {
+        care_intent: careProposal.intent,
+        care_requirements: careProposal.requirements,
+      }),
+      ...(salesRequirements === undefined ? {} : {
+        sales_proposal_source: 'API_GATEWAY',
+        sales_intent: 'advisor',
+        sales_requirements: salesRequirements,
+      }),
     },
   });
 

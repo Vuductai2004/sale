@@ -7,6 +7,7 @@
 'use client';
 
 import React, { Suspense, useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { ApiError, getSharedUiStateBadgeClass, SHARED_UI_STATE_LABELS } from '@agentos/ui-foundation';
 import type { SharedUiState } from '@agentos/ui-foundation';
@@ -174,6 +175,26 @@ function ExecutiveDashboardContent() {
           </button>
         </div>
       </div>
+      <nav aria-label="Demo workspace" className="mt-5 flex flex-wrap gap-2">
+        <Link
+          href="/demo/operations"
+          className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-300 transition hover:border-sky-500 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+        >
+          Conversation operations
+        </Link>
+        <Link
+          href="/demo/campaigns"
+          className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-300 transition hover:border-sky-500 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+        >
+          Campaign drafts
+        </Link>
+        <Link
+          href="/demo/trace"
+          className="rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-semibold text-slate-300 transition hover:border-sky-500 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500"
+        >
+          Run trace
+        </Link>
+      </nav>
 
       {/* Operational Warnings / Explicit Error Banners */}
       {errorMessage && (

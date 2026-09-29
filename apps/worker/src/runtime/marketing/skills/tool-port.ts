@@ -1,5 +1,11 @@
 import type { SkillToolInvocation, SkillToolPort } from '@agentos/skills';
 
+import { MARKETING_APPROVED_DOCUMENT_ALLOWLIST } from '../knowledge-adapter.js';
+import {
+  auditMarketingBrand,
+  generateMarketingContent,
+} from '../content.js';
+
 import type {
   InputMktAnalyzeSignal,
   InputMktAuditBrand,
@@ -8,8 +14,10 @@ import type {
   InputMktEvaluateAttribution,
   InputMktGenerateContent,
   InputMktSegmentAudience,
+  MarketingKnowledgePort,
   MarketingSkillToolPortOptions,
 } from './types.js';
+import type { MarketingKnowledgeDocument } from '../contracts.js';
 
 /**
  * Error thrown by the Marketing skill tool port.
@@ -26,6 +34,15 @@ export class MarketingSkillToolError extends Error {
   }
 }
 
+async function readApprovedMarketingDocuments(
+  knowledge: MarketingKnowledgePort,
+  tenant_id: string,
+): Promise<readonly MarketingKnowledgeDocument[]> {
+  return Promise.all(
+    MARKETING_APPROVED_DOCUMENT_ALLOWLIST.map((path) => knowledge.readApproved(tenant_id, path)),
+  );
+}
+
 /**
  * Creates the unified SkillToolPort for Marketing skills.
  * Routes each skill_id and tool_binding to its injected port, failing closed
@@ -34,6 +51,28 @@ export class MarketingSkillToolError extends Error {
 export function createMarketingSkillToolPort(
   options: MarketingSkillToolPortOptions,
 ): SkillToolPort {
+  const knowledgeBackedContentEngine = options.knowledge
+    ? {
+        async generateContent(input: InputMktGenerateContent) {
+          const docs = await readApprovedMarketingDocuments(options.knowledge!, input.tenant_id);
+          return generateMarketingContent(input, docs);
+        },
+      }
+    : null;
+  const knowledgeBackedBrandGuard = options.knowledge
+    ? {
+        async auditBrandCompliance(input: InputMktAuditBrand) {
+          const docs = await readApprovedMarketingDocuments(options.knowledge!, input.tenant_id);
+          const result = auditMarketingBrand(input, docs);
+          return {
+            ...result,
+            violations: [...result.violations],
+          };
+        },
+      }
+    : null;
+  const contentEngine = options.content_engine ?? knowledgeBackedContentEngine;
+  const brandGuard = options.brand_guard ?? knowledgeBackedBrandGuard;
   return {
     async invoke<TInput, TOutput>(invocation: SkillToolInvocation<TInput>): Promise<TOutput> {
       const { skill_id, tool_binding, input, context } = invocation;
@@ -77,6 +116,27 @@ export function createMarketingSkillToolPort(
         skill_id === 'skill.mkt.check_consent' &&
         tool_binding === 'API-002.ConsentStore'
       ) {
+        const typedConsentInput = input as unknown as InputMktCheckConsent;
+        const segmentId = typedConsentInput.customer_id;
+        if (
+          typeof segmentId === 'string'
+          && /^inactive[_-][1-9][0-9]*d$/.test(segmentId)
+        ) {
+          if (!options.audience_consent) {
+            throw new MarketingSkillToolError(
+              'CONSENT_AGGREGATE_PORT_UNAVAILABLE',
+              'Tenant-scoped aggregate consent guard is required for campaign segments; no customer identity is assumed',
+            );
+          }
+          return (await options.audience_consent.checkAudienceConsent(
+            {
+              tenant_id: typedConsentInput.tenant_id,
+              segment_id: segmentId,
+              channel: typedConsentInput.channel,
+            },
+            context,
+          )) as TOutput;
+        }
         const consentPort =
           options.consent ?? options.consent_port ?? options.consentPort;
         if (!consentPort) {
@@ -96,13 +156,13 @@ export function createMarketingSkillToolPort(
         skill_id === 'skill.mkt.generate_content' &&
         tool_binding === 'Core.LLMContentEngine'
       ) {
-        if (!options.content_engine) {
+        if (!contentEngine) {
           throw new MarketingSkillToolError(
             'UNBOUND_PROVIDER',
             'Core.LLMContentEngine is unbound: no content generation engine is configured',
           );
         }
-        return (await options.content_engine.generateContent(
+        return (await contentEngine.generateContent(
           input as unknown as InputMktGenerateContent,
           context,
         )) as TOutput;
@@ -113,13 +173,13 @@ export function createMarketingSkillToolPort(
         skill_id === 'skill.mkt.audit_brand_compliance' &&
         tool_binding === 'SecondBrain.BrandGuard'
       ) {
-        if (!options.brand_guard) {
+        if (!brandGuard) {
           throw new MarketingSkillToolError(
             'UNBOUND_PROVIDER',
             'SecondBrain.BrandGuard is unbound: no BrandGuard compliance engine is configured',
           );
         }
-        return (await options.brand_guard.auditBrandCompliance(
+        return (await brandGuard.auditBrandCompliance(
           input as unknown as InputMktAuditBrand,
           context,
         )) as TOutput;

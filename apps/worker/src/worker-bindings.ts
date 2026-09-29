@@ -10,6 +10,7 @@ import {
   getUnboundCapabilities,
   type CareOrchestratorFactoryOptions,
 } from './runtime/care/index.js';
+import { parseTenantAllowlist } from './runtime/knowledge-root.js';
 import {
   createSalesOrchestratorFactory,
   getSalesUnboundCapabilities,
@@ -24,6 +25,13 @@ import {
   createMarketingOrchestratorFactory,
   type MarketingOrchestratorFactoryOptions,
 } from './runtime/marketing/factory.js';
+import {
+  createMarketingConsentPort,
+  createMarketingCustomer360Port,
+} from './runtime/marketing/data-adapters.js';
+import { createMarketingAudienceReader } from './runtime/marketing/audience-adapter.js';
+import { createSalesConsentPort } from './runtime/sales/consent-adapter.js';
+import { createSalesRevenueEvidencePort } from './runtime/sales/revenue-evidence-adapter.js';
 
 interface WorkerBindingEnv extends WorkerConnectorEnv {
   readonly SALES_SIGNAL_SOURCE_CHANNELS?: string;
@@ -31,6 +39,7 @@ interface WorkerBindingEnv extends WorkerConnectorEnv {
   readonly MARKETING_SIGNAL_SOURCE_CHANNELS?: string;
   readonly MARKETING_SIGNAL_EVENT_TYPES?: string;
   readonly AUDIT_HMAC_SECRET?: string;
+  readonly QUOTE_SIGNING_SECRET?: string;
 }
 
 type OrchestratorFactory =
@@ -117,11 +126,17 @@ export function createWorkerDomainBindings(options: WorkerBindingOptions): Domai
             workerId,
             workflowRepository: workflowRepository as DurableWorkflowRepository,
             erp_read: connectors.erp_read,
+            consent: createSalesConsentPort(),
+            revenue_evidence: createSalesRevenueEvidencePort(),
+            ...(env.QUOTE_SIGNING_SECRET === undefined ? {} : { quote_signing_secret: env.QUOTE_SIGNING_SECRET }),
             ...(crossDomainHandoff === undefined ? {} : { crossDomainHandoff }),
             ...(autonomy === undefined ? {} : { autonomy }),
           }
         : {
             ...options.salesFactoryOptions,
+            ...(options.salesFactoryOptions.quote_signing_secret !== undefined || env.QUOTE_SIGNING_SECRET === undefined
+              ? {}
+              : { quote_signing_secret: env.QUOTE_SIGNING_SECRET }),
             ...(options.salesFactoryOptions.crossDomainHandoff !== undefined || crossDomainHandoff === undefined
               ? {}
               : { crossDomainHandoff }),
@@ -174,15 +189,62 @@ export function createWorkerDomainBindings(options: WorkerBindingOptions): Domai
     let marketingFactory = options.marketingOrchestratorFactory;
     if (!marketingFactory) {
       try {
+        const suppliedMarketingOptions = options.marketingFactoryOptions ?? {};
+        const knowledgeRoot = suppliedMarketingOptions.knowledge_root_dir
+          ?? suppliedMarketingOptions.knowledge_root
+          ?? env.CARE_KNOWLEDGE_ROOT;
+        const knowledgeTenantIds = suppliedMarketingOptions.knowledge_tenant_ids
+          ?? parseTenantAllowlist(env.CARE_TENANT_IDS);
+        const audienceReader = createMarketingAudienceReader();
         marketingFactory = createMarketingOrchestratorFactory({
-          ...(options.marketingFactoryOptions ?? {}),
+          ...suppliedMarketingOptions,
           workerId,
-          workflowRepository: options.marketingFactoryOptions?.workflowRepository ?? workflowRepository as DurableWorkflowRepository,
+          workflowRepository: suppliedMarketingOptions.workflowRepository ?? workflowRepository as DurableWorkflowRepository,
+          ...(knowledgeRoot === undefined ? {} : { knowledge_root_dir: knowledgeRoot }),
+          ...(knowledgeTenantIds.length === 0 ? {} : { knowledge_tenant_ids: knowledgeTenantIds }),
+          // The audience and consent ports are tenant-bound per orchestrator, so a campaign run can
+          // only ever read the tenant whose task it claimed. Provider ports stay unbound and refuse.
+          ...(suppliedMarketingOptions.tenantSkillOptions !== undefined
+            ? {}
+            : {
+                tenantSkillOptions: async (tenant_id: string) => {
+                  const consent = createMarketingConsentPort({ serverBoundTenantId: tenant_id });
+                  return {
+                    customer360: createMarketingCustomer360Port({
+                      serverBoundTenantId: tenant_id,
+                      readAudience: audienceReader,
+                    }),
+                    consent: {
+                      // The canonical consent store answers with its own row shape; the skill
+                      // contract needs only the decision, so nothing else is invented here.
+                      checkConsent: async (input, context) => {
+                        if (input.tenant_id !== context.tenant_id || input.tenant_id !== tenant_id) {
+                          return {
+                            allowed: false,
+                            consent_timestamp: null,
+                            suppression_reason: 'TENANT_CONTEXT_MISMATCH',
+                          };
+                        }
+                        const decision = await consent.check({
+                          tenant_id: input.tenant_id,
+                          customer_id: input.customer_id,
+                          channel: input.channel,
+                        });
+                        return {
+                          allowed: decision.allowed,
+                          consent_timestamp: decision.consent_timestamp,
+                          suppression_reason: decision.suppression_reason,
+                        };
+                      },
+                    },
+                  };
+                },
+              }),
           ...(env.AUDIT_HMAC_SECRET === undefined ? {} : { auditSecret: env.AUDIT_HMAC_SECRET }),
-          ...(options.marketingFactoryOptions?.crossDomainHandoff !== undefined
+          ...(suppliedMarketingOptions.crossDomainHandoff !== undefined
             ? {}
             : crossDomainHandoff === undefined ? {} : { crossDomainHandoff }),
-          ...(options.marketingFactoryOptions?.autonomy !== undefined || autonomy === undefined
+          ...(suppliedMarketingOptions.autonomy !== undefined || autonomy === undefined
             ? {}
             : { autonomy }),
         });

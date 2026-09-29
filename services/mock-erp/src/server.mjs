@@ -1,6 +1,7 @@
 import http from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 
 import { CANONICAL_EVENTS, CATALOG_ITEM, CUSTOMER, TENANT_ID, WAREHOUSE } from './fixtures.mjs';
@@ -12,6 +13,80 @@ const MANAGED = new Set(['staging', 'sandbox', 'production']);
 const ACTION_PATH = /^\/api\/v1\/actions\/([A-Za-z0-9._:-]{1,128})$/;
 
 const ORDERS_FIXTURE_URL = new URL('../../../testcases/fixtures/offline/orders.json', import.meta.url);
+const DEMO_PACK_NAME = 'novamart';
+const DEMO_PACK_URL = new URL('./demo/novamart.json', import.meta.url);
+const DEMO_PACK_TTL_SECONDS = 900;
+
+function loadDemoPack() {
+  let pack;
+  try {
+    pack = JSON.parse(readFileSync(DEMO_PACK_URL, 'utf8'));
+  } catch {
+    throw new Error('mock-erp demo pack could not be loaded');
+  }
+  if (
+    pack === null
+    || typeof pack !== 'object'
+    || pack.pack_version !== 'novamart-demo-v1'
+    || pack.tenant_id !== '99999999-9999-4999-8999-999999999999'
+    || pack.currency !== 'VND'
+    || !Array.isArray(pack.skus)
+    || pack.skus.length !== 28
+    || !Array.isArray(pack.customers)
+    || !Array.isArray(pack.orders)
+  ) {
+    throw new Error('mock-erp demo pack is invalid');
+  }
+  const skuIds = new Set();
+  for (const sku of pack.skus) {
+    if (
+      sku === null
+      || typeof sku !== 'object'
+      || sku.tenant_id !== pack.tenant_id
+      || typeof sku.sku_id !== 'string'
+      || skuIds.has(sku.sku_id)
+    ) {
+      throw new Error('mock-erp demo pack is invalid');
+    }
+    skuIds.add(sku.sku_id);
+  }
+  if (
+    pack.customers.some((customer) => customer?.tenant_id !== pack.tenant_id)
+    || pack.orders.some((order) => order?.tenant_id !== pack.tenant_id)
+  ) {
+    throw new Error('mock-erp demo pack is invalid');
+  }
+  return pack;
+}
+
+function unavailable(res) {
+  send(res, 404, { code: 'AUTHORITATIVE_SOURCE_UNAVAILABLE' });
+}
+
+function demoSku(pack, skuId) {
+  return pack.skus.find((sku) => sku.sku_id === skuId) ?? null;
+}
+
+function demoCatalogProjection(sku) {
+  return {
+    tenant_id: sku.tenant_id,
+    product_id: sku.product_id,
+    sku: sku.sku_id,
+    sku_id: sku.sku_id,
+    brand: sku.brand,
+    name: sku.name,
+    category: sku.category,
+    use_case: sku.use_case,
+    key_attribute: sku.key_attribute,
+    description: sku.description,
+    attributes: sku.attributes,
+    currency: sku.currency,
+    list_price: sku.list_price,
+    original_list_price: sku.original_list_price,
+    is_active: sku.is_active,
+    images: sku.images,
+  };
+}
 
 export function assertBootEnv(env = process.env) {
   const appEnv = env.APP_ENV ?? '';
@@ -20,6 +95,15 @@ export function assertBootEnv(env = process.env) {
     return {
       ok: false,
       stderr: `FATAL: Environment validation failed\n  [APP_ENV] mock-erp refuses to start for APP_ENV=${where}; this simulator is local/CI only\n`,
+    };
+  }
+  const demoPack = typeof env.MOCK_ERP_DEMO_PACK === 'string'
+    ? env.MOCK_ERP_DEMO_PACK.trim()
+    : '';
+  if (demoPack !== '' && demoPack !== DEMO_PACK_NAME) {
+    return {
+      ok: false,
+      stderr: `FATAL: Environment validation failed\n  [MOCK_ERP_DEMO_PACK] unknown demo pack '${demoPack}'\n`,
     };
   }
   const secret = env.MOCK_SECRET_KEY ?? '';
@@ -55,7 +139,7 @@ export function assertBootEnv(env = process.env) {
     };
   }
 
-  return { ok: true, appEnv, secret, latency, failure, swallowAfterWrite };
+  return { ok: true, appEnv, secret, latency, failure, swallowAfterWrite, demoPack: demoPack || null };
 }
 
 function canonicalize(value) {
@@ -122,6 +206,7 @@ export function createServer(env = process.env, deps = {}) {
     error.exitCode = 1;
     throw error;
   }
+  const demoPack = boot.demoPack === DEMO_PACK_NAME ? loadDemoPack() : null;
   const effects = deps.effects ?? new Map();
   const actions = deps.actions ?? new Map();
   const random = deps.random ?? Math.random;
@@ -163,21 +248,59 @@ export function createServer(env = process.env, deps = {}) {
     }
     if (boot.latency > 0) await sleep(boot.latency);
     if (req.method === 'GET' && url.pathname === '/api/v1/catalog/items') {
+      if (demoPack) {
+        if (scope !== demoPack.tenant_id) {
+          unavailable(res);
+          return;
+        }
+        send(res, 200, {
+          items: demoPack.skus.map(demoCatalogProjection),
+          snapshot_at: now().toISOString(),
+        });
+        return;
+      }
       if (scope !== TENANT_ID) {
-        send(res, 404, { code: 'AUTHORITATIVE_SOURCE_UNAVAILABLE' });
+        unavailable(res);
         return;
       }
       send(res, 200, { items: [CATALOG_ITEM], snapshot_at: now().toISOString() });
       return;
     }
     if (req.method === 'POST' && url.pathname === '/api/v1/inventory/lookup') {
+      if (demoPack) {
+        const skuIds = Array.isArray(body.sku_ids) ? body.sku_ids : [];
+        if (
+          scope !== demoPack.tenant_id
+          || skuIds.some((skuId) => typeof skuId !== 'string' || demoSku(demoPack, skuId) === null)
+        ) {
+          unavailable(res);
+          return;
+        }
+        send(res, 200, {
+          snapshot_at: now().toISOString(),
+          items: skuIds.map((skuId) => {
+            const sku = demoSku(demoPack, skuId);
+            return {
+              tenant_id: scope,
+              sku_id: sku.sku_id,
+              total_available_to_promise: sku.total_available_to_promise,
+              available_quantity: sku.available_quantity,
+              reserved_qty: sku.reserved_qty,
+              physical_qty: sku.physical_qty,
+              in_stock: sku.in_stock,
+              warehouse_breakdown: sku.warehouse_breakdown,
+            };
+          }),
+        });
+        return;
+      }
       if (scope !== TENANT_ID) {
-        send(res, 404, { code: 'AUTHORITATIVE_SOURCE_UNAVAILABLE' });
+        unavailable(res);
         return;
       }
       const skuIds = Array.isArray(body.sku_ids) ? body.sku_ids : [];
       if (skuIds.some((sku) => sku !== CATALOG_ITEM.sku)) {
-        send(res, 404, { code: 'AUTHORITATIVE_SOURCE_UNAVAILABLE' });
+        unavailable(res);
         return;
       }
       send(res, 200, {
@@ -195,8 +318,45 @@ export function createServer(env = process.env, deps = {}) {
     }
 
     if (req.method === 'POST' && url.pathname === '/api/v1/prices/lookup') {
+      if (demoPack) {
+        const sku = typeof body.sku_id === 'string' ? demoSku(demoPack, body.sku_id) : null;
+        if (scope !== demoPack.tenant_id || sku === null) {
+          unavailable(res);
+          return;
+        }
+        const quotedAt = now();
+        const quotedAtIso = quotedAt.toISOString();
+        const expiresAt = new Date(quotedAt.getTime() + DEMO_PACK_TTL_SECONDS * 1000).toISOString();
+        const quote = {
+          tenant_id: scope,
+          sku_id: sku.sku_id,
+          owner_approved: true,
+          list_price: sku.list_price,
+          original_list_price: sku.original_list_price,
+          p_floor: sku.floor_price,
+          floor_price: sku.floor_price,
+          currency: sku.currency,
+          floor_source: sku.floor_price_source,
+          floor_price_source: sku.floor_price_source,
+          quote_ttl_seconds: DEMO_PACK_TTL_SECONDS,
+          quoted_at: quotedAtIso,
+          snapshot_at: quotedAtIso,
+          quote_expires_at: expiresAt,
+          expires_at: expiresAt,
+          provenance: {
+            source: sku.floor_price_source,
+            pack_version: demoPack.pack_version,
+            floor_price_synced_at: sku.floor_price_synced_at,
+            quoted_at: quotedAtIso,
+            expires_at: expiresAt,
+          },
+        };
+        const signature = signBody(boot.secret, JSON.stringify(quote));
+        send(res, 200, { ...quote, signature, quote_signature: signature });
+        return;
+      }
       if (scope !== TENANT_ID || body.sku_id !== CATALOG_ITEM.sku) {
-        send(res, 404, { code: 'AUTHORITATIVE_SOURCE_UNAVAILABLE' });
+        unavailable(res);
         return;
       }
       send(res, 409, {
@@ -238,6 +398,28 @@ export function createServer(env = process.env, deps = {}) {
       return;
     }
     if (req.method === 'POST' && url.pathname === '/api/v1/orders/status') {
+      if (demoPack) {
+        const orderRef = typeof body?.key === 'string'
+          ? body.key
+          : (typeof body?.order_identifier === 'string'
+            ? body.order_identifier
+            : (typeof body?.order_id === 'string' ? body.order_id : null));
+        const match = scope === demoPack.tenant_id
+          ? demoPack.orders.find(
+            (order) => order.order_id === orderRef || order.order_number === orderRef,
+          )
+          : null;
+        if (
+          !orderRef
+          || !match
+          || (body?.customer_id !== undefined && match.customer_id !== body.customer_id)
+        ) {
+          unavailable(res);
+          return;
+        }
+        send(res, 200, { snapshot_at: now().toISOString(), ...match });
+        return;
+      }
       const orderRef = typeof body?.key === 'string'
         ? body.key
         : (typeof body?.order_identifier === 'string'
@@ -274,6 +456,20 @@ export function createServer(env = process.env, deps = {}) {
       return;
     }
     if (req.method === 'POST' && url.pathname === '/api/v1/customers/lookup') {
+      if (demoPack) {
+        const customerId = typeof body.customer_id === 'string'
+          ? body.customer_id
+          : (typeof body.key === 'string' ? body.key : null);
+        const customer = scope === demoPack.tenant_id
+          ? demoPack.customers.find((candidate) => candidate.customer_id === customerId)
+          : null;
+        if (!customer) {
+          unavailable(res);
+          return;
+        }
+        send(res, 200, customer);
+        return;
+      }
       if (body.customer_id !== CUSTOMER.customer_id) {
         send(res, 404, { code: 'AUTHORITATIVE_SOURCE_UNAVAILABLE' });
         return;
@@ -282,6 +478,35 @@ export function createServer(env = process.env, deps = {}) {
       return;
     }
     if (req.method === 'POST' && url.pathname === '/api/v1/customers/sales-history') {
+      if (demoPack) {
+        const customerId = typeof body.customer_id === 'string'
+          ? body.customer_id
+          : (typeof body.key === 'string' ? body.key : null);
+        const customer = scope === demoPack.tenant_id
+          ? demoPack.customers.find((candidate) => candidate.customer_id === customerId)
+          : null;
+        if (!customer) {
+          unavailable(res);
+          return;
+        }
+        const customerOrders = demoPack.orders.filter((order) => order.customer_id === customerId);
+        const completedOrders = customerOrders.filter((order) => order.status === 'DELIVERED');
+        const paidOrders = customerOrders.filter((order) => order.payment_status === 'PAID');
+        send(res, 200, {
+          tenant_id: scope,
+          customer_id: customerId,
+          currency: demoPack.currency,
+          lifetime_spend: paidOrders.reduce((sum, order) => sum + order.total_amount, 0),
+          total_order_count: customerOrders.length,
+          completed_order_count: completedOrders.length,
+          returned_order_count: customerOrders.filter((order) => order.status === 'RETURNED').length,
+          average_order_value: paidOrders.length === 0
+            ? 0
+            : paidOrders.reduce((sum, order) => sum + order.total_amount, 0) / paidOrders.length,
+          recent_orders: customerOrders.slice(-10),
+        });
+        return;
+      }
       if (body.customer_id !== CUSTOMER.customer_id) {
         send(res, 404, { code: 'AUTHORITATIVE_SOURCE_UNAVAILABLE' });
         return;
