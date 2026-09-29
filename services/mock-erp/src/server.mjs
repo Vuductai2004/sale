@@ -594,7 +594,7 @@ export function listen(env = process.env, deps = {}) {
     process.stderr.write(boot.stderr);
     process.exit(boot.exitCode ?? 1);
   }
-  const port = Number(env.PORT ?? 8081);
+  const port = Number(env.MOCK_ERP_PORT ?? env.PORT ?? 8081);
   const server = createServer(env, deps);
   return new Promise((resolve) => {
     server.listen(port, '0.0.0.0', () => resolve(server));
@@ -602,6 +602,9 @@ export function listen(env = process.env, deps = {}) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  if (typeof process.loadEnvFile === 'function') {
+    try { process.loadEnvFile(); } catch { /* ignore if .env is missing */ }
+  }
   listen().catch((error) => {
     process.stderr.write(error.stderr ?? `FATAL: ${error.message}\n`);
     process.exit(error.exitCode ?? 1);

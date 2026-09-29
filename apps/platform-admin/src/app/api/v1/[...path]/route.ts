@@ -2,10 +2,11 @@ import { proxyDemoPlatformApi } from '../../../../lib/demo-bff.server';
 
 export const dynamic = 'force-dynamic';
 
-type RouteContext = { readonly params: { readonly path?: readonly string[] } };
+type RouteContext = { readonly params: { readonly path?: readonly string[] } | Promise<{ readonly path?: readonly string[] }> };
 
 async function handle(request: Request, context: RouteContext): Promise<Response> {
-  const path = context.params.path?.join('/') ?? '';
+  const params = await context.params;
+  const path = params.path?.join('/') ?? '';
   return proxyDemoPlatformApi(request, path);
 }
 

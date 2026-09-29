@@ -64,7 +64,10 @@ function requestHeaders(request: Request, token: string, path: string): Headers 
     const value = request.headers.get(name);
     if (value) headers.set(name, value);
   }
-  if (path === 'demo/widget-session') headers.set('origin', request.headers.get('origin')!);
+  if (path === 'demo/widget-session') {
+    const origin = request.headers.get('origin');
+    if (origin) headers.set('origin', origin);
+  }
   return headers;
 }
 
