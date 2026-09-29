@@ -234,6 +234,33 @@ describe('CareContextAggregator', () => {
     expect(context.working_memory.turn_count).toBe(3);
   });
 
+  it('fails closed to human takeover when the conversation lookup throws', async () => {
+    const aggregator = new CareContextAggregator({
+      repositories: {
+        findIdentity: async () => null,
+        getProfile: async () => null,
+        getConversation: async () => {
+          throw new Error('conversation database unavailable');
+        },
+        listMessages: async () => {
+          throw new Error('history must not be read after lookup failure');
+        },
+      },
+    });
+    const subject: SignalSubject = {
+      session_id: 'thread-error',
+      conversation_id: '22222222-2222-4222-8222-222222222222',
+      channel_type: 'web',
+      channel_identifier: 'thread-error',
+    };
+
+    const context = await aggregator.hydrateContext(tenant_id, subject, 'corr-lookup-error');
+
+    expect(context.working_memory.takeover_active).toBe(true);
+    expect(context.working_memory.conversation_id).toBeUndefined();
+    expect(context.working_memory.turn_count).toBe(1);
+  });
+
   it.each([
     ['tenant', { tenant_id: 'different-tenant' }],
     ['channel', { channel: 'LINE' }],
