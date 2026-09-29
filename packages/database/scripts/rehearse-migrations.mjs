@@ -229,6 +229,21 @@ async function assertAppliedSchema(client, schemaSql) {
       WHERE n.nspname = 'public' AND p.proname = ANY($1::text[])`,
     [REQUIRED_PUBLIC_FUNCTIONS],
   );
+  const { rows: auditSequenceColumns } = await client.query(
+    `SELECT data_type, is_nullable
+       FROM information_schema.columns
+      WHERE table_schema = 'agentos'
+        AND table_name = 'audit_records'
+        AND column_name = 'chain_seq'`,
+  );
+  const { rows: auditSequenceConstraints } = await client.query(
+    `SELECT 1
+       FROM pg_catalog.pg_constraint
+      WHERE conrelid = 'agentos.audit_records'::regclass
+        AND conname = 'uq_audit_records_tenant_chain_seq'
+        AND contype = 'u'`,
+  );
+
 
   const present = new Set(relations.map((relation) => relation.name));
   const unforced = relations
@@ -243,12 +258,23 @@ async function assertAppliedSchema(client, schemaSql) {
   const publicRoutineNames = new Set(publicRoutines.map((routine) => routine.name));
   const missingPublicFunctions = REQUIRED_PUBLIC_FUNCTIONS.filter((name) => !publicRoutineNames.has(name));
   const missingFunctions = REQUIRED_FUNCTIONS.filter((name) => !routineNames.has(name));
+  const auditSequenceColumn = auditSequenceColumns[0];
+  const auditSequenceProblem =
+    auditSequenceColumn?.data_type !== 'bigint' || auditSequenceColumn.is_nullable !== 'NO'
+      ? 'audit_records.chain_seq must be a NOT NULL bigint'
+      : undefined;
+  const auditSequenceConstraintProblem =
+    auditSequenceConstraints.length !== 1
+      ? 'audit_records must enforce UNIQUE (tenant_id, chain_seq)'
+      : undefined;
   const problems = [
     absent('tables', tables),
     absent('views', views),
     missingFunctions.length > 0 ? `functions absent after apply: ${missingFunctions.join(', ')}` : undefined,
     missingPublicFunctions.length > 0 ? `public functions absent after apply: ${missingPublicFunctions.join(', ')}` : undefined,
     unforced.length > 0 ? `tables without ENABLE + FORCE ROW LEVEL SECURITY: ${unforced.join(', ')}` : undefined,
+    auditSequenceProblem,
+    auditSequenceConstraintProblem,
   ].filter((problem) => problem !== undefined);
 
   if (problems.length > 0) {

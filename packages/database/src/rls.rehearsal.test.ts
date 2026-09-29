@@ -4,6 +4,7 @@ import { Pool, type PoolClient } from 'pg';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { getPool } from './client.js';
+import { AuditRepository } from './repositories/audit-evidence.js';
 import { insertFact } from './repositories/customer-360.js';
 import { withTenantContext } from './rls.js';
 
@@ -377,6 +378,59 @@ describe.skipIf(!hasDatabaseUrl)('agentos_app RLS rehearsal (real PostgreSQL)', 
       expect(outcome.seesCustomerA).toBe(false);
       expect(outcome.hijackUpdate.rowCount).toBe(0);
       expectSqlState(outcome.rejectedInsert, '42501');
+    });
+  });
+
+  describe('audit chain sequence migration', () => {
+    it('assigns tenant-local chain_seq in insert order and ignores caller timestamps', async () => {
+      const client = await fixturePool.connect();
+
+      try {
+        await beginAppRole(client, TENANT_A);
+        const audit = new AuditRepository(async (_tenantId, work) => work(client));
+        const common = {
+          tenant_id: TENANT_A,
+          agent_id: 'rls-audit-agent',
+          customer_or_entity_id: CUSTOMER_A,
+          trigger: 'rls.rehearsal',
+          context: { fixture: true },
+          skill: 'rls.audit.sequence',
+          tool: 'fixture',
+          decision: { verdict: 'ALLOW' },
+          authority: 'AUTH-3' as const,
+          approval: null,
+          action: { type: 'fixture' },
+          execution_status: 'success' as const,
+          evidence: { source: 'rls-rehearsal' },
+          outcome: { accepted: true },
+          latency_ms: 1,
+          cost: { tokens: 1 },
+          error: null,
+        };
+
+        await audit.append({
+          ...common,
+          run_id: 'RLS-AUDIT-SEQ-1',
+          timestamp: '2099-01-01T00:00:00.000Z',
+        });
+        await audit.append({
+          ...common,
+          run_id: 'RLS-AUDIT-SEQ-2',
+          timestamp: '1970-01-01T00:00:00.000Z',
+        });
+
+        const result = await client.query<{ chain_seq: string; timestamp: Date }>(
+          'SELECT chain_seq::text AS chain_seq, "timestamp" FROM agentos.audit_records WHERE tenant_id = $1 ORDER BY chain_seq',
+          [TENANT_A],
+        );
+
+        expect(result.rows.map((row) => row.chain_seq)).toEqual(['1', '2']);
+        expect(new Set(result.rows.map((row) => row.chain_seq)).size).toBe(result.rows.length);
+        expect(result.rows.every((row) => row.timestamp.getUTCFullYear() !== 2099 && row.timestamp.getUTCFullYear() !== 1970)).toBe(true);
+      } finally {
+        await client.query('ROLLBACK').catch(() => undefined);
+        client.release();
+      }
     });
   });
 
