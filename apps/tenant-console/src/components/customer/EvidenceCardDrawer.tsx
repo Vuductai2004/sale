@@ -5,7 +5,6 @@
  */
 'use client';
 
-import React from 'react';
 import type { EvidenceClassification } from '@agentos/ui-foundation';
 import type { EvidenceCard } from './types';
 

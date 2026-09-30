@@ -4,8 +4,10 @@
 
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { ApiError, type SharedUiState } from '@agentos/ui-foundation';
+import { StatusBadge, PageHeader } from '@agentos/ui-foundation/react';
+import type { Tone } from '@agentos/ui-foundation/status';
 import { adminOperationsClient } from '../../lib/admin-operations-client';
 import type { AgentRunProjection, GetRunsParams, RunFilters, TaskAcceptedResponse } from './types';
 import { AgentDirectory } from './AgentDirectory';
@@ -13,7 +15,19 @@ import { RunFilterControls } from './RunFilterControls';
 import { RunTable } from './RunTable';
 import { RunInspectionDrawer } from './RunInspectionDrawer';
 import { RetryRunModal } from './RetryRunModal';
-import { PageHeader, StatusBadge, type StatusTone } from '../ui/Primitives';
+function stateTone(state: SharedUiState): Tone {
+  switch (state) {
+    case 'loading': return 'info';
+    case 'empty': return 'neutral';
+    case 'permission_denied': return 'danger';
+    case 'dependency_unavailable': return 'warning';
+    case 'version_conflict': return 'warning';
+    case 'fail_closed': return 'danger';
+    case 'stale': return 'warning';
+    case 'partial': return 'warning';
+    default: return 'neutral';
+  }
+}
 const DEFAULT_FILTERS: RunFilters = {
   agent_id: '',
   state: '',
@@ -23,19 +37,6 @@ const DEFAULT_FILTERS: RunFilters = {
   limit: 20,
 };
 
-function stateTone(state: SharedUiState): StatusTone {
-  switch (state) {
-    case 'loading': return 'loading';
-    case 'empty': return 'no-data';
-    case 'permission_denied': return 'permission-denied';
-    case 'dependency_unavailable': return 'dependency-unavailable';
-    case 'version_conflict': return 'version-conflict';
-    case 'fail_closed': return 'fail-closed';
-    case 'stale': return 'stale';
-    case 'partial': return 'partial';
-    default: return 'neutral';
-  }
-}
 
 export function AgentOperationsConsole() {
   const [runs, setRuns] = useState<readonly AgentRunProjection[]>([]);

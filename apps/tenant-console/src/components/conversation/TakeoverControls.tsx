@@ -4,7 +4,6 @@
  */
 'use client';
 
-import React from 'react';
 import type { TakeoverLeaseState } from './types';
 
 export interface TakeoverControlsProps {

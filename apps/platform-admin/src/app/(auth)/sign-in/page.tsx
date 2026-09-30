@@ -1,6 +1,8 @@
 'use client';
 
 import { can, safeNext, type AuthSession } from '@agentos/ui-foundation/auth';
+import { AuthLayout, Button, Field, Input } from '@agentos/ui-foundation/react';
+import { t } from '@agentos/ui-foundation/i18n';
 import { useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState, type FormEvent } from 'react';
 type ViewState = 'loading' | 'ready' | 'disabled' | 'signed_in' | 'error' | 'permission';
@@ -10,10 +12,10 @@ function responseError(status: number, payload: unknown): string {
     ? payload.error
     : '';
   if (status === 404 || code === 'NOT_FOUND') return 'Sign-in is not available in this environment.';
-  if (status === 403 || code === 'PERMISSION_DENIED') return 'This account is not permitted to sign in to platform operations.';
-  if (status === 401 || code === 'AUTHENTICATION_FAILED') return 'The email or password was not accepted.';
-  if (status === 429 || code === 'TOO_MANY_ATTEMPTS') return 'Too many attempts. Please wait and try again.';
-  if (status >= 500) return 'The authentication service is unavailable.';
+  if (status === 403 || code === 'PERMISSION_DENIED') return t('auth.forbidden');
+  if (status === 401 || code === 'AUTHENTICATION_FAILED') return t('auth.invalid_credentials');
+  if (status === 429 || code === 'TOO_MANY_ATTEMPTS') return t('auth.too_many_attempts');
+  if (status >= 500) return t('common.error');
   return 'Sign-in could not be completed.';
 }
 
@@ -38,7 +40,7 @@ function AuthPageContent() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [viewState, setViewState] = useState<ViewState>('loading');
-  const [message, setMessage] = useState<string | null>(expired ? 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.' : null);
+  const [message, setMessage] = useState<string | null>(expired ? t('auth.session_expired') : null);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -72,7 +74,7 @@ function AuthPageContent() {
       .catch(() => {
         if (!active) return;
         setViewState('error');
-        setMessage('The authentication service is unavailable.');
+        setMessage(t('common.error'));
       });
     return () => {
       active = false;
@@ -102,7 +104,7 @@ function AuthPageContent() {
       window.location.assign(next);
     } catch {
       setViewState('error');
-      setMessage('The authentication service is unavailable.');
+      setMessage(t('common.error'));
     } finally {
       setSubmitting(false);
     }
@@ -112,35 +114,29 @@ function AuthPageContent() {
   const loading = viewState === 'loading';
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-canvas px-4 py-10 text-ink sm:px-6">
-      <section className="ui-section-card w-full max-w-md p-6 shadow-lg sm:p-8" aria-labelledby="sign-in-title">
-        <div className="flex flex-wrap items-center gap-3 font-mono text-xs font-semibold uppercase tracking-[0.18em] text-brand">
-          AgentOS Platform Admin
-          <span className="ui-status ui-status--demo-only">Demo only</span>
-        </div>
-        <h1 id="sign-in-title" className="mt-6 text-2xl font-semibold tracking-tight text-ink">Sign in to platform operations</h1>
-        <p className="mt-2 text-sm leading-6 text-muted">Use your account credentials to access platform operations.</p>
+    <AuthLayout audience="platform" demo>
+      <h1 id="sign-in-title" className="text-2xl font-semibold tracking-tight text-ink">{t('auth.sign_in')}</h1>
+      <p className="mt-2 text-sm leading-6 text-muted">Use your account credentials to access platform operations.</p>
 
-        {loading ? <p role="status" className="ui-state ui-state--loading mt-6">Checking session…</p> : null}
-        {message ? <p role="alert" className={`ui-state mt-6 ${unavailable ? 'ui-state--blocked' : 'ui-state--error'}`}>{message}</p> : null}
+      {loading ? <p role="status" className="ui-state ui-state--loading mt-6">{t('common.loading')}</p> : null}
+      {message ? <p role="alert" className={`ui-state mt-6 ${unavailable ? 'ui-state--blocked' : 'ui-state--error'}`}>{message}</p> : null}
 
-        {!unavailable ? (
-          <form onSubmit={submit} className="mt-6 space-y-5">
-            <div>
-              <label htmlFor="platform-email" className="text-sm font-medium text-ink">Email</label>
-              <input id="platform-email" name="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="username" required disabled={loading || submitting} className="ui-input mt-2" />
-            </div>
-            <div>
-              <label htmlFor="platform-password" className="text-sm font-medium text-ink">Mật khẩu</label>
-              <input id="platform-password" name="password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" required disabled={loading || submitting} className="ui-input mt-2" />
-            </div>
-            <button type="submit" disabled={loading || submitting || !email.trim() || !password} className="ui-button ui-button--primary w-full">{submitting ? 'Signing in…' : 'Đăng nhập'}</button>
-          </form>
-        ) : null}
+      {!unavailable ? (
+        <form onSubmit={submit} className="mt-6 space-y-5">
+          <Field label={t('auth.email')} htmlFor="platform-email">
+            <Input id="platform-email" name="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="username" required disabled={loading || submitting} />
+          </Field>
+          <Field label={t('auth.password')} htmlFor="platform-password">
+            <Input id="platform-password" name="password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" required disabled={loading || submitting} />
+          </Field>
+          <Button type="submit" loading={submitting} loadingLabel={t('common.loading')} disabled={loading || !email.trim() || !password} className="w-full">
+            {t('auth.sign_in')}
+          </Button>
+        </form>
+      ) : null}
 
-        <p className="mt-6 border-t border-line pt-4 text-xs leading-5 text-muted">Credentials stay server-side. This view never stores or exposes API bearer tokens.</p>
-      </section>
-    </main>
+      <p className="mt-6 border-t border-line pt-4 text-xs leading-5 text-muted">Credentials stay server-side. This view never stores or exposes API bearer tokens.</p>
+    </AuthLayout>
   );
 }
 export default function AuthPage() {

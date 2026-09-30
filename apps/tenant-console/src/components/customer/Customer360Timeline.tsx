@@ -6,7 +6,7 @@
  */
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { ApiError } from '@agentos/ui-foundation';
 import type { EvidenceClassification } from '@agentos/ui-foundation';
 import { tenantConsoleClient } from '../../lib/tenant-console-client';
@@ -17,7 +17,7 @@ import type {
   EvidenceCard,
 } from './types';
 import { EvidenceCardDrawer } from './EvidenceCardDrawer';
-import { StatusBadge } from '../ui/Primitives';
+import { StatusBadge } from '@agentos/ui-foundation/react';
 
 interface Customer360TimelineProps {
   readonly initialCustomerId?: string | undefined;
@@ -363,7 +363,7 @@ export function Customer360Timeline({
               <span className="font-semibold text-ink">Verified customer record</span>
               <code className="font-mono text-muted">{customerId}</code>
             </div>
-          ) : <StatusBadge label="Select a verified customer" tone="no-data" />}
+          ) : <StatusBadge code="NO_DATA" label="Select a verified customer" />}
         </div>
 
         {/* Customer Profile Banner (only rendered when returned) */}

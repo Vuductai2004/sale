@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ApiError } from '@agentos/ui-foundation';
-import { ConfirmDialog } from '../ui/Primitives';
+import { Button, Modal } from '@agentos/ui-foundation/react';
 import { adminOperationsClient } from '../../lib/admin-operations-client';
 import type {
   AutonomyInspectionResponse,
@@ -416,15 +416,20 @@ export function TenantWorkspace() {
           )}
         </PanelSection>
       </div>
-      <ConfirmDialog
+      <Modal
         open={pendingAction !== null}
         title={pendingAction?.title ?? 'Confirm autonomy change'}
-        detail={pendingAction?.detail ?? ''}
-        confirmLabel="Apply change"
-        busy={action !== null}
-        onConfirm={confirmPendingAction}
-        onCancel={() => setPendingAction(null)}
-      />
+        description={pendingAction?.detail ?? ''}
+        onClose={() => setPendingAction(null)}
+        actions={(
+          <>
+            <Button variant="secondary" onClick={() => setPendingAction(null)} disabled={action !== null}>Cancel</Button>
+            <Button onClick={confirmPendingAction} loading={action !== null}>Apply change</Button>
+          </>
+        )}
+      >
+        <span className="sr-only">Confirm autonomy change</span>
+      </Modal>
     </div>
   );
 }

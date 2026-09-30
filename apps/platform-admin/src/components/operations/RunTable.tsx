@@ -2,7 +2,6 @@
  * Keyboard-accessible virtualized/paginated tabular view of R16 agent run history.
  */
 
-import React from 'react';
 import type { AgentRunProjection } from './types';
 import { isRunRetryable } from './retry-helpers';
 

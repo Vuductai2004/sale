@@ -3,7 +3,7 @@
  * Never invents agent identities, fake metrics, or phantom status rows.
  */
 
-import React, { useMemo } from 'react';
+import { useMemo } from 'react';
 import type { AgentRunProjection, AgentDirectoryItem, TaskLifecycleState } from './types';
 
 interface AgentDirectoryProps {

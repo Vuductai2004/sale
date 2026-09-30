@@ -2,11 +2,12 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { can, canAny, type AuthSession, type Permission } from '@agentos/ui-foundation/auth';
+import { t } from '@agentos/ui-foundation/i18n';
+import { DemoBadge } from '@agentos/ui-foundation/react';
 import { tenantConsoleClient } from '../../lib/tenant-console-client';
 import { useSession } from '../auth/SessionProvider';
-import { DemoBadge } from '../ui/Primitives';
 
 type NavItem = {
   readonly href: string;
@@ -18,14 +19,14 @@ type NavItem = {
 };
 
 const NAV_ITEMS: readonly NavItem[] = [
-  { href: '/', label: 'Overview', description: 'Company snapshot' },
-  { href: '/takeover', label: 'Customer care', description: 'Conversations and takeover', permission: 'conversation:takeover' },
-  { href: '/approvals?tab=approvals', label: 'Approvals', description: 'Pending human decisions', permission: 'approval:read' },
-  { href: '/demo/operations', label: 'Operations demo', description: 'Scoped run activity', permission: 'conversation:takeover', demo: true },
-  { href: '/demo/campaigns', label: 'Marketing demo', description: 'Draft and approval handoff', permissions: ['campaign:draft', 'approval:read'], demo: true },
-  { href: '/demo/storefront', label: 'Sales demo', description: 'Session-bound storefront', permission: 'customer:read', demo: true },
-  { href: '/analytics', label: 'Analytics', description: 'Observed metrics only', permission: 'telemetry:read' },
-  { href: '/settings', label: 'Settings', description: 'Tenant settings status' },
+  { href: '/', label: t('nav.overview'), description: 'Tổng quan công ty' },
+  { href: '/takeover', label: t('nav.conversations'), description: 'Hội thoại và tiếp quản', permission: 'conversation:takeover' },
+  { href: '/approvals?tab=approvals', label: t('nav.approvals'), description: 'Quyết định đang chờ', permission: 'approval:read' },
+  { href: '/demo/operations', label: t('nav.operations'), description: 'Hoạt động theo phạm vi', permission: 'conversation:takeover', demo: true },
+  { href: '/demo/campaigns', label: t('nav.campaigns'), description: 'Soạn thảo và chuyển phê duyệt', permissions: ['campaign:draft', 'approval:read'], demo: true },
+  { href: '/demo/storefront', label: 'Demo bán hàng', description: 'Cửa hàng theo phiên', permission: 'customer:read', demo: true },
+  { href: '/analytics', label: t('nav.analytics'), description: 'Chỉ số đã quan sát', permission: 'telemetry:read' },
+  { href: '/settings', label: t('nav.settings'), description: 'Trạng thái cài đặt tenant' },
 ];
 
 const CAPABILITY_ROWS = ['AI team roster', 'Knowledge management', 'Integrations'];
@@ -59,7 +60,12 @@ export function CompanyShell({ children }: { readonly children: ReactNode }) {
   const session = useSession();
   const [menuOpen, setMenuOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
 
+  function closeMenu() {
+    setMenuOpen(false);
+    menuButtonRef.current?.focus();
+  }
 
   useEffect(() => {
     setMenuOpen(false);
@@ -68,7 +74,7 @@ export function CompanyShell({ children }: { readonly children: ReactNode }) {
   useEffect(() => {
     if (!menuOpen) return;
     const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') setMenuOpen(false);
+      if (event.key === 'Escape') closeMenu();
     };
     document.addEventListener('keydown', closeOnEscape);
     return () => document.removeEventListener('keydown', closeOnEscape);
@@ -93,18 +99,18 @@ export function CompanyShell({ children }: { readonly children: ReactNode }) {
     <div className="app-shell" data-app="tenant">
       <button
         type="button"
-        aria-label="Close navigation"
+        aria-label="Đóng menu"
         className={`fixed inset-0 z-20 bg-slate-900/20 backdrop-blur-sm lg:hidden ${menuOpen ? 'block' : 'hidden'}`}
-        onClick={() => setMenuOpen(false)}
+        onClick={closeMenu}
       />
-      <aside className="app-sidebar" data-open={menuOpen} aria-label="Company navigation">
+      <aside className="app-sidebar" data-open={menuOpen} aria-label="Company navigation" role={menuOpen ? 'dialog' : undefined} aria-modal={menuOpen ? true : undefined}>
         <div className="flex h-full flex-col p-5">
           <div className="flex items-start justify-between gap-3">
             <Link href="/" className="flex items-center gap-3 rounded-md text-ink focus-visible:outline-none" aria-label="AgentOS company overview">
               <span className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand text-sm font-bold text-white" aria-hidden="true">A</span>
               <span><span className="block text-sm font-bold tracking-tight text-ink">AgentOS</span><span className="block text-[11px] text-muted">Company workspace</span></span>
             </Link>
-            <button type="button" className="mobile-menu-button rounded-md p-2 text-muted" aria-label="Close navigation" onClick={() => setMenuOpen(false)}><CloseIcon /></button>
+            <button type="button" className="mobile-menu-button rounded-md p-2 text-muted" aria-label="Đóng menu" onClick={closeMenu}><CloseIcon /></button>
           </div>
 
           <div className="mt-8 rounded-lg border border-line bg-surface-low p-3">
@@ -147,7 +153,7 @@ export function CompanyShell({ children }: { readonly children: ReactNode }) {
 
       <div className="app-main">
         <header className="app-topbar" role="banner">
-          <div className="flex min-w-0 items-center gap-3"><button type="button" className="mobile-menu-button rounded-md p-2 text-muted hover:bg-surface-low" aria-label="Open navigation" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)}><MenuIcon /></button><div className="min-w-0"><p className="truncate text-sm font-semibold text-ink">{pageLabel(pathname)}</p><p className="hidden text-xs text-muted sm:block">Scoped to the current tenant; no global search or alerts</p></div></div>
+          <div className="flex min-w-0 items-center gap-3"><button ref={menuButtonRef} type="button" className="mobile-menu-button rounded-md p-2 text-muted hover:bg-surface-low" aria-label="Mở menu" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)}><MenuIcon /></button><div className="min-w-0"><p className="truncate text-sm font-semibold text-ink">{pageLabel(pathname)}</p><p className="hidden text-xs text-muted sm:block">Scoped to the current tenant; no global search or alerts</p></div></div>
           <div className="flex shrink-0 items-center gap-2 sm:gap-3">{session ? <DemoBadge /> : null}<span className="hidden max-w-52 truncate text-xs font-medium text-muted sm:inline">{session?.identity.email ?? 'Session not loaded'}</span><span className="h-2 w-2 rounded-full bg-slate-300" title="No platform health claim" aria-label="Health not asserted" /></div>
         </header>
         <main className="app-content">{children}</main>

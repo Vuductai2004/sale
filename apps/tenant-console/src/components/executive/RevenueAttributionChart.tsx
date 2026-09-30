@@ -5,7 +5,7 @@
 
 'use client';
 
-import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback } from 'react';
 import { tenantConsoleClient } from '../../lib/tenant-console-client';
 import type { AttributionPoint, SseConnectionStatus } from './types';
 

@@ -5,7 +5,7 @@ import type { FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import { can, type AuthSession } from '@agentos/ui-foundation/auth';
 import { AuthRequestError, tenantConsoleClient } from '../../../../lib/tenant-console-client';
-import { DemoBadge } from '../../../../components/ui/Primitives';
+import { DemoBadge } from '@agentos/ui-foundation/react';
 import { RequirePermission } from '../../../../components/auth/RequirePermission';
 type Approval = {
   readonly approval_id: string;

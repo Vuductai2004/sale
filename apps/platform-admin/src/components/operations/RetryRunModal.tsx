@@ -2,7 +2,7 @@
  * Operator modal for confirming R13 side-effect-free run retry execution.
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ApiError } from '@agentos/ui-foundation';
 import { adminOperationsClient } from '../../lib/admin-operations-client';
 import type { AgentRunProjection, RunRetryRequest, TaskAcceptedResponse } from './types';
@@ -48,7 +48,7 @@ export function RetryRunModal({
 
   if (!isOpen || !run) return null;
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
     setErrorMessage(null);

@@ -5,7 +5,6 @@
 
 'use client';
 
-import React from 'react';
 import type { AnomalyAlert } from './types';
 
 export function AnomalyAlertsFeed({

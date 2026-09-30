@@ -1,7 +1,8 @@
 import type { Config } from 'tailwindcss';
 
 const config: Config = {
-  content: ['./src/**/*.{ts,tsx}'],
+  content: ['./src/**/*.{ts,tsx}', '../../packages/ui-foundation/src/**/*.{ts,tsx}'],
+  presets: [require('@agentos/ui-foundation/tailwind-preset')],
   theme: {
     extend: {
       colors: {
@@ -15,7 +16,7 @@ const config: Config = {
         brand: 'var(--ag-brand)',
         'brand-deep': 'var(--ag-brand-deep)',
         'brand-soft': 'var(--ag-brand-soft)',
-        'line': 'var(--ag-border)',
+        line: 'var(--ag-border)',
       },
       fontFamily: {
         sans: ['var(--font-ui)', 'ui-sans-serif', 'system-ui', 'sans-serif'],

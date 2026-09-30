@@ -4,7 +4,7 @@
  */
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { ApiError } from '@agentos/ui-foundation';
 import { can, type AuthSession } from '@agentos/ui-foundation/auth';
 import { tenantConsoleClient } from '../../lib/tenant-console-client';

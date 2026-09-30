@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { type FormEvent, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { DemoBadge } from '../../../../components/ui/Primitives';
+import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { DemoBadge } from '@agentos/ui-foundation/react';
 type Persona = 'anonymous' | 'C05' | 'C06';
 const PERSONAS = ['anonymous', 'C05', 'C06'] as const;
 type ViewState = 'loading' | 'ready' | 'empty' | 'unauthenticated' | 'permission_denied' | 'error';
@@ -644,6 +644,6 @@ export default function StorefrontDemoPage() {
   );
 }
 
-function StatePanel({ title, detail, action, loading = false, error = false, compact = false }: { readonly title: string; readonly detail: string; readonly action?: React.ReactNode; readonly loading?: boolean; readonly error?: boolean; readonly compact?: boolean }) {
+function StatePanel({ title, detail, action, loading = false, error = false, compact = false }: { readonly title: string; readonly detail: string; readonly action?: ReactNode; readonly loading?: boolean; readonly error?: boolean; readonly compact?: boolean }) {
   return <div role={error ? 'alert' : 'status'} className={`${compact ? 'my-5' : 'my-2'} rounded-lg border px-4 py-5 ${error ? 'border-rose-900/70 bg-rose-950/20' : 'border-slate-800 bg-slate-900/60'}`}><div className="flex items-start gap-3"><div className={`mt-1 h-2 w-2 shrink-0 rounded-full ${loading ? 'animate-pulse bg-sky-400' : error ? 'bg-rose-400' : 'bg-slate-600'}`} aria-hidden="true" /><div><h2 className={`text-sm font-medium ${error ? 'text-rose-200' : 'text-slate-200'}`}>{title}</h2><p className={`mt-1 text-xs leading-5 ${error ? 'text-rose-300/80' : 'text-slate-500'}`}>{detail}</p>{action && <div className="mt-3">{action}</div>}</div></div></div>;
 }

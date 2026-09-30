@@ -2,7 +2,7 @@
  * Drawer panel providing deep inspection of R16 step authority verdicts, latencies, and evidence.
  */
 
-import React, { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import type { AgentRunProjection } from './types';
 import { getRetryEligibility } from './retry-helpers';
 

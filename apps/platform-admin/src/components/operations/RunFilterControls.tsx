@@ -2,7 +2,7 @@
  * Keyboard-accessible query filter controls for R16 agent run history.
  */
 
-import React from 'react';
+import type { KeyboardEvent } from 'react';
 import type { RunFilters } from './types';
 
 interface RunFilterControlsProps {
@@ -40,7 +40,7 @@ export function RunFilterControls({
   onReset,
   isLoading,
 }: RunFilterControlsProps) {
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'Enter') {
       e.preventDefault();
       onApply();

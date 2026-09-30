@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation';
 import { can, type AuthSession } from '@agentos/ui-foundation/auth';
 import { AuthRequestError, tenantConsoleClient } from '../../../../lib/tenant-console-client';
 import { Customer360Timeline } from '../../../../components/customer/Customer360Timeline';
-import { DemoBadge } from '../../../../components/ui/Primitives';
+import { DemoBadge } from '@agentos/ui-foundation/react';
 import { RequirePermission } from '../../../../components/auth/RequirePermission';
 type Conversation = {
   readonly conversation_id: string;

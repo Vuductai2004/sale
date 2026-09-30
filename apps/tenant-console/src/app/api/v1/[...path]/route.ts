@@ -64,6 +64,8 @@ function isAllowedPath(path: string, method: string): boolean {
   return false;
 }
 
+
+
 function requestHeaders(request: Request, token: string, path: string): Headers {
   const headers = new Headers({ Authorization: `Bearer ${token}` });
   for (const name of FORWARDED_REQUEST_HEADERS) {

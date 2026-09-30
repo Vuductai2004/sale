@@ -4,7 +4,7 @@
  */
 'use client';
 
-import React, { Suspense, useState } from 'react';
+import { Suspense, useState } from 'react';
 import { useSearchParams, useRouter, usePathname } from 'next/navigation';
 import { ApprovalCenter } from '../../../components/approvals/ApprovalCenter';
 import { Customer360Timeline } from '../../../components/customer/Customer360Timeline';

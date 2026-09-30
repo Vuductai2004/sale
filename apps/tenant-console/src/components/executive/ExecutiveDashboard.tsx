@@ -7,7 +7,7 @@
 
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { ApiError } from '@agentos/ui-foundation';
 import type { SharedUiState } from '@agentos/ui-foundation';
 import { tenantConsoleClient } from '../../lib/tenant-console-client';

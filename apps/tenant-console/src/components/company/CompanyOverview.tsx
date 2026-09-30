@@ -5,9 +5,9 @@ import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ApiError, type SharedUiState, type SourceStatus } from '@agentos/ui-foundation';
 import { can, type AuthSession } from '@agentos/ui-foundation/auth';
+import { DemoBadge, EmptyState, ErrorState, LoadingState, MetricCard, PageHeader, SectionHeader, StatusBadge } from '@agentos/ui-foundation/react';
 import type { ApprovalQueueItem, KpiMetricItem } from '../../lib/types/tenant-console';
 import { tenantConsoleClient } from '../../lib/tenant-console-client';
-import { BlockedState, DemoBadge, EmptyState, ErrorState, LoadingPanel, MetricTile, PageHeader, SectionCard, StatusBadge } from '../ui/Primitives';
 
 type MetricValue = KpiMetricItem<unknown>;
 type OverviewState = 'loading' | 'ready' | 'signed_out' | 'error';
@@ -28,14 +28,13 @@ const METRIC_CARDS = [
 
 
 
-function sourceTone(status: SourceStatus): 'live' | 'stale' | 'no-data' | 'not-instrumented' | 'dependency-unavailable' | 'fail-closed' {
+function sourceTone(status: SourceStatus): 'success' | 'warning' | 'neutral' | 'danger' {
   switch (status) {
-    case 'LIVE': return 'live';
-    case 'STALE': return 'stale';
-    case 'NO_DATA': return 'no-data';
-    case 'UNAVAILABLE': return 'dependency-unavailable';
-    case 'FAIL_CLOSED': return 'fail-closed';
-    default: return 'not-instrumented';
+    case 'LIVE': return 'success';
+    case 'STALE': return 'warning';
+    case 'UNAVAILABLE':
+    case 'FAIL_CLOSED': return 'danger';
+    default: return 'neutral';
   }
 }
 
@@ -83,9 +82,9 @@ function loadError(error: unknown): { readonly state: SharedUiState; readonly me
 }
 
 function capabilityLabel(status: 'integrated' | 'demo-only' | 'blocked') {
-  if (status === 'integrated') return <StatusBadge label="Integrated" tone="integrated" />;
-  if (status === 'demo-only') return <StatusBadge label="Demo only" tone="demo-only" />;
-  return <StatusBadge label="Blocked" tone="blocked" />;
+  if (status === 'integrated') return <StatusBadge label="Integrated" tone="success" />;
+  if (status === 'demo-only') return <StatusBadge label="Demo only" tone="demo" />;
+  return <StatusBadge label="Blocked" tone="danger" />;
 }
 
 function capabilityLink(href: string, label: string, enabled: boolean) {
@@ -94,15 +93,15 @@ function capabilityLink(href: string, label: string, enabled: boolean) {
     : <span className="mt-4 inline-flex text-sm font-semibold text-muted">Unavailable</span>;
 }
 
-function overviewTone(state: SharedUiState): 'no-data' | 'live' | 'partial' | 'stale' | 'dependency-unavailable' | 'fail-closed' | 'blocked' {
+function overviewTone(state: SharedUiState): 'neutral' | 'success' | 'warning' | 'danger' {
   switch (state) {
-    case 'idle': return 'live';
-    case 'partial': return 'partial';
-    case 'stale': return 'stale';
-    case 'permission_denied': return 'blocked';
-    case 'dependency_unavailable': return 'dependency-unavailable';
-    case 'fail_closed': return 'fail-closed';
-    default: return 'no-data';
+    case 'idle': return 'success';
+    case 'partial':
+    case 'stale': return 'warning';
+    case 'permission_denied':
+    case 'dependency_unavailable':
+    case 'fail_closed': return 'danger';
+    default: return 'neutral';
   }
 }
 
@@ -206,7 +205,7 @@ export function CompanyOverview() {
   const attentionValue = !canReadApprovals ? 'Scoped only' : approvalState === 'ready' && approvalTotal !== null ? String(approvalTotal) : approvalState === 'permission_denied' ? 'Scoped only' : approvalState === 'error' ? 'Unavailable' : 'Loading';
   const attentionDetail = !canReadApprovals ? 'This session cannot read the approval queue.' : approvalState === 'ready' ? 'Authoritative pending total returned for this session.' : approvalState === 'permission_denied' ? 'The approval queue denied this session.' : approvalState === 'error' ? (approvalError ?? 'The approval queue is unavailable.') : 'Loading the authorized approval queue.';
 
-  if (overviewState === 'loading') return <LoadingPanel label="Loading company observations" />;
+  if (overviewState === 'loading') return <LoadingState label="Loading company observations" />;
 
   return (
     <div className="space-y-6" aria-label="Company overview">
@@ -219,19 +218,27 @@ export function CompanyOverview() {
 
       <div className="flex flex-wrap items-center gap-2" aria-label="Overview status"><StatusBadge label={uiState === 'empty' ? 'No data' : uiState.replaceAll('_', ' ')} tone={overviewTone(uiState)} />{session ? <DemoBadge /> : null}<span className="text-xs text-muted">{observedAt ? `Observed ${new Date(observedAt).toLocaleString()}` : 'Observed time unavailable'}</span></div>
 
-      {overviewState === 'signed_out' ? <ErrorState title="Tenant session unavailable" detail={errorMessage ?? 'Sign in to continue.'} correlationId={correlationId} /> : null}
-      {overviewState === 'error' ? <ErrorState title="Company observations unavailable" detail={errorMessage ?? 'The current data source failed closed.'} correlationId={correlationId} onRetry={() => void loadOverview()} /> : null}
+      {overviewState === 'signed_out' ? <ErrorState message={`Tenant session unavailable: ${errorMessage ?? 'Sign in to continue.'}${correlationId ? ` Correlation ID: ${correlationId}.` : ''}`} /> : null}
+      {overviewState === 'error' ? <ErrorState message={`Company observations unavailable: ${errorMessage ?? 'The current data source failed closed.'}${correlationId ? ` Correlation ID: ${correlationId}.` : ''}`} onRetry={() => void loadOverview()} /> : null}
 
-      <section aria-labelledby="metric-heading"><div className="mb-3 flex items-end justify-between gap-3"><div><h2 id="metric-heading" className="text-lg font-semibold text-ink">Daily summary</h2><p className="mt-1 text-sm text-muted">KPI source: <code>/telemetry/kpi-snapshot</code>. Trends and revenue estimates are omitted.</p></div></div><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{metricByCard.map(({ definition, metric }) => <MetricTile key={definition.label} label={definition.label} value={definition.label === 'Items needing attention' ? attentionValue : displayMetric(metric)} detail={definition.label === 'Items needing attention' ? attentionDetail : metric?.reason ?? definition.detail} status={<StatusBadge label={metric?.source_status ? metric.source_status.replaceAll('_', ' ') : 'Not instrumented'} tone={metric?.source_status ? sourceTone(metric.source_status) : 'not-instrumented'} />} />)}</div></section>
+      <section aria-labelledby="metric-heading"><div className="mb-3 flex items-end justify-between gap-3"><div><h2 id="metric-heading" className="text-lg font-semibold text-ink">Daily summary</h2><p className="mt-1 text-sm text-muted">KPI source: <code>/telemetry/kpi-snapshot</code>. Trends and revenue estimates are omitted.</p></div></div><div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">{metricByCard.map(({ definition, metric }) => <MetricCard key={definition.label} label={definition.label} value={definition.label === 'Items needing attention' ? attentionValue : displayMetric(metric)} detail={definition.label === 'Items needing attention' ? attentionDetail : metric?.reason ?? definition.detail} status={<StatusBadge label={metric?.source_status ? metric.source_status.replaceAll('_', ' ') : 'Not instrumented'} tone={metric?.source_status ? sourceTone(metric.source_status) : 'neutral'} />} />)}</div></section>
 
       <div className="grid gap-6 xl:grid-cols-[1.35fr_0.65fr]">
-        <SectionCard title="Needs attention" description="Only pending records returned to the current role are listed.">
-          {!canReadApprovals ? <BlockedState title="Approval queue not available to this role" detail="Tenant operator sessions cannot read marketing approval records. Customer care attention remains scoped to the conversation workflow." /> : approvalState === 'error' ? <ErrorState title="Approval queue unavailable" detail={approvalError ?? 'The authorized approval source failed closed.'} /> : approvalState === 'permission_denied' ? <BlockedState title="Approval queue denied" detail="The current session cannot read pending approval records." /> : approvals.length > 0 ? <ul className="divide-y divide-line">{approvals.map((approval) => <li key={approval.approval_id} className="flex flex-col gap-3 py-4 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><p className="truncate text-sm font-semibold text-ink">{approval.title ?? approval.action_id}</p><p className="mt-1 truncate text-xs text-muted">{approval.reason} · {new Date(approval.created_at).toLocaleString()}</p></div><Link className="ui-button ui-button--secondary shrink-0" href="/approvals?tab=approvals">Review</Link></li>)}</ul> : <EmptyState title="No pending approvals" detail="The authorized approval queue returned no pending records. No unified notification count is inferred." />}
-        </SectionCard>
-        <SectionCard title="Recent activity" description="No global activity feed is available for this tenant workspace."><EmptyState title="No global feed" detail="Open a known customer timeline or run trace from an authorized workflow to inspect activity." /></SectionCard>
+        <section className="ui-section-card">
+          <SectionHeader title="Needs attention" description="Only pending records returned to the current role are listed." />
+          <div className="p-5">
+          {!canReadApprovals ? <EmptyState title="Approval queue not available to this role" description="Tenant operator sessions cannot read marketing approval records. Customer care attention remains scoped to the conversation workflow." status="NOT_INTEGRATED" /> : approvalState === 'error' ? <ErrorState message={`Approval queue unavailable: ${approvalError ?? 'The authorized approval source failed closed.'}`} /> : approvalState === 'permission_denied' ? <EmptyState title="Approval queue denied" description="The current session cannot read pending approval records." status="NOT_INTEGRATED" /> : approvals.length > 0 ? <ul className="divide-y divide-line">{approvals.map((approval) => <li key={approval.approval_id} className="flex flex-col gap-3 py-4 first:pt-0 last:pb-0 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><p className="truncate text-sm font-semibold text-ink">{approval.title ?? approval.action_id}</p><p className="mt-1 truncate text-xs text-muted">{approval.reason} · {new Date(approval.created_at).toLocaleString()}</p></div><Link className="ui-button ui-button--secondary shrink-0" href="/approvals?tab=approvals">Review</Link></li>)}</ul> : <EmptyState title="No pending approvals" description="The authorized approval queue returned no pending records. No unified notification count is inferred." />}
+        </div>
+        </section>
+        <section className="ui-section-card">
+          <SectionHeader title="Recent activity" description="No global activity feed is available for this tenant workspace." />
+          <div className="p-5"><EmptyState title="No global feed" description="Open a known customer timeline or run trace from an authorized workflow to inspect activity." /></div>
+        </section>
       </div>
 
-      <SectionCard title="AI team domains" description="These cards describe product areas, not an active-agent count or fleet roster.">
+      <section className="ui-section-card">
+        <SectionHeader title="AI team domains" description="These cards describe product areas, not an active-agent count or fleet roster." />
+        <div className="p-5">
         <div className="grid gap-4 md:grid-cols-3">
           <div className="rounded-lg border border-line bg-surface-low p-4">
             <div className="flex items-center justify-between gap-3"><h3 className="font-semibold text-ink">Customer care</h3>{capabilityLabel(can(session, 'conversation:takeover') ? 'integrated' : 'blocked')}</div>
@@ -249,9 +256,13 @@ export function CompanyOverview() {
             {capabilityLink('/demo/storefront', 'Open demo storefront', can(session, 'customer:read'))}
           </div>
         </div>
-      </SectionCard>
+        </div>
+      </section>
 
-      <SectionCard title="Workspace boundaries" description="These are intentional non-interactive states, not missing buttons."><div className="grid gap-3 text-sm sm:grid-cols-3"><div className="rounded-lg border border-line p-3"><p className="font-semibold text-ink">Tenant identity</p><p className="mt-1 text-muted">{session?.membership.tenant_id ?? 'Unavailable until sign-in'}</p></div><div className="rounded-lg border border-line p-3"><p className="font-semibold text-ink">Search and alerts</p><p className="mt-1 text-muted">Scoped loaded-row filtering only; no global endpoint.</p></div><div className="rounded-lg border border-line p-3"><p className="font-semibold text-ink">Summary action</p><p className="mt-1 text-muted">Not integrated because no summary-generation route is authorized.</p></div></div></SectionCard>
+      <section className="ui-section-card">
+        <SectionHeader title="Workspace boundaries" description="These are intentional non-interactive states, not missing buttons." />
+        <div className="p-5"><div className="grid gap-3 text-sm sm:grid-cols-3"><div className="rounded-lg border border-line p-3"><p className="font-semibold text-ink">Tenant identity</p><p className="mt-1 text-muted">{session?.membership.tenant_id ?? 'Unavailable until sign-in'}</p></div><div className="rounded-lg border border-line p-3"><p className="font-semibold text-ink">Search and alerts</p><p className="mt-1 text-muted">Scoped loaded-row filtering only; no global endpoint.</p></div><div className="rounded-lg border border-line p-3"><p className="font-semibold text-ink">Summary action</p><p className="mt-1 text-muted">Not integrated because no summary-generation route is authorized.</p></div></div></div>
+      </section>
     </div>
   );
 }

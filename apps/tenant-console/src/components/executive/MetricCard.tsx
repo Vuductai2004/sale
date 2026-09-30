@@ -6,7 +6,7 @@
 
 'use client';
 
-import React from 'react';
+import type { ReactNode } from 'react';
 import type {
   BaselineIndicatorDefinition,
   KpiMetricItem,
@@ -40,7 +40,7 @@ export function getBadgeStyle(status: SourceStatus): string {
 export function formatValue(
   value: number | string | null | undefined | Record<string, unknown>,
   format: BaselineIndicatorDefinition['format']
-): React.ReactNode {
+): ReactNode {
   if (value === null || value === undefined) {
     return null;
   }

@@ -4,7 +4,6 @@
  */
 'use client';
 
-import React from 'react';
 import type { ApprovalItem } from './types';
 
 interface ApprovalQueueListProps {
