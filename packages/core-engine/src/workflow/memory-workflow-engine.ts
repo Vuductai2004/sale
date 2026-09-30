@@ -310,6 +310,13 @@ export class MemoryWorkflowEngine implements IStatefulWorkflowEngine {
     );
     if (pending !== undefined) {
       if (pending.effect_key === params.approval.effect_key && pending.action_id === params.approval.action_id) {
+        const payloadDigest = sha256Hex(canonicalizeJson(params.approval.payload));
+        if (payloadDigest !== pending.payload_sha256) {
+          throw new OrchestratorError(
+            'APPROVAL_BINDING_MISMATCH',
+            `Approval '${pending.approval_id}' binds a different reviewed payload; refusing to replay it for another payload.`,
+          );
+        }
         return { approval_id: pending.approval_id };
       }
       throw new OrchestratorError(
@@ -407,6 +414,23 @@ export class MemoryWorkflowEngine implements IStatefulWorkflowEngine {
     if (approval.payload_sha256 !== params.expected_payload_sha256) {
       return { claimed: false };
     }
+    if (
+      params.decision !== 'APPROVED'
+      && params.decision !== 'MODIFIED'
+      && params.authorized_action !== null
+    ) {
+      return { claimed: false };
+    }
+    if (params.decision === 'APPROVED' && params.authorized_action !== null) {
+      const authorized = params.authorized_action;
+      if (
+        authorized.action_id !== approval.action_id
+        || authorized.effect_key !== approval.effect_key
+        || sha256Hex(canonicalizeJson(authorized.payload)) !== approval.payload_sha256
+      ) {
+        return { claimed: false };
+      }
+    }
     if (approval.decision !== 'PENDING') {
       return { claimed: false };
     }
@@ -455,8 +479,15 @@ export class MemoryWorkflowEngine implements IStatefulWorkflowEngine {
         approval.effect_key = params.authorized_action.effect_key;
         approval.payload_sha256 = sha256Hex(canonicalizeJson(params.authorized_action.payload));
       }
+      const checkpointAction = params.decision === 'MODIFIED'
+        ? {
+            ...params.authorized_action,
+            approval_id: approval.approval_id,
+            approval_payload_digest: approval.payload_sha256,
+          }
+        : params.authorized_action;
       if (row.state_payload !== null) {
-        row.state_payload = { ...row.state_payload, pending_action: params.authorized_action };
+        row.state_payload = { ...row.state_payload, pending_action: checkpointAction };
       }
     }
 

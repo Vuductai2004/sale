@@ -191,6 +191,35 @@ describe('bounded skill execution', () => {
     await expectRefusalAsync(harness.engine.dispatch(dispatchRequest()), 'CIRCUIT_BREAKER_OPEN');
     expect(harness.invocations).toHaveLength(callsBeforeRefusal);
   });
+  it('scopes the breaker by tenant instead of suppressing another tenant', async () => {
+    const harness = createHarness({
+      respond: hangsUntilAborted,
+      row: {
+        effect_class: 'EFFECT',
+        timeout_ms: 5,
+        retry_policy: {
+          max_retries: 0,
+          initial_interval_ms: 0,
+          backoff_multiplier: 1,
+          retry_on_timeout: false,
+          non_retryable_errors: [],
+        },
+      },
+    });
+
+    for (let failure = 0; failure < 5; failure += 1) {
+      await expectRefusalAsync(harness.engine.dispatch(dispatchRequest()), 'EFFECT_UNKNOWN');
+    }
+
+    await expectRefusalAsync(
+      harness.engine.dispatch(
+        dispatchRequest({ tenant_id: 'tenant-2', input: { tenant_id: 'tenant-2', sku_id: 'SKU-1' } }),
+      ),
+      'EFFECT_UNKNOWN',
+    );
+    expect(harness.invocations).toHaveLength(6);
+  });
+
 
   it('forwards the caller’s cancellation to the attempt in flight', async () => {
     const controller = new AbortController();

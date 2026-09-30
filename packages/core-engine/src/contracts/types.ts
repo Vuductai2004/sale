@@ -148,7 +148,12 @@ export interface WorkingMemoryContext {
   /** Canonical conversation row UUID, present only after its tenant/channel/thread binding is verified. */
   readonly conversation_id?: string;
   readonly active_cart_id?: string;
+  /** Trusted channel through which the run may address the customer. */
   readonly last_touch_channel: string;
+  /** Registry skill bound for a customer-facing response, when this run has one. */
+  readonly response_skill_id?: string;
+  /** Registered connector target bound for that response skill. */
+  readonly response_adapter_target?: string;
   readonly turn_count: number;
   /** Live projection of `tenant:{tid}:session:{sid}:takeover_lock` (SCR-005). */
   readonly takeover_active: boolean;
@@ -542,7 +547,19 @@ export interface EffectReservationRepository {
   getReservation(tenant_id: string, effect_key: string): Promise<EffectReservationRecord | null>;
 
   /**
-   * Settles a `RESERVED` row: `SUCCEEDED` with the verified receipt, or `FAILED` for a
+   * Reconciliation-tolerant settlement used when authoritative provider proof arrives after the
+   * reservation was marked FAILED or EXPIRED. Durable implementations may expose this stronger
+   * transition; the strict primitive above remains the fallback for lightweight bindings.
+   */
+  resolve?(input: {
+    readonly tenant_id: string;
+    readonly effect_key: string;
+    readonly status: 'SUCCEEDED' | 'FAILED';
+    readonly receipt?: unknown;
+  }): Promise<void>;
+
+  /**
+   * Settles a live `RESERVED` row: `SUCCEEDED` with the verified receipt, or `FAILED` for a
    * provider-confirmed absence. An indeterminate outcome is NOT a settlement and is never
    * expressed here — the row stays `RESERVED` (§04 §3.2.4).
    *

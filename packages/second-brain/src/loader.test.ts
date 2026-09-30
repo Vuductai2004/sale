@@ -45,7 +45,7 @@ describe('loadApprovedDocuments', () => {
     try {
       await cp(packageRoot, sandbox, {
         recursive: true,
-        filter: (source) => !/(?:node_modules|dist)[\\/]/.test(source),
+        filter: (source) => !/(?:^|[\\/])(?:node_modules|dist)(?:[\\/]|$)/.test(source),
       });
 
       await writeFile(

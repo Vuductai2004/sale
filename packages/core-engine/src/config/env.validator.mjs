@@ -755,7 +755,10 @@ function urlField(add, read, key) {
  */
 function llmBaseUrlField(add, read, context) {
   const key = 'OPENAI_BASE_URL';
-  const value = read(key) ?? DEFAULT_OPENAI_BASE_URL;
+  const configuredValue = read(key);
+  const value = configuredValue === undefined || configuredValue.trim() === ''
+    ? DEFAULT_OPENAI_BASE_URL
+    : configuredValue;
   let url;
   try {
     url = new URL(value);

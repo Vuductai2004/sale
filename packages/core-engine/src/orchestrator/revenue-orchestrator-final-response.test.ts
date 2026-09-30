@@ -381,12 +381,20 @@ describe('RevenueOrchestrator final response boundary', () => {
     };
     const queued = checkpointWorkflow(checkpoint);
     const finalizer = vi.fn(async () => finalResponse);
+    const resumedStages: string[] = [];
+    const runStageRecorder: IRunStageRecorder = {
+      nextAttemptOrdinal: async () => 1,
+      append: async ({ stage }) => {
+        resumedStages.push(stage);
+      },
+    };
     const { orchestrator, dispatch } = makeHarness({
       workflow: queued.workflow,
       evidenceLogger,
       effectGuard,
       responseFinalizer: { finalize: finalizer },
       responseStore: responses.store,
+      runStageRecorder,
     });
 
     const result = await orchestrator.processQueuedSignal(runId, signal(), {
@@ -397,6 +405,7 @@ describe('RevenueOrchestrator final response boundary', () => {
     expect(dispatch).not.toHaveBeenCalled();
     expect(finalizer).toHaveBeenCalledTimes(1);
     expect(responses.save).toHaveBeenCalledTimes(1);
+    expect(resumedStages).toEqual(['OUTCOME', 'LEARNING']);
     expect(queued.transitionTask).toHaveBeenCalledWith(
       TENANT,
       runId,
@@ -521,7 +530,7 @@ describe('RevenueOrchestrator final response boundary', () => {
     expect(dispatch).toHaveBeenCalledTimes(1);
     expect(stageEvents.filter((entry) => entry.attempt_ordinal === 1).at(-1)?.stage).toBe('APPROVAL');
     expect(stageEvents.filter((entry) => entry.attempt_ordinal === 2).map((entry) => entry.stage)).toEqual([
-      'ACTION', 'APPROVAL', 'EXECUTION', 'EVIDENCE', 'OUTCOME',
+      'ACTION', 'APPROVAL', 'EXECUTION', 'EVIDENCE', 'OUTCOME', 'LEARNING',
     ]);
   });
 

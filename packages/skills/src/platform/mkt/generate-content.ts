@@ -42,6 +42,8 @@ export interface OutputMktGenerateContent {
   headline: string;
   body_content: string;
   cta_text: string;
+  preheader?: string;
+  brand_audit_text?: string;
   channel_payload: ChannelSpecificPayload;
 }
 
@@ -87,6 +89,8 @@ const spec: Omit<PlatformRowSpec, 'skill_id'> = {
       headline: { type: 'string' },
       body_content: { type: 'string' },
       cta_text: { type: 'string' },
+      preheader: { type: 'string' },
+      brand_audit_text: { type: 'string' },
       channel_payload: {
         type: 'object',
         required: ['channel_type'],

@@ -23,6 +23,10 @@
  */
 
 import { randomUUID } from 'node:crypto';
+import { AsyncLocalStorage } from 'node:async_hooks';
+
+import { SpanStatusCode, trace } from '@opentelemetry/api';
+import type { Span } from '@opentelemetry/api';
 
 import {
   GENESIS_HASH,
@@ -65,7 +69,7 @@ import type {
   ISessionControl,
   IStatefulWorkflowEngine,
 } from '../contracts/index.js';
-import { canonicalizeJson } from '../durability/canonical-json.js';
+import { canonicalizeJson, sha256CanonicalJson } from '../durability/canonical-json.js';
 import { StageJournal, type LifecycleStage } from '../lifecycle/stages.js';
 import { assertOrchestratorBrokered } from './agent-boundary.js';
 import {
@@ -95,11 +99,13 @@ interface EvidenceChain {
   previous: string;
 }
 
+/** OTel remains optional at runtime: without an SDK this returns a non-recording span. */
+const STAGE_TRACER = trace.getTracer('agentos.orchestrator');
 
 export class RevenueOrchestrator {
   private readonly defaultWorkerId = `worker_${randomUUID().substring(0, 8)}`;
-  private claimedWorkerId: string | null = null;
   private journal: StageJournal = new StageJournal();
+  private readonly stageContext = new AsyncLocalStorage<StageJournal>();
 
   constructor(
     private readonly dependencies: {
@@ -156,22 +162,75 @@ export class RevenueOrchestrator {
     detail?: unknown;
     evidence_refs?: unknown;
   }): Promise<void> {
-    this.journal.enter(params.stage);
+    (this.stageContext.getStore() ?? this.journal).enter(params.stage);
     const recorder = this.dependencies.runStageRecorder;
-    if (recorder === undefined) {
-      return;
+    if (recorder !== undefined) {
+      const entered_at = new Date().toISOString();
+      await recorder.append({
+        tenant_id: params.tenant_id,
+        run_id: params.run_id,
+        attempt_ordinal: params.attempt_ordinal,
+        step_index: params.step_index,
+        stage: params.stage,
+        entered_at,
+        ...(params.detail === undefined ? {} : { detail: params.detail }),
+        ...(params.evidence_refs === undefined ? {} : { evidence_refs: params.evidence_refs }),
+      });
     }
-    const entered_at = new Date().toISOString();
-    await recorder.append({
-      tenant_id: params.tenant_id,
-      run_id: params.run_id,
-      attempt_ordinal: params.attempt_ordinal,
-      step_index: params.step_index,
-      stage: params.stage,
-      entered_at,
-      ...(params.detail === undefined ? {} : { detail: params.detail }),
-      ...(params.evidence_refs === undefined ? {} : { evidence_refs: params.evidence_refs }),
+  }
+
+  private startStageSpan(params: {
+    tenant_id: string;
+    run_id: string;
+    stage: LifecycleStage;
+  }): Span {
+    return STAGE_TRACER.startSpan(`orchestrator.stage.${params.stage}`, {
+      attributes: {
+        tenant_id: params.tenant_id,
+        run_id: params.run_id,
+        stage: params.stage,
+      },
     });
+  }
+
+  private async runStageSpan<T>(span: Span, operation: () => Promise<T>): Promise<T> {
+    try {
+      const result = await operation();
+      span.setStatus({ code: SpanStatusCode.OK });
+      return result;
+    } catch (error) {
+      const exception = error instanceof Error ? error : new Error(String(error));
+      span.recordException(exception);
+      span.setStatus({ code: SpanStatusCode.ERROR });
+      throw error;
+    } finally {
+      span.end();
+    }
+  }
+
+  private async traceStage<T>(
+    params: {
+      tenant_id: string;
+      run_id: string;
+      attempt_ordinal: number;
+      step_index: number;
+      stage: LifecycleStage;
+      detail?: unknown;
+      evidence_refs?: unknown;
+    },
+    operation: () => Promise<T>,
+  ): Promise<T> {
+    const span = this.startStageSpan(params);
+    try {
+      await this.enterStage(params);
+    } catch (error) {
+      const exception = error instanceof Error ? error : new Error(String(error));
+      span.recordException(exception);
+      span.setStatus({ code: SpanStatusCode.ERROR });
+      span.end();
+      throw error;
+    }
+    return this.runStageSpan(span, operation);
   }
 
   /**
@@ -190,7 +249,9 @@ export class RevenueOrchestrator {
   public async processSignal(signal: SignalEnvelope): Promise<OrchestratorRunResult> {
     // A rejected envelope is not a run: the journal is reset before validation and SIGNAL is only
     // entered once the envelope passed it.
-    this.journal = new StageJournal();
+    const journal = new StageJournal();
+    this.journal = journal;
+    this.stageContext.enterWith(journal);
 
     // STEP 1: SIGNAL VALIDATION — fail closed before any durable write.
     validateSignalEnvelope(signal);
@@ -216,13 +277,13 @@ export class RevenueOrchestrator {
         state: 'running',
       });
       attempt_ordinal = await this.dependencies.runStageRecorder?.nextAttemptOrdinal(signal.tenant_id, run_id) ?? 1;
-      await this.enterStage({
+      await this.traceStage({
         tenant_id: signal.tenant_id,
         run_id,
         attempt_ordinal,
         step_index: 0,
         stage: 'SIGNAL',
-      });
+      }, async () => undefined);
     } catch (error) {
       await this.dependencies.leaseManager.releaseLease(signal.tenant_id, run_id, this.workerId);
       throw error;
@@ -235,6 +296,7 @@ export class RevenueOrchestrator {
       chain,
       workerId: this.workerId,
       attempt_ordinal,
+      assertExecutionLease: false,
     });
   }
 
@@ -249,12 +311,12 @@ export class RevenueOrchestrator {
     signal: SignalEnvelope,
     options?: { worker_id?: string }
   ): Promise<OrchestratorRunResult> {
-    this.journal = new StageJournal();
-    this.claimedWorkerId = options?.worker_id ?? this.workerId;
+    const journal = new StageJournal();
+    this.journal = journal;
+    this.stageContext.enterWith(journal);
+    const effectiveWorkerId = options?.worker_id ?? this.workerId;
     // STEP 1: SIGNAL VALIDATION — fail closed before any durable action.
     validateSignalEnvelope(signal);
-
-    const effectiveWorkerId = this.claimedWorkerId;
     const task = await this.dependencies.workflowEngine.getTask(signal.tenant_id, run_id);
     if (!task) {
       throw new OrchestratorError('TASK_NOT_FOUND', `Task ${run_id} does not exist`);
@@ -324,10 +386,55 @@ export class RevenueOrchestrator {
             throw new OrchestratorError('CHECKPOINT_INCOMPLETE', 'Claimed task has no complete persisted plan cursor.');
           }
           validatePlanInputBindings(checkpoint.plan);
+          const persistedAction = checkpoint.pending_action;
+          const persistedApprovalId = persistedAction?.approval_id;
+          const persistedApprovalDigest = persistedAction?.approval_payload_digest;
+          // A MODIFIED AUTH-4 action is the only read-only checkpoint that may be dispatched
+          // automatically after the claim transaction committed. The approval id and the digest
+          // are persisted with the revised action, so recovery cannot re-draft revision zero or
+          // dispatch bytes other than the ones the operator released.
+          const authorizedReadOnlyAction =
+            persistedAction !== null
+            && persistedAction.action_revision > 0
+            && persistedAction.required_authority === 'AUTH-4'
+            && typeof persistedApprovalId === 'string'
+            && persistedApprovalId.length > 0
+            && typeof persistedApprovalDigest === 'string'
+            && persistedApprovalDigest.length > 0
+            && !persistedAction.mutating
+              ? persistedAction
+              : null;
           if (checkpoint.pending_action?.mutating && checkpoint.pending_action.step_index === checkpoint.current_step) {
             throw new OrchestratorError('CHECKPOINT_REQUIRES_RECONCILIATION', 'A restarted mutating step requires reconciliation by its effect key.');
           }
+          this.replayCommittedStages(checkpoint);
           if (checkpoint.current_step > checkpoint.plan.steps.length) {
+            const lastStep = checkpoint.plan.steps.at(-1);
+            const recovered = lastStep === undefined
+              ? null
+              : await this.findVerifiedStepReceipt({
+                  tenant_id: signal.tenant_id,
+                  run_id,
+                  request_id: checkpoint.request_id,
+                  step_index: lastStep.step_index,
+                  plan: checkpoint.plan,
+                });
+            if (recovered !== null) {
+              await this.traceStage({
+                tenant_id: signal.tenant_id,
+                run_id,
+                attempt_ordinal,
+                step_index: recovered.evidence.step_index,
+                stage: 'OUTCOME',
+              }, async () => undefined);
+              await this.updateLearningMemory(
+                signal.tenant_id,
+                run_id,
+                undefined,
+                recovered.evidence,
+                attempt_ordinal,
+              );
+            }
             const handoff = await this.brokerPlanHandoff({
               tenant_id: signal.tenant_id,
               run_id,
@@ -351,17 +458,42 @@ export class RevenueOrchestrator {
             return {
               run_id,
               lifecycle_state: 'completed',
+              ...(recovered === null ? {} : { evidence: recovered.evidence }),
               ...(response === undefined ? {} : { response }),
               ...(handoff.kind === 'ADMITTED' ? { handoff: handoff.admission } : {}),
             };
           }
-          this.replayCommittedStages(checkpoint);
           const outcome = await this.executeSteps({
             signal, tenant_id: signal.tenant_id, run_id, correlation_id: signal.correlation_id,
             request_id: checkpoint.request_id, plan: checkpoint.plan, context: checkpoint.context,
             chain: { previous: checkpoint.previous_evidence_hash }, from_step: checkpoint.current_step,
-            approved_action: null, approval_ref: null, attempt_ordinal,
+            approved_action: authorizedReadOnlyAction,
+            approval_ref: authorizedReadOnlyAction === null
+              ? null
+              : {
+                  approval_id: authorizedReadOnlyAction.approval_id ?? null,
+                  decision: 'MODIFIED',
+                  operator_id: null,
+                },
+            attempt_ordinal,
+            assertExecutionLease: true,
           });
+          if (outcome.evidence !== undefined) {
+            await this.traceStage({
+              tenant_id: signal.tenant_id,
+              run_id,
+              attempt_ordinal,
+              step_index: outcome.evidence.step_index,
+              stage: 'OUTCOME',
+            }, async () => undefined);
+            await this.updateLearningMemory(
+              signal.tenant_id,
+              run_id,
+              undefined,
+              outcome.evidence,
+              attempt_ordinal,
+            );
+          }
           if (outcome.lifecycle_state === 'completed') {
             const handoff = await this.brokerPlanHandoff({
               tenant_id: signal.tenant_id,
@@ -398,13 +530,13 @@ export class RevenueOrchestrator {
 
     // The reattempt branch replays SIGNAL from the checkpoint, so the first-pass path enters it
     // here: exactly one SIGNAL entry on either path, and no illegal repeat on a re-driven task.
-    await this.enterStage({
+    await this.traceStage({
       tenant_id: signal.tenant_id,
       run_id,
       attempt_ordinal,
       step_index: 0,
       stage: 'SIGNAL',
-    });
+    }, async () => undefined);
 
     // Transition queued task to running if not already running
     if (task.state === 'queued') {
@@ -428,6 +560,7 @@ export class RevenueOrchestrator {
       chain,
       workerId: effectiveWorkerId,
       attempt_ordinal,
+      assertExecutionLease: true,
     });
   }
 
@@ -441,25 +574,25 @@ export class RevenueOrchestrator {
     chain: EvidenceChain;
     workerId: string;
     attempt_ordinal: number;
+    assertExecutionLease: boolean;
   }): Promise<OrchestratorRunResult> {
-    const { signal, run_id, request_id, chain, workerId, attempt_ordinal } = params;
+    const { signal, run_id, request_id, chain, workerId, attempt_ordinal, assertExecutionLease } = params;
 
     return await this.withDurableRecovery(
       { tenant_id: signal.tenant_id, run_id, workerId },
       async () => {
         // STEP 2: CONTEXT HYDRATION (trusted identity resolution + session-scoped memory)
-        await this.enterStage({
+        const context = await this.traceStage({
           tenant_id: signal.tenant_id,
           run_id,
           attempt_ordinal,
           step_index: 0,
           stage: 'CONTEXT',
-        });
-        const context = await this.dependencies.contextAggregator.hydrateContext(
+        }, async () => this.dependencies.contextAggregator.hydrateContext(
           signal.tenant_id,
           signal.subject,
           signal.correlation_id
-        );
+        ));
         const sessionId = context.working_memory.session_id;
 
         if (await this.dependencies.sessionControl.isTakenOver(signal.tenant_id, sessionId)) {
@@ -472,42 +605,45 @@ export class RevenueOrchestrator {
         }
 
         // STEP 3: HYPOTHESIS FORMATION (explicitly HYPOTHESIS-class, cannot write to FACT)
-        await this.enterStage({
+        const hypothesis = await this.traceStage({
           tenant_id: signal.tenant_id,
           run_id,
           attempt_ordinal,
           step_index: 0,
           stage: 'HYPOTHESIS',
+        }, async () => {
+          const derived = await this.dependencies.agentRuntime.deriveHypothesis(signal, context);
+          enforceEpistemicSeparation(derived);
+          return derived;
         });
-        const hypothesis = await this.dependencies.agentRuntime.deriveHypothesis(signal, context);
-        enforceEpistemicSeparation(hypothesis);
         // STEP 4: DECISION & ROUTING (FR-ORC-001)
-        await this.enterStage({
+        const routing = await this.traceStage({
           tenant_id: signal.tenant_id,
           run_id,
           attempt_ordinal,
           step_index: 0,
           stage: 'DECISION',
-        });
-        const routing = assertOrchestratorBrokered(
+        }, async () => assertOrchestratorBrokered(
           await this.dependencies.agentRuntime.resolveRouting(signal, context, hypothesis),
-        );
+        ));
 
 
         // STEP 5: PLAN FORMULATION. The Single Clarification Rule produces a one-step plan, so a
         // clarification message passes the SAME authority, reservation and evidence guards as any
         // other outbound action (it is a real external mutation).
-        await this.enterStage({
+        const plan = await this.traceStage({
           tenant_id: signal.tenant_id,
           run_id,
           attempt_ordinal,
           step_index: 0,
           stage: 'PLAN',
+        }, async () => {
+          const formulated = routing.requires_clarification
+            ? this.buildClarificationPlan(routing, signal, context)
+            : await this.dependencies.agentRuntime.formulatePlan(routing, context, hypothesis);
+          validatePlanInputBindings(formulated);
+          return formulated;
         });
-        const plan = routing.requires_clarification
-          ? this.buildClarificationPlan(routing, signal, context)
-          : await this.dependencies.agentRuntime.formulatePlan(routing, context, hypothesis);
-        validatePlanInputBindings(plan);
         // Persist the decided plan before its first side effect. A restarted worker must replay this
         // checkpoint rather than rederive a potentially different plan under the same request id.
         await this.dependencies.workflowEngine.updateTaskProgress(signal.tenant_id, run_id, 1, {
@@ -529,6 +665,7 @@ export class RevenueOrchestrator {
           approved_action: null,
           approval_ref: null,
           attempt_ordinal,
+          assertExecutionLease,
         });
         if (outcome.lifecycle_state !== 'completed') {
           return {
@@ -542,13 +679,13 @@ export class RevenueOrchestrator {
         // an outcome to attribute; a plan that produced none (an empty plan, or a resume past the last
         // step) completes without claiming either stage rather than recording a stage it never reached.
         if (outcome.evidence !== undefined) {
-          await this.enterStage({
+          await this.traceStage({
             tenant_id: signal.tenant_id,
             run_id,
             attempt_ordinal,
             step_index: outcome.evidence.step_index,
             stage: 'OUTCOME',
-          });
+          }, async () => undefined);
           await this.updateLearningMemory(signal.tenant_id, run_id, hypothesis, outcome.evidence, attempt_ordinal);
         }
 
@@ -686,6 +823,7 @@ export class RevenueOrchestrator {
     reconciled_action?: ActionDraft | null;
     reconciled_effect?: ReconciledEffect | null;
     attempt_ordinal: number;
+    assertExecutionLease: boolean;
   }): Promise<StepLoopOutcome> {
     const { tenant_id, run_id, correlation_id, request_id, plan, context, chain, attempt_ordinal } = params;
     const sessionId = context.working_memory.session_id;
@@ -694,6 +832,19 @@ export class RevenueOrchestrator {
     // A first pass carries the inbound event; a resume carries the decision that released it.
     const trigger = params.signal ? params.signal.event_type : 'task.resume';
     let latestEvidence: ImmutableEvidenceRecord | undefined;
+    if (params.from_step > plan.steps.length && plan.steps.length > 0) {
+      const lastStep = plan.steps.at(-1);
+      if (lastStep !== undefined) {
+        const recovered = await this.findVerifiedStepReceipt({
+          tenant_id,
+          run_id,
+          request_id,
+          step_index: lastStep.step_index,
+          plan,
+        });
+        latestEvidence = recovered?.evidence;
+      }
+    }
 
     for (const step of plan.steps) {
       if (step.step_index < params.from_step) {
@@ -703,8 +854,7 @@ export class RevenueOrchestrator {
       const stepStartedAt = new Date(stepStartTime).toISOString();
 
       // SCR-005 guard, per step (hence per retry and per resume): a takeover landing mid-run stops
-      // the very next dispatch rather than only the first.
-      if (this.claimedWorkerId !== null) {
+      if (params.assertExecutionLease === true) {
         await this.dependencies.assertExecutionLease?.(tenant_id, run_id);
       }
       if (await this.dependencies.sessionControl.isTakenOver(tenant_id, sessionId)) {
@@ -767,42 +917,44 @@ export class RevenueOrchestrator {
       // STEPS 6-7: ACTION DRAFTING (deterministic effect_key + authoritative floor).
       // The stage is entered before the draft: the step loop returns to ACTION from EVIDENCE for
       // every step after the first (§8.4), and a step that never drafts never records it.
-      await this.enterStage({
-        tenant_id,
-        run_id,
-        attempt_ordinal,
-        step_index: step.step_index,
-        stage: 'ACTION',
-      });
       const released = params.approved_action !== null
         && params.approved_action.step_index === step.step_index;
       const reconciled = reconciledAction !== null
         && reconciledAction.step_index === step.step_index;
 
-      if (reconciledEffect !== null && !reconciled) {
-        throw new OrchestratorError(
-          'RECONCILIATION_BINDING_REQUIRED',
-          'Provider reconciliation proof requires the persisted pending action for the resumed step.',
-        );
-      }
+      const action: ActionDraft = await this.traceStage({
+        tenant_id,
+        run_id,
+        attempt_ordinal,
+        step_index: step.step_index,
+        stage: 'ACTION',
+      }, async () => {
+        if (reconciledEffect !== null && !reconciled) {
+          throw new OrchestratorError(
+            'RECONCILIATION_BINDING_REQUIRED',
+            'Provider reconciliation proof requires the persisted pending action for the resumed step.',
+          );
+        }
 
-      const resolvedInputs = released || reconciled
-        ? undefined
-        : await this.resolveStepInputs({
-            tenant_id, run_id, request_id, step, plan, context,
-          });
-      const action: ActionDraft = released
-        ? (params.approved_action as ActionDraft)
-        : reconciled
-          ? (reconciledAction as ActionDraft)
-          : await this.draftAction(step, context, run_id, tenant_id, request_id, 0, resolvedInputs);
-      verifyFloorPrice(action);
-      // Save the exact draft before dispatch. A restarted effect-bearing run cannot re-draft and
-      // re-send until the reservation and provider outcome have been reconciled by this key.
-      await this.dependencies.workflowEngine.updateTaskProgress(tenant_id, run_id, step.step_index, {
-        ...(params.signal === null ? {} : { signal: params.signal }),
-        plan, current_step: step.step_index, pending_action: action, context,
-        previous_evidence_hash: chain.previous, request_id,
+        const resolvedInputs = released || reconciled
+          ? undefined
+          : await this.resolveStepInputs({
+              tenant_id, run_id, request_id, step, plan, context,
+            });
+        const drafted: ActionDraft = released
+          ? (params.approved_action as ActionDraft)
+          : reconciled
+            ? (reconciledAction as ActionDraft)
+            : await this.draftAction(step, context, run_id, tenant_id, request_id, 0, resolvedInputs);
+        verifyFloorPrice(drafted);
+        // Save the exact draft before dispatch. A restarted effect-bearing run cannot re-draft and
+        // re-send until its reservation and provider outcome have been reconciled by this key.
+        await this.dependencies.workflowEngine.updateTaskProgress(tenant_id, run_id, step.step_index, {
+          ...(params.signal === null ? {} : { signal: params.signal }),
+          plan, current_step: step.step_index, pending_action: drafted, context,
+          previous_evidence_hash: chain.previous, request_id,
+        });
+        return drafted;
       });
 
       // STEP 7: recheck current policy even after a human decision was claimed.
@@ -847,14 +999,13 @@ export class RevenueOrchestrator {
           );
         }
       }
-      await this.enterStage({
+      const authorization = await this.traceStage({
         tenant_id,
         run_id,
         attempt_ordinal,
         step_index: step.step_index,
         stage: 'APPROVAL',
-      });
-      const authorization = await this.dependencies.policyEngine.evaluateAuthority(action, context);
+      }, async () => this.dependencies.policyEngine.evaluateAuthority(action, context));
 
       if (authorization.verdict === 'DENIED') {
         await this.dependencies.workflowEngine.transitionTask(tenant_id, run_id, 'stopped', `Authority denied: ${authorization.reason}`);
@@ -977,8 +1128,16 @@ export class RevenueOrchestrator {
           step_index: step.step_index,
           stage: 'EXECUTION',
         });
+        const executionSpan = this.startStageSpan({
+          tenant_id,
+          run_id,
+          stage: 'EXECUTION',
+        });
         try {
-          dispatchedReceipt = await dispatchWithDeadline(this.dependencies, action, step);
+          dispatchedReceipt = await this.runStageSpan(
+            executionSpan,
+            async () => dispatchWithDeadline(this.dependencies, action, step),
+          );
           providerReceipt = dispatchedReceipt;
         } catch (error) {
           const classified = classifyFailure(error);
@@ -1089,24 +1248,26 @@ export class RevenueOrchestrator {
         }
       } else {
         // A replayed receipt is an actual execution-stage observation without another adapter call.
-        await this.enterStage({
+        await this.traceStage({
           tenant_id,
           run_id,
           attempt_ordinal,
           step_index: step.step_index,
           stage: 'EXECUTION',
-        });
+        }, async () => undefined);
       }
 
       // STEP 9: CHAINED IMMUTABLE EVIDENCE. The stage record precedes the durable evidence append,
       // preserving a trace even when evidence persistence itself fails closed.
-      await this.enterStage({
+      const evidenceStage = {
         tenant_id,
         run_id,
         attempt_ordinal,
         step_index: step.step_index,
-        stage: 'EVIDENCE',
-      });
+        stage: 'EVIDENCE' as const,
+      };
+      await this.enterStage(evidenceStage);
+      const evidenceSpan = this.startStageSpan(evidenceStage);
 
       // From here a mutating step may ALREADY have applied its external effect: it dispatched just
       // now, or it replayed the stored receipt of an effect that landed. An evidence or audit write
@@ -1117,15 +1278,18 @@ export class RevenueOrchestrator {
       // read-only step has no external effect, so its write failure keeps the existing behaviour.
       const effectMayHaveLanded = step.mutating && (replayed || dispatchedReceipt !== null);
       try {
-        const stepEvidence = await this.dependencies.evidenceLogger.createImmutableRecord({
-          run_id,
-          tenant_id,
-          correlation_id,
-          step_index: step.step_index,
-          effect_key: action.effect_key,
-          previous_evidence_hash: chain.previous,
-          payload: { action, receipt: providerReceipt, replayed },
-        });
+        const stepEvidence = await this.runStageSpan(
+          evidenceSpan,
+          async () => this.dependencies.evidenceLogger.createImmutableRecord({
+            run_id,
+            tenant_id,
+            correlation_id,
+            step_index: step.step_index,
+            effect_key: action.effect_key,
+            previous_evidence_hash: chain.previous,
+            payload: { action, receipt: providerReceipt, replayed },
+          }),
+        );
         chain.previous = stepEvidence.chain_hash; // link to the predecessor's chain hash
         latestEvidence = stepEvidence;
 
@@ -1199,7 +1363,9 @@ export class RevenueOrchestrator {
       reason?: string;
     }
   ): Promise<OrchestratorRunResult> {
-    this.journal = new StageJournal();
+    const journal = new StageJournal();
+    this.journal = journal;
+    this.stageContext.enterWith(journal);
     let task = await this.dependencies.workflowEngine.getTask(resumeEvent.tenant_id, run_id);
     if (!task) {
       throw new OrchestratorError('TASK_NOT_FOUND', 'Task ' + run_id + ' does not exist');
@@ -1462,6 +1628,15 @@ export class RevenueOrchestrator {
         const candidate = decision === 'MODIFIED'
           ? await this.applyModification(pendingAction, resumeEvent.modifications!, checkpoint.context)
           : pendingAction;
+        const authorizedAction = decision === 'APPROVED' || decision === 'MODIFIED'
+          ? {
+              ...candidate,
+              approval_id: approvalId,
+              approval_payload_digest: decision === 'MODIFIED'
+                ? sha256CanonicalJson(candidate.payload)
+                : expectedPayloadSha256,
+            }
+          : null;
         if (decision === 'APPROVED' || decision === 'MODIFIED') {
           verifyFloorPrice(candidate);
           const eligibility = await this.dependencies.policyEngine.evaluateAuthority(candidate, checkpoint.context);
@@ -1495,7 +1670,7 @@ export class RevenueOrchestrator {
           approval_id: approvalId,
           effect_key: pendingAction.effect_key,
           expected_payload_sha256: expectedPayloadSha256,
-          authorized_action: decision === 'APPROVED' || decision === 'MODIFIED' ? candidate : null,
+          authorized_action: authorizedAction,
           decision,
           operator_id: operatorId,
           review_comment: resumeEvent.reason ?? null,
@@ -1519,11 +1694,7 @@ export class RevenueOrchestrator {
           };
         }
         executionResumed = true;
-        releasedAction = {
-          ...candidate,
-          approval_id: approvalId,
-          approval_payload_digest: expectedPayloadSha256,
-        };
+        releasedAction = authorizedAction;
         approvalRef = { approval_id: approvalId, decision, operator_id: operatorId };
       }
 
@@ -1563,6 +1734,7 @@ export class RevenueOrchestrator {
         reconciled_action: reconciledAction,
         reconciled_effect: reconciledEffect,
         attempt_ordinal,
+        assertExecutionLease: true,
       });
       if (outcome.lifecycle_state !== 'completed') {
         return {
@@ -1573,13 +1745,20 @@ export class RevenueOrchestrator {
       }
 
       if (outcome.evidence !== undefined) {
-        await this.enterStage({
+        await this.traceStage({
           tenant_id: resumeEvent.tenant_id,
           run_id,
           attempt_ordinal,
           step_index: outcome.evidence.step_index,
           stage: 'OUTCOME',
-        });
+        }, async () => undefined);
+        await this.updateLearningMemory(
+          resumeEvent.tenant_id,
+          run_id,
+          undefined,
+          outcome.evidence,
+          attempt_ordinal,
+        );
       }
 
       const resumedHandoff = await this.brokerPlanHandoff({
@@ -1812,12 +1991,13 @@ export class RevenueOrchestrator {
    * is guarded as usual.
    */
   private replayCommittedStages(checkpoint: DurableTaskCheckpoint): void {
+    const journal = this.stageContext.getStore() ?? this.journal;
     for (const stage of ['SIGNAL', 'CONTEXT', 'HYPOTHESIS', 'DECISION', 'PLAN'] as const) {
-      this.journal.enter(stage);
+      journal.enter(stage);
     }
     for (let step = 1; step < checkpoint.current_step; step += 1) {
       for (const stage of ['ACTION', 'APPROVAL', 'EXECUTION', 'EVIDENCE'] as const) {
-        this.journal.enter(stage);
+        journal.enter(stage);
       }
     }
   }
@@ -2108,18 +2288,37 @@ export class RevenueOrchestrator {
     signal: SignalEnvelope,
     context: HydratedContext
   ): ExecutionPlan {
+    const rawResponseChannel = context.working_memory?.last_touch_channel;
+    const responseChannel = typeof rawResponseChannel === 'string' ? rawResponseChannel.trim() : '';
+    const rawResponseSkill = context.working_memory?.response_skill_id;
+    const responseSkill = typeof rawResponseSkill === 'string' ? rawResponseSkill.trim() : '';
+    const rawResponseAdapterTarget = context.working_memory?.response_adapter_target;
+    const responseAdapterTarget = typeof rawResponseAdapterTarget === 'string'
+      ? rawResponseAdapterTarget.trim()
+      : '';
+    if (
+      responseChannel.length === 0
+      || responseSkill.length === 0
+      || responseAdapterTarget.length === 0
+    ) {
+      throw new OrchestratorError(
+        'RESPONSE_SENDER_UNBOUND',
+        'A clarification response requires a trusted response channel, skill and adapter target bound in run context.',
+      );
+    }
+
     return {
       plan_id: `plan_${randomUUID()}`,
       steps: [
         {
           step_index: 1,
           agent_id: routing.target_agent,
-          skill_id: 'skill.sales.send_message',
-          adapter_target: signal.source_channel,
+          skill_id: responseSkill,
+          adapter_target: responseAdapterTarget,
           input_parameters: {
             tenant_id: signal.tenant_id,
             recipient_id: signal.subject.channel_identifier ?? context.working_memory.session_id,
-            channel: signal.source_channel,
+            channel: responseChannel,
             message_content: { text: routing.clarification_prompt ?? '' },
           },
           required_authority: 'AUTH-3',
@@ -2298,17 +2497,17 @@ export class RevenueOrchestrator {
   private async updateLearningMemory(
     tenant_id: string,
     run_id: string,
-    _hypothesis: HypothesisRecord,
+    _hypothesis: HypothesisRecord | undefined,
     receipt: ImmutableEvidenceRecord | undefined,
     attempt_ordinal: number,
   ): Promise<void> {
-    await this.enterStage({
+    await this.traceStage({
       tenant_id,
       run_id,
       attempt_ordinal,
       step_index: receipt?.step_index ?? 0,
       stage: 'LEARNING',
-    });
+    }, async () => undefined);
   }
 
 }

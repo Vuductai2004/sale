@@ -255,7 +255,7 @@ export class PolicyEnforcementPoint {
     }
 
     const agent_id = context.agent_id.trim();
-    const agent = agent_id.length === 0 ? undefined : this.registry.getAgent(agent_id);
+    const agent = agent_id.length === 0 ? undefined : this.registry.getAgent(agent_id, context.tenant_id);
 
     if (agent === undefined) {
       return this.settle(

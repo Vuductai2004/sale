@@ -89,7 +89,7 @@ export function checkBinding(
   if (
     target.length > 0
     && target !== context.agent_id.trim()
-    && registry.getAgent(target) !== undefined
+    && registry.getAgent(target, context.tenant_id) !== undefined
   ) {
     return deny(
       'PEP-TOPOLOGY',

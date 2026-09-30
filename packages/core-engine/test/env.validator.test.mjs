@@ -160,6 +160,11 @@ test('accepts a complete local environment and applies the documented defaults',
   assert.equal(data.MOCK_ERP_ENABLED, true);
   assert.equal(data.TEMPORAL_NAMESPACE, 'default');
 });
+test('treats a blank OpenAI base URL as the documented default', () => {
+  const data = expectOk(parseEnvironment(validLocalEnv({ OPENAI_BASE_URL: '' })));
+  assert.equal(data.OPENAI_BASE_URL, 'https://api.openai.com/v1');
+});
+
 test('validates the OpenAI-compatible provider boundary and bounded runtime settings', () => {
   expectFailure(parseEnvironment(validLocalEnv({ DEFAULT_LLM_PROVIDER: 'anthropic' })), 'DEFAULT_LLM_PROVIDER');
   expectFailure(parseEnvironment(validLocalEnv({ OPENAI_BASE_URL: 'https://user:password@example.com/v1' })), 'OPENAI_BASE_URL');
