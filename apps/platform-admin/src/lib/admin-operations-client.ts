@@ -1,3 +1,4 @@
+import { safeNext } from '@agentos/ui-foundation/auth';
 import { HttpClient, type HttpClientConfig, type QueryParams, type RequestOptions } from '@agentos/ui-foundation';
 
 const PLATFORM_CSRF_COOKIE = 'agentos_platform_csrf';
@@ -58,12 +59,17 @@ export class AdminOperationsClient extends HttpClient {
       const csrfToken = csrfTokenFromCookie();
       if (csrfToken) headers.set('x-csrf-token', csrfToken);
     }
-    return super.requestRaw(
+    const response = await super.requestRaw(
       endpoint,
       { ...init, credentials: init.credentials ?? 'same-origin' },
       query,
       { ...options, headers: Object.fromEntries(headers.entries()) },
     );
+    if (response.status === 401 && typeof window !== 'undefined' && window.location.pathname !== '/sign-in') {
+      const next = safeNext(`${window.location.pathname}${window.location.search}`);
+      window.location.assign(`/sign-in?reason=expired&next=${encodeURIComponent(next)}`);
+    }
+    return response;
   }
   async getRuns(
     params?: GetRunsParams,

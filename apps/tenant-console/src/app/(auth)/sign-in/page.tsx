@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { Suspense, useState } from 'react';
 import type { FormEvent } from 'react';
-import { useRouter } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
+import { safeNext } from '@agentos/ui-foundation/auth';
 import { AuthRequestError, tenantConsoleClient } from '../../../lib/tenant-console-client';
 
 function messageForError(value: unknown): string {
@@ -11,30 +12,14 @@ function messageForError(value: unknown): string {
 }
 
 
-export default function AuthPage() {
-  const router = useRouter();
+function AuthPageContent() {
+  const searchParams = useSearchParams();
+  const next = safeNext(searchParams.get('next'));
+  const expired = searchParams.get('reason') === 'expired';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  useEffect(() => {
-    let cancelled = false;
-    void tenantConsoleClient.getAuthSession()
-      .then(() => {
-        if (!cancelled) router.replace('/');
-      })
-      .catch(() => {
-        // A 401 is the expected signed-out bootstrap response.
-      })
-      .finally(() => {
-        if (!cancelled) setIsLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [router]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -43,7 +28,7 @@ export default function AuthPage() {
     try {
       await tenantConsoleClient.signIn(email.trim(), password);
       setPassword('');
-      router.replace('/');
+      window.location.replace(next);
     } catch (reason: unknown) {
       setError(messageForError(reason));
     } finally {
@@ -58,6 +43,7 @@ export default function AuthPage() {
           <div className="mb-8">
             <h1 className="text-2xl font-semibold tracking-tight text-ink">Đăng nhập</h1>
             <p className="mt-2 text-sm leading-6 text-muted">Sử dụng email và mật khẩu tài khoản của bạn.</p>
+            {expired && <p role="status" className="mt-3 text-sm text-amber-700">Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.</p>}
           </div>
 
           {error && (
@@ -67,7 +53,7 @@ export default function AuthPage() {
           )}
 
           <form onSubmit={handleSubmit} className="space-y-5">
-            <fieldset disabled={isLoading || isSubmitting} className="space-y-4">
+            <fieldset disabled={isSubmitting} className="space-y-4">
               <div>
                 <label htmlFor="email" className="mb-2 block text-sm font-medium text-ink">Email</label>
                 <input
@@ -98,14 +84,22 @@ export default function AuthPage() {
 
             <button
               type="submit"
-              disabled={isLoading || isSubmitting || email.trim().length === 0 || password.length === 0}
+              disabled={isSubmitting || email.trim().length === 0 || password.length === 0}
               className="ui-button ui-button--primary w-full"
             >
-              {isLoading ? 'Đang kiểm tra…' : isSubmitting ? 'Đang đăng nhập…' : 'Đăng nhập'}
+              {isSubmitting ? 'Đang đăng nhập…' : 'Đăng nhập'}
             </button>
           </form>
         </section>
       </div>
     </main>
+  );
+}
+
+export default function AuthPage() {
+  return (
+    <Suspense fallback={<main className="min-h-screen bg-canvas" aria-busy="true" />}>
+      <AuthPageContent />
+    </Suspense>
   );
 }

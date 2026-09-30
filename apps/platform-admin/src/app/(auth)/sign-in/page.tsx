@@ -1,8 +1,8 @@
 'use client';
 
-import { can, type AuthSession } from '@agentos/ui-foundation/auth';
-import { useEffect, useState, type FormEvent } from 'react';
-
+import { can, safeNext, type AuthSession } from '@agentos/ui-foundation/auth';
+import { useSearchParams } from 'next/navigation';
+import { Suspense, useEffect, useState, type FormEvent } from 'react';
 type ViewState = 'loading' | 'ready' | 'disabled' | 'signed_in' | 'error' | 'permission';
 
 function responseError(status: number, payload: unknown): string {
@@ -31,11 +31,14 @@ function isPlatformSession(value: unknown): value is AuthSession {
   return Boolean(candidate.identity && candidate.membership && Array.isArray(candidate.permissions) && typeof candidate.expires_at === 'string' && can(candidate as AuthSession, 'platform:admin'));
 }
 
-export default function AuthPage() {
+function AuthPageContent() {
+  const searchParams = useSearchParams();
+  const next = safeNext(searchParams.get('next'));
+  const expired = searchParams.get('reason') === 'expired';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [viewState, setViewState] = useState<ViewState>('loading');
-  const [message, setMessage] = useState<string | null>(null);
+  const [message, setMessage] = useState<string | null>(expired ? 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.' : null);
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -46,7 +49,7 @@ export default function AuthPage() {
         if (!active) return;
         if (response.ok && isPlatformSession(payload)) {
           setViewState('signed_in');
-          window.location.assign('/');
+          window.location.assign(next);
           return;
         }
         if (response.status === 404) {
@@ -96,7 +99,7 @@ export default function AuthPage() {
       }
       setPassword('');
       setViewState('signed_in');
-      window.location.assign('/');
+      window.location.assign(next);
     } catch {
       setViewState('error');
       setMessage('The authentication service is unavailable.');
@@ -138,6 +141,13 @@ export default function AuthPage() {
         <p className="mt-6 border-t border-line pt-4 text-xs leading-5 text-muted">Credentials stay server-side. This view never stores or exposes API bearer tokens.</p>
       </section>
     </main>
+  );
+}
+export default function AuthPage() {
+  return (
+    <Suspense fallback={<main className="min-h-screen bg-canvas" aria-busy="true" />}>
+      <AuthPageContent />
+    </Suspense>
   );
 }
 

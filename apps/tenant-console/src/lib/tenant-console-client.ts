@@ -65,24 +65,40 @@ function secureBrowserFetch(fetchImpl: typeof fetch): typeof fetch {
       const csrf = browserCsrfToken();
       if (csrf) headers.set(CSRF_HEADER, csrf);
     }
-    return fetchImpl(input, {
+    const response = await fetchImpl(input, {
       ...init,
       headers,
       credentials: 'same-origin',
     });
+    if (response.status === 401 && typeof window !== 'undefined') {
+      const rawUrl = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+      let pathname = '';
+      try {
+        const parsed = new URL(rawUrl, window.location.origin);
+        pathname = parsed.pathname;
+      } catch {
+        pathname = '';
+      }
+      if (pathname === '/api/auth/session' || pathname === '/api/v1' || pathname.startsWith('/api/v1/')) {
+        const current = `${window.location.pathname}${window.location.search}`;
+        window.location.assign(`/sign-in?reason=expired&next=${encodeURIComponent(current)}`);
+      }
+    }
+    return response;
   };
 }
 
 /** Tenant-console methods are limited to the KPI, approval, customer, takeover, and storefront contracts. */
 export class TenantConsoleClient extends HttpClient {
   private readonly browserFetch: typeof fetch;
-
+  private readonly bootstrapFetch: typeof fetch;
   constructor(config: HttpClientConfig = {}) {
     const fetchImpl = config.fetch ?? (typeof fetch !== 'undefined' ? fetch.bind(globalThis) : undefined);
     if (!fetchImpl) throw new Error('No fetch implementation available in current environment.');
     const secureFetch = secureBrowserFetch(fetchImpl);
     super({ ...config, baseUrl: config.baseUrl ?? '', fetch: secureFetch });
     this.browserFetch = secureFetch;
+    this.bootstrapFetch = fetchImpl;
   }
 
   private async authRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -103,7 +119,7 @@ export class TenantConsoleClient extends HttpClient {
 
   private async ensureAuthCsrfCookie(): Promise<void> {
     if (browserCsrfToken()) return;
-    await this.browserFetch('/api/auth/session', {
+    await this.bootstrapFetch('/api/auth/session', {
       method: 'GET',
       headers: { Accept: 'application/json' },
       credentials: 'same-origin',
