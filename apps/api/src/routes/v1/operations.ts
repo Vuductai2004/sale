@@ -135,9 +135,7 @@ export function registerOperationRoutes(
 
         const response: TaskAcceptedResponse = {
           task_id: started.run_id,
-          // A retry re-queues a run; the route does not synthesize a conversation binding it was not
-          // given, so an unbound run reports `null` rather than an empty identifier.
-          conversation_id: null,
+          conversation_id: started.conversation_id ?? null,
           status: started.lifecycle_state === 'queued' ? 'accepted' : started.lifecycle_state,
           task_version: started.task_version,
           correlation_id: started.correlation_id,

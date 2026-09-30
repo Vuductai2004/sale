@@ -6,7 +6,7 @@
  *
  *   1. **Verify the signature over the bytes that arrived**, before anything is derived, stored or
  *      routed. A forged or replayed delivery is refused `401` and no agent is invoked (`TC-CON-004`).
- *      The digest is computed over the preserved raw body, never over a re-serialised payload.
+ *      The signature covers the preserved raw body; the idempotency digest covers the canonical envelope.
  *   2. **Bind the tenant from the credential**, never from the body. `authenticate()` has already
  *      refused a delivery whose asserted tenant disagrees with the resolved principal.
  *   3. **Derive the canonical name through the connector layer** and append through the durable
@@ -17,7 +17,7 @@
  * was already claimed cannot silently mean different bytes.
  */
 
-import { createHash } from 'node:crypto';
+import { sha256CanonicalJson } from '@agentos/core-engine';
 
 import type { FastifyInstance } from 'fastify';
 
@@ -45,20 +45,15 @@ export interface EventRouteDeps {
   readonly normalizer?: EventRouteNormalizer;
 }
 
-/** Digest of the canonical envelope bytes, used to detect a changed payload under a claimed id. */
+/** Digest of the canonical envelope, used to detect a changed payload under a claimed id. */
 function envelopeDigest(envelope: PlatformEventEnvelope): string {
-  return createHash('sha256')
-    .update(
-      JSON.stringify({
-        event_id: envelope.event_id,
-        event_type: envelope.event_type,
-        source: envelope.source,
-        occurred_at: envelope.occurred_at,
-        payload: envelope.payload,
-      }),
-      'utf8',
-    )
-    .digest('hex');
+  return sha256CanonicalJson({
+    event_id: envelope.event_id,
+    event_type: envelope.event_type,
+    source: envelope.source,
+    occurred_at: envelope.occurred_at,
+    payload: envelope.payload,
+  });
 }
 
 /** Rejects an envelope that is not a well-formed `PlatformEventEnvelope`. */
@@ -191,6 +186,27 @@ export function registerEventRoutes(app: FastifyInstance, deps: EventRouteDeps):
           payload: envelope.payload,
         },
       });
+      // A concurrent redelivery can win the append between the receipt probe above and the insert.
+      // Read the winner's receipt before acknowledging a deduplicated delivery, so a changed body
+      // cannot claim an event id merely by racing the first request.
+      if (!appended.inserted) {
+        const winner = await runtime.events.receipt(principal.tenant_id, envelope.event_id);
+        if (winner !== null && winner.payload_sha256 !== null && winner.payload_sha256 !== digest) {
+          await runtime.audit.record({
+            tenant_id: principal.tenant_id,
+            correlation_id,
+            operation: 'events.ingest',
+            principal_kind: principal.kind,
+            outcome: 'REFUSED',
+            error_code: 'IDEMPOTENCY_CONFLICT',
+            detail: { event_id: envelope.event_id },
+          });
+          fail(
+            'IDEMPOTENCY_CONFLICT',
+            'this event_id was already accepted with different bytes; the delivery is not recorded a second time',
+          );
+        }
+      }
 
       await runtime.audit.record({
         tenant_id: principal.tenant_id,

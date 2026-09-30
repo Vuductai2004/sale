@@ -34,8 +34,10 @@ import {
 import { correlationIdOf, fail, replyFailure } from '../../gateway/http.js';
 import {
   admitCareTurn,
+  InMemoryTurnRateLimiter,
   parseEnabledAgentModules,
   validateAdmissionEventType,
+  type TurnRateLimiter,
 } from './care-turn.js';
 import { registerConversationTakeoverRoutes } from './conversations-takeover.js';
 import type { TurnIntentPort } from '../../runtime/bindings/turn-intent.js';
@@ -90,6 +92,7 @@ export interface ConversationRouteDeps {
   readonly salesSignalEventTypes?: readonly string[];
   readonly marketingSignalEventTypes?: readonly string[];
   readonly intentProposer?: TurnIntentPort;
+  readonly turnRateLimiter?: TurnRateLimiter;
 }
 
 /**
@@ -103,6 +106,10 @@ export function registerConversationRoutes(
   deps: ConversationRouteDeps,
 ): void {
   const preHandler = authenticate(deps);
+
+  const turnRateLimiter = deps.turnRateLimiter ?? new InMemoryTurnRateLimiter({
+    clock: deps.runtime.clock,
+  });
 
   // -------------------------------------------------------------------------
   // R01 — POST /api/v1/conversations
@@ -279,6 +286,7 @@ export function registerConversationRoutes(
           event_type,
           ...(body?.attachments === undefined ? {} : { attachments: body.attachments }),
           ...(deps.intentProposer === undefined ? {} : { intentProposer: deps.intentProposer }),
+          rateLimiter: turnRateLimiter,
           operation: 'conversations.messages',
         });
 
@@ -299,18 +307,22 @@ export function registerConversationRoutes(
 
     try {
       const principal = requirePrincipal(request);
+      // Operator authority is checked before reading task state; an unauthorized operator must not
+      // cause a tenant-scoped task lookup. Session principals still need the task row for ownership.
+      if (principal.kind === 'OPERATOR') {
+        requireOperator(request, 'run:read');
+      }
       const task = await runtime.runs.read({ tenant_id: principal.tenant_id, run_id: request.params.task_id });
 
       if (task === null) {
         fail('TASK_NOT_FOUND', 'this tenant holds no durable task with that identifier');
       }
-      if (principal.kind === 'OPERATOR') {
-        requireOperator(request, 'run:read');
-      } else if (
-        (principal.kind === 'CHANNEL_SESSION' &&
+      if (
+        principal.kind !== 'OPERATOR' &&
+        ((principal.kind === 'CHANNEL_SESSION' &&
           (task.conversation_id !== principal.conversation_id || task.session_id !== principal.session_id)) ||
         (principal.kind === 'WIDGET_SESSION' && task.session_id !== principal.session_id) ||
-        task.session_id === undefined
+        task.session_id === undefined)
       ) {
         fail('TASK_NOT_FOUND', 'this session does not own the requested task');
       }

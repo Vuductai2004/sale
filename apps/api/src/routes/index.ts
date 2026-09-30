@@ -4,6 +4,7 @@ import type { CredentialStore } from '../gateway/principal.js';
 import type { GatewayRuntime, CompanyProjectionPort, PlatformDirectoryPort, PlatformProvidersPort } from '../gateway/ports.js';
 import type { DemoCredentialStore } from '../runtime/demo-auth.js';
 import type { TurnIntentPort } from '../runtime/bindings/turn-intent.js';
+import { InMemoryTurnRateLimiter, type TurnRateLimiter } from './v1/care-turn.js';
 import { registerAnalyticsRoutes } from './v1/analytics.js';
 import { registerCustomerRoutes } from './v1/customers.js';
 import { registerApprovalRoutes } from './v1/approvals.js';
@@ -34,7 +35,10 @@ export interface RouteDependencies {
   readonly credentials: CredentialStore;
   /** Present only for a local/CI DEMO_MODE composition. */
   readonly demoAuth?: DemoCredentialStore;
+  /** Request-time environment accessor for routes whose capability gate may change in-process. */
+  readonly env?: () => Readonly<Record<string, string | undefined>>;
   readonly intentProposer?: TurnIntentPort;
+  readonly turnRateLimiter?: TurnRateLimiter;
   readonly demoMode?: boolean;
   readonly readiness?: DemoReadinessPort;
   readonly trace?: RunTracePort;
@@ -75,6 +79,10 @@ export interface RouteDependencies {
  * @param deps The injected runtime, credential store and canonical-event normaliser.
  */
 export function registerRoutes(app: FastifyInstance, deps: RouteDependencies): void {
+  const turnRateLimiter = deps.turnRateLimiter ?? new InMemoryTurnRateLimiter({
+    clock: deps.runtime.clock,
+  });
+  const admissionDeps: RouteDependencies = { ...deps, turnRateLimiter };
   void app.register(
     (scope, _options, done) => {
       if (deps.demoAuth !== undefined) {
@@ -85,9 +93,10 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDependencies): v
         registerDemoWidgetRoutes(scope, {
           demoAuth: deps.demoAuth,
           runtime: deps.runtime,
+          ...(deps.env === undefined ? {} : { env: deps.env }),
         });
       }
-      registerConversationRoutes(scope, deps);
+      registerConversationRoutes(scope, admissionDeps);
       registerOperatorConversationRoutes(scope, deps);
       registerChatRoutes(scope);
       registerEventRoutes(scope, deps);
@@ -97,7 +106,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDependencies): v
       registerTelemetryRoutes(scope, deps);
       registerCustomerRoutes(scope, deps);
       registerAnalyticsRoutes(scope, deps);
-      registerStorefrontRoutes(scope, deps);
+      registerStorefrontRoutes(scope, admissionDeps);
       registerCampaignRoutes(scope, deps);
       if (deps.demoMode !== undefined && deps.readiness !== undefined && deps.trace !== undefined) {
         registerDemoReadinessRoutes(scope, {

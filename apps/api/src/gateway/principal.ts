@@ -192,7 +192,7 @@ export function createCredentialStore(config: {
   const widgets = new Map<string, WidgetCredential>(
     config.widgets.map((credential) => [credential.token, credential]),
   );
-  const session_secret = config.session_secret ?? process.env.SESSION_SECRET ?? process.env.JWT_SECRET;
+  const session_secret = config.session_secret ?? process.env.SESSION_SECRET;
 
   return {
     resolveOperator: (token) => operators.get(token) ?? null,

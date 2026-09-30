@@ -159,7 +159,9 @@ describe('conversation turn routing and task ownership', () => {
       exp: now + 60,
     });
     const validParts = valid.split('.');
-    const tampered = `${validParts[0]}.${validParts[1]?.slice(0, -1)}${validParts[1]?.endsWith('A') ? 'B' : 'A'}`;
+    const signatureMiddle = Math.floor((validParts[1]?.length ?? 0) / 2);
+    const tamperedCharacter = validParts[1]?.charAt(signatureMiddle) === 'A' ? 'B' : 'A';
+    const tampered = `${validParts[0]}.${validParts[1]?.slice(0, signatureMiddle)}${tamperedCharacter}${validParts[1]?.slice(signatureMiddle + 1)}`;
     const expired = signedSessionToken({
       conversation_id: CONVERSATION,
       session_id: 'thread-a',
@@ -241,7 +243,7 @@ describe('conversation turn routing and task ownership', () => {
         expect(response.statusCode).toBe(expected);
         expect(response.json().answer).toBeUndefined();
       }
-      expect(read).toHaveBeenCalledTimes(5);
+      expect(read).toHaveBeenCalledTimes(4);
     } finally { await app.close(); }
   });
 });

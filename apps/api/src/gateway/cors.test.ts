@@ -10,7 +10,13 @@ function buildApp(rawAllowlist: string | undefined) {
   const app = Fastify({ logger: false });
   installCors(app, rawAllowlist);
   app.get('/api/v1/tasks/task-1', async () => ({ ok: true }));
-  app.post('/api/v1/storefront/stream', async () => ({ ok: true }));
+  app.post('/api/v1/storefront/stream', async (_request, reply) => {
+    reply.hijack();
+    reply.raw.writeHead(200, {
+      'content-type': 'text/plain; charset=utf-8',
+    });
+    reply.raw.end('stream');
+  });
   return app;
 }
 
@@ -40,6 +46,38 @@ describe('browser origin policy', () => {
     expect(response.headers['access-control-allow-methods']).toContain('POST');
     expect(response.headers['access-control-allow-headers']).toContain('authorization');
     expect(response.headers['access-control-max-age']).toBe('600');
+
+    await app.close();
+  });
+
+  it('keeps the scoped origin header on a hijacked raw response', async () => {
+    const app = buildApp(ORIGIN);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/storefront/stream',
+      headers: { origin: ORIGIN },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toBe('stream');
+    expect(response.headers['access-control-allow-origin']).toBe(ORIGIN);
+    expect(response.headers['access-control-allow-origin']).not.toBe('*');
+
+    await app.close();
+  });
+
+  it('adds no origin header to a hijacked raw response from an unlisted origin', async () => {
+    const app = buildApp(ORIGIN);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/v1/storefront/stream',
+      headers: { origin: 'https://attacker.test' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.headers['access-control-allow-origin']).toBeUndefined();
 
     await app.close();
   });

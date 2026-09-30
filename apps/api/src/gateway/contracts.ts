@@ -50,6 +50,7 @@ export type RuleErrorCode =
 export type ApprovalErrorCode =
   | 'APPROVAL_STALE_PAYLOAD'
   | 'APPROVAL_NOT_CLAIMABLE'
+  | 'APPROVAL_EXPIRED'
   | 'APPROVER_MUST_DIFFER';
 
 /** Gateway-owned refusals that are not business rules. */
@@ -121,6 +122,7 @@ export const FAILURE_STATUS: Readonly<Partial<Record<GatewayErrorCode_, number>>
   IDEMPOTENCY_CONFLICT: 409,
   APPROVAL_STALE_PAYLOAD: 409,
   APPROVAL_NOT_CLAIMABLE: 409,
+  APPROVAL_EXPIRED: 409,
   CONVERSATION_LOCKED: 409,
   TAKEOVER_LEASE_HELD: 409,
   TAKEOVER_LEASE_LOST: 409,
@@ -130,6 +132,7 @@ export const FAILURE_STATUS: Readonly<Partial<Record<GatewayErrorCode_, number>>
   RUN_LEASE_HELD: 409,
   CUSTOMER_EVENT_RESERVED_PAYLOAD_FIELD: 422,
   APPROVAL_REQUIRED: 409,
+  REQUIRE_HUMAN_APPROVAL: 409,
   TASK_NOT_FOUND: 404,
   NOT_FOUND: 404,
   CONVERSATION_NOT_FOUND: 404,
@@ -200,6 +203,7 @@ export type TaskWireStatus =
   | 'running'
   | 'waiting'
   | 'awaiting_human'
+  | 'in_flight'
   | 'completed'
   | 'stopped'
   | 'failed';
@@ -373,7 +377,8 @@ export interface ApprovalDecisionResponse {
 
 /** The only supported baseline filter (`06` §8.1.3 R14). */
 export type ApprovalQueueFilter = 'PENDING';
-
+/** Detail reads may report an approval that crossed its deadline. */
+export type ApprovalQueueStatus = ApprovalQueueFilter | 'EXPIRED';
 export interface ApprovalQueueItem {
   readonly approval_id: string;
   readonly run_id: string;
@@ -381,7 +386,7 @@ export interface ApprovalQueueItem {
   readonly effect_key: string;
   readonly payload: Record<string, unknown>;
   readonly reason: string;
-  readonly status: ApprovalQueueFilter;
+  readonly status: ApprovalQueueStatus;
   readonly is_paused: boolean;
   readonly decided_by: string | null;
   readonly decided_at: string | null;
@@ -394,7 +399,7 @@ export interface ApprovalQueueItem {
 /** `06` §8.2.1: the same item plus the reviewer-visible fields SCR-003 renders. */
 export interface ApprovalDetailResponse extends ApprovalQueueItem {
   readonly tenant_id: string;
-  readonly expires_at: string | null;
+  readonly expires_at: string;
 }
 
 // ============================================================================

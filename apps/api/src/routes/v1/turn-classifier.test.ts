@@ -35,6 +35,12 @@ describe('salesRequirementsFor', () => {
       use_case: 'travel',
     });
   });
+  it('does not treat an English connector as a currency code', () => {
+    expect(salesRequirementsFor('Recommend a laptop under 1000 for travel')).toEqual({
+      category: 'laptops',
+      use_case: 'travel',
+    });
+  });
 
   it('admits partial understanding so Sales can clarify missing preferences', () => {
     expect(salesRequirementsFor('Recommend a printer')).toEqual({

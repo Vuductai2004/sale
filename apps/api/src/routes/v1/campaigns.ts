@@ -217,8 +217,9 @@ function acceptedFromReceipt(receipt: Record<string, unknown>): TaskAcceptedResp
     conversation_id: null,
     status:
       status === 'accepted' || status === 'running' || status === 'waiting' || status === 'awaiting_human' ||
+      status === 'in_flight' || status === 'IN_FLIGHT' ||
       status === 'completed' || status === 'stopped' || status === 'failed'
-        ? status
+        ? status === 'IN_FLIGHT' ? 'in_flight' : status
         : 'accepted',
     task_version,
     correlation_id,

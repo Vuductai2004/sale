@@ -63,7 +63,7 @@ function buildHarness(options?: {
           decision_notes: null,
           created_at: '2026-09-23T00:00:00.000Z',
           payload_sha256: PAYLOAD_SHA256,
-          expires_at: null,
+          expires_at: '2026-09-26T00:00:00.000Z',
         };
 
   const decide = vi.fn(
@@ -212,6 +212,33 @@ describe('POST /approvals/:approval_id/decision (R05 approvals.decide)', () => {
       await app.close();
     }
   });
+  it('refuses a decision route for an approval already marked EXPIRED', async () => {
+    const { app, decide, detail } = buildHarness();
+    Object.assign(detail!, { status: 'EXPIRED' });
+
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: `/approvals/${APPROVAL_ID}/decision`,
+        headers: { authorization: `Bearer ${OPERATOR_TOKEN}` },
+        payload: {
+          decision: 'APPROVE',
+          reason: 'The approval must still be live',
+          expected_payload_sha256: PAYLOAD_SHA256,
+        },
+      });
+
+      expect(response.statusCode).toBe(409);
+      expect(response.json()).toMatchObject({
+        error_code: 'APPROVAL_EXPIRED',
+        retryable: false,
+      });
+      expect(decide).not.toHaveBeenCalled();
+    } finally {
+      await app.close();
+    }
+  });
+
 
   it('allows the draft owner to approve when the distinct-approver setting is off', async () => {
     const { app, decide } = buildHarness({ runSessionId: OPERATOR_ID });

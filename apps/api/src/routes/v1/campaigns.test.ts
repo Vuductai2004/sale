@@ -122,12 +122,15 @@ describe('POST /campaigns/drafts', () => {
     }
   });
 
-  it('replays the same receipt and refuses changed bytes under the same idempotency key', async () => {
-    const { app, start } = buildHarness();
+  it('replays the same receipt, maps IN_FLIGHT status, and refuses changed bytes under the same idempotency key', async () => {
+    const { app, start, receipts } = buildHarness();
 
     try {
       const headers = { authorization: `Bearer ${CREATOR_TOKEN}` };
       const first = await app.inject({ method: 'POST', url: '/campaigns/drafts', headers, payload: REQUEST });
+      const stored = receipts.get(`${TENANT}:campaign.draft:${REQUEST.idempotency_key}`);
+      if (stored === undefined) throw new Error('test receipt was not stored');
+      stored.status = 'IN_FLIGHT';
       const replay = await app.inject({ method: 'POST', url: '/campaigns/drafts', headers, payload: REQUEST });
       const conflict = await app.inject({
         method: 'POST',
@@ -138,7 +141,7 @@ describe('POST /campaigns/drafts', () => {
 
       expect(first.statusCode).toBe(202);
       expect(replay.statusCode).toBe(202);
-      expect(replay.json()).toEqual(first.json());
+      expect(replay.json()).toMatchObject({ status: 'in_flight' });
       expect(conflict.statusCode).toBe(409);
       expect(conflict.json().error_code).toBe('IDEMPOTENCY_CONFLICT');
       expect(start).toHaveBeenCalledTimes(1);

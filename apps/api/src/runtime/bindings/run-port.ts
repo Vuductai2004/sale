@@ -387,6 +387,7 @@ export function createDurableRunPort(
         task_version: task.task_version,
         correlation_id: task.correlation_id,
         lifecycle_state: task.state,
+        ...runOwner(task),
       };
     },
 
@@ -400,9 +401,21 @@ export function createDurableRunPort(
   };
 }
 
+type QueuedAdmissionTaskWriter = (input: {
+  readonly tenant_id: string;
+  readonly run_id: string;
+  readonly correlation_id: string;
+  readonly state_payload?: unknown;
+}) => Promise<DurableTaskRecord>;
+
+type StartWorkflowRepository =
+  Pick<DurableWorkflowRepository, 'getTask'> & {
+    readonly createQueuedAdmissionTask?: QueuedAdmissionTaskWriter;
+  };
+
 export interface StartRunPortOptions {
   readonly guard: IEffectGuard;
-  readonly workflows: Pick<DurableWorkflowRepository, 'getTask'>;
+  readonly workflows: StartWorkflowRepository;
   readonly ids?: () => string;
   readonly clock?: () => Date;
   readonly runner?: TenantTransactionRunner;
@@ -423,7 +436,7 @@ export function createStartRunPort(
 ): Pick<RunPort, 'start'>;
 export function createStartRunPort(
   guard: IEffectGuard,
-  workflows: Pick<DurableWorkflowRepository, 'getTask'>,
+  workflows: StartWorkflowRepository,
   options?: {
     readonly ids?: () => string;
     readonly clock?: () => Date;
@@ -432,7 +445,7 @@ export function createStartRunPort(
 ): Pick<RunPort, 'start'>;
 export function createStartRunPort(
   guardOrOptions: IEffectGuard | StartRunPortOptions,
-  workflowsArg?: Pick<DurableWorkflowRepository, 'getTask'>,
+  workflowsArg?: StartWorkflowRepository,
   extraOptions?: {
     readonly ids?: () => string;
     readonly clock?: () => Date;
@@ -476,7 +489,7 @@ export function createStartRunPort(
       });
 
       const request_fingerprint = guard.computeRequestFingerprint(canonicalPayload);
-      const run_id = ids();
+      const run_id = input.admission_reservation?.run_id ?? ids();
       const conversation_id = input.payload['conversation_id'];
       // The canonical `SignalEnvelope`: `signal_id` IS the immutable inbound identity the effect key
       // is derived from. The API-resolved conversation UUID and the session/channel identity are
@@ -500,6 +513,32 @@ export function createStartRunPort(
           ...(input.verified_customer_id === undefined ? {} : { verified_customer_id: input.verified_customer_id }),
         },
       };
+
+      if (input.admission_reservation !== undefined) {
+        if (
+          input.admission_reservation.effect_key !== effect_key ||
+          input.admission_reservation.request_fingerprint !== request_fingerprint
+        ) {
+          fail('INTERNAL_ERROR', 'the preclaimed turn reservation does not match the canonical request');
+        }
+        if (workflows.createQueuedAdmissionTask === undefined) {
+          throw new Error('PRECLAIMED_ADMISSION_UNSUPPORTED: the run binding has no queued task writer');
+        }
+        const task = await workflows.createQueuedAdmissionTask({
+          tenant_id: input.tenant_id,
+          run_id,
+          correlation_id: input.correlation_id,
+          state_payload: { signal },
+        });
+        return {
+          run_id: task.run_id,
+          task_version: task.task_version,
+          correlation_id: task.correlation_id,
+          lifecycle_state: task.state,
+          ...(typeof conversation_id === 'string' && conversation_id.length > 0 ? { conversation_id } : {}),
+          admission: 'ADMITTED',
+        };
+      }
 
       const outcome = await admitCareTurn(
         {
@@ -540,6 +579,7 @@ export function createStartRunPort(
           task_version: outcome.task.task_version,
           correlation_id: outcome.task.correlation_id,
           lifecycle_state: outcome.task.state,
+          ...runOwner(outcome.task),
           admission: 'ADMITTED',
         };
       }
@@ -556,6 +596,7 @@ export function createStartRunPort(
         task_version: existingTask.task_version,
         correlation_id: existingTask.correlation_id,
         lifecycle_state: existingTask.state,
+        ...runOwner(existingTask),
         admission: outcome.kind,
         ...(outcome.kind === 'REPLAY' && outcome.receipt !== null ? { receipt: outcome.receipt } : {}),
       };

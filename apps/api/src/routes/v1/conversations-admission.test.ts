@@ -10,6 +10,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createCredentialStore } from '../../gateway/principal.js';
 import type { GatewayRuntime } from '../../gateway/ports.js';
 import type { TurnIntentPort } from '../../runtime/bindings/turn-intent.js';
+import type { TurnRateLimiter } from './care-turn.js';
 import { registerConversationRoutes } from './conversations.js';
 
 const TENANT = 'tenant-a';
@@ -18,7 +19,11 @@ const CONVERSATION_ID = '11111111-1111-4111-8111-111111111111';
 
 const SESSION_TOKEN = 'session-token';
 
-function buildHarness(options: { readonly intentProposer?: TurnIntentPort } = {}) {
+function buildHarness(options: {
+  readonly intentProposer?: TurnIntentPort;
+  readonly takeoverHolder?: { readonly operator_id: string; readonly expires_at: string } | null;
+  readonly turnRateLimiter?: TurnRateLimiter;
+} = {}) {
   const conversation = {
     conversation_id: CONVERSATION_ID,
     tenant_id: TENANT,
@@ -35,6 +40,25 @@ function buildHarness(options: { readonly intentProposer?: TurnIntentPort } = {}
   const providerCalls = { appendProviderCall: vi.fn(async (_input: unknown) => undefined) };
   const audit = { record: vi.fn(async (_input: unknown) => undefined) };
   const appendMessage = vi.fn(async (_input: unknown) => undefined);
+  const setState = vi.fn(async (
+    _tenant_id: string,
+    _conversation_id: string,
+    state: 'open' | 'paused_takeover' | 'closed',
+    operator_id: string | null,
+  ) => {
+    conversation.state = state;
+    conversation.takeover_operator_id = operator_id;
+  });
+  const clearTakeoverIfOwned = vi.fn(async (
+    _tenant_id: string,
+    _conversation_id: string,
+    operator_id: string,
+  ) => {
+    if (conversation.state !== 'paused_takeover' || conversation.takeover_operator_id !== operator_id) return false;
+    conversation.state = 'open';
+    conversation.takeover_operator_id = null;
+    return true;
+  });
   // The real `runs.start` port carries the server-resolved channel, so the fixture names it too:
   // a case can then assert what the admission path actually passed.
   const start = vi.fn(async (input: { correlation_id: string; source_channel?: string }) => ({
@@ -44,12 +68,17 @@ function buildHarness(options: { readonly intentProposer?: TurnIntentPort } = {}
     lifecycle_state: 'queued' as const,
     admission: 'ADMITTED' as 'ADMITTED' | 'IN_FLIGHT',
   }));
+  const reserve = vi.fn(async (): Promise<{ kind: 'RESERVED' | 'IN_FLIGHT' }> => ({ kind: 'RESERVED' }));
   const runtime = {
     conversations: {
       get: vi.fn(async (_tenant_id: string, _conversation_id: string) => conversation),
       appendMessage,
+      setState,
+      clearTakeoverIfOwned,
     },
-    takeover: { holder: vi.fn(async () => null) },
+    takeover: {
+      holder: vi.fn(async () => options.takeoverHolder === undefined ? null : options.takeoverHolder),
+    },
     runs: { start },
     receipts: {
       receiptFor: vi.fn(async (_tenant_id: string, effect_key: string) => receipts.get(effect_key) ?? null),
@@ -61,7 +90,7 @@ function buildHarness(options: { readonly intentProposer?: TurnIntentPort } = {}
       computeEffectKey: (input: { tenant_id: string; skill_id: string; request_id: string }) =>
         [input.tenant_id, input.skill_id, input.request_id].join(':'),
       computeRequestFingerprint: (input: Record<string, unknown>) => JSON.stringify(input),
-      reserve: vi.fn(async () => ({ kind: 'RESERVED' as const })),
+      reserve,
       resolve: vi.fn(async () => undefined),
     },
     audit,
@@ -85,9 +114,10 @@ function buildHarness(options: { readonly intentProposer?: TurnIntentPort } = {}
       widgets: [],
     }),
     ...(options.intentProposer === undefined ? {} : { intentProposer: options.intentProposer }),
+    ...(options.turnRateLimiter === undefined ? {} : { turnRateLimiter: options.turnRateLimiter }),
   });
 
-  return { app, appendMessage, conversation, receipts, start, providerCalls, audit };
+  return { app, appendMessage, conversation, receipts, start, reserve, providerCalls, audit, setState, clearTakeoverIfOwned };
 }
 
 describe('POST /conversations/:conversation_id/messages shared Care admission', () => {
@@ -254,8 +284,11 @@ describe('POST /conversations/:conversation_id/messages shared Care admission', 
   });
 
   it('persists a customer message during human takeover with HTTP 202 HUMAN_OWNED and no run', async () => {
-    const { app, appendMessage, conversation, start } = buildHarness();
+    const { app, appendMessage, conversation, start } = buildHarness({
+      takeoverHolder: { operator_id: 'operator-a', expires_at: '2026-09-23T00:01:00.000Z' },
+    });
     conversation.state = 'paused_takeover';
+    conversation.takeover_operator_id = 'operator-a';
     const url = `/conversations/${CONVERSATION_ID}/messages`;
     const headers = { authorization: `Bearer ${SESSION_TOKEN}` };
     const body = { message: 'Where is my order?', idempotency_key: 'turn-paused', module: 'support' };
@@ -277,6 +310,90 @@ describe('POST /conversations/:conversation_id/messages shared Care admission', 
         content: body.message,
         request_id: body.idempotency_key,
       }));
+      expect(start).not.toHaveBeenCalled();
+    } finally {
+      await app.close();
+    }
+  });
+  it('treats an expired takeover lease as released for the next customer turn', async () => {
+    const { app, appendMessage, conversation, start } = buildHarness();
+    conversation.state = 'paused_takeover';
+    conversation.takeover_operator_id = 'operator-a';
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/conversations/${CONVERSATION_ID}/messages`,
+      headers: { authorization: `Bearer ${SESSION_TOKEN}` },
+      payload: { message: 'Where is my order?', idempotency_key: 'turn-expired', module: 'support' },
+    });
+
+    expect(response.statusCode).toBe(202);
+    expect(response.json()).toMatchObject({ conversation_id: CONVERSATION_ID, status: 'accepted' });
+    expect(conversation.state).toBe('paused_takeover');
+    expect(conversation.takeover_operator_id).toBe('operator-a');
+    expect(start).toHaveBeenCalledOnce();
+    expect(appendMessage).toHaveBeenCalledOnce();
+    await app.close();
+  });
+
+  it('claims the idempotency slot before intent classification, so a concurrent duplicate calls the LLM once', async () => {
+    let releaseProposal: () => void = () => {};
+    const proposalFinished = new Promise<void>((resolve) => {
+      releaseProposal = resolve;
+    });
+    const intentProposer: TurnIntentPort = {
+      propose: vi.fn(async () => {
+        await proposalFinished;
+        return { intent: 'faq_search' as const, requirements: {}, confidence: 0.9 };
+      }),
+    };
+    const { app, reserve, start } = buildHarness({ intentProposer });
+    reserve
+      .mockImplementationOnce(async () => ({ kind: 'RESERVED' as const }))
+      .mockImplementationOnce(async () => ({ kind: 'IN_FLIGHT' as const }));
+    const request = {
+      method: 'POST' as const,
+      url: `/conversations/${CONVERSATION_ID}/messages`,
+      headers: { authorization: `Bearer ${SESSION_TOKEN}` },
+      payload: { message: 'Where is my order?', idempotency_key: 'turn-concurrent', module: 'support' },
+    };
+
+    try {
+      const first = app.inject(request);
+      await vi.waitFor(() => expect(reserve).toHaveBeenCalledTimes(1));
+      const second = app.inject(request);
+      await vi.waitFor(() => expect(reserve).toHaveBeenCalledTimes(2));
+      expect(reserve).toHaveBeenCalledTimes(2);
+      expect(intentProposer.propose).toHaveBeenCalledOnce();
+      releaseProposal();
+      const responses = await Promise.all([first, second]);
+      expect(responses[0]?.statusCode).toBe(202);
+      expect(responses[1]?.statusCode).toBe(202);
+      expect(start).toHaveBeenCalledOnce();
+    } finally {
+      releaseProposal();
+      await app.close();
+    }
+  });
+
+  it('returns RATE_LIMITED before intent classification when the tenant session bucket is empty', async () => {
+    const intentProposer: TurnIntentPort = {
+      propose: vi.fn(async () => ({ intent: 'faq_search' as const, requirements: {}, confidence: 0.9 })),
+    };
+    const turnRateLimiter: TurnRateLimiter = { consume: vi.fn(() => false) };
+    const { app, start } = buildHarness({ intentProposer, turnRateLimiter });
+
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: `/conversations/${CONVERSATION_ID}/messages`,
+        headers: { authorization: `Bearer ${SESSION_TOKEN}` },
+        payload: { message: 'Please help', idempotency_key: 'turn-rate-limited', module: 'support' },
+      });
+
+      expect(response.statusCode).toBe(429);
+      expect(response.json()).toMatchObject({ error_code: 'RATE_LIMITED' });
+      expect(intentProposer.propose).not.toHaveBeenCalled();
       expect(start).not.toHaveBeenCalled();
     } finally {
       await app.close();

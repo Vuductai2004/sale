@@ -103,6 +103,16 @@ export interface ConversationPort {
     state: ConversationState,
     takeover_operator_id: string | null,
   ): Promise<void>;
+  /**
+   * Returns a conversation to agent control only when its persisted takeover marker still belongs
+   * to the operator whose lease was observed as expired. This conditional transition prevents stale
+   * expiry cleanup from clearing a newer operator's takeover.
+   */
+  clearTakeoverIfOwned(
+    tenant_id: string,
+    conversation_id: string,
+    operator_id: string,
+  ): Promise<boolean>;
   appendMessage(input: ConversationMessageInput): Promise<string>;
   /** Server-issued session token bound to the conversation credential (`06` §8.0 tenant binding). */
   issueSessionToken(input: {
@@ -164,10 +174,19 @@ export interface StartedRun {
   readonly task_version: number;
   readonly correlation_id: string;
   readonly lifecycle_state: TaskStoredState;
+  /** Immutable conversation owner when the run is bound to a customer conversation. */
+  readonly conversation_id?: string;
   /** Which delivery owns the reservation; absent only for legacy injected test ports. */
   readonly admission?: RunAdmission;
   /** Persisted receipt when the reservation was already settled as a replay. */
   readonly receipt?: Record<string, unknown>;
+}
+
+/** A reservation claimed before provider classification; the run binding persists it exactly once. */
+export interface AdmissionReservation {
+  readonly run_id: string;
+  readonly effect_key: string;
+  readonly request_fingerprint: string;
 }
 
 export interface RunPort {
@@ -178,7 +197,9 @@ export interface RunPort {
   start(input: {
     tenant_id: string;
     correlation_id: string;
-    request_id: string;
+    readonly request_id: string;
+    /** Reservation claimed before intent classification; the run binding must not reserve again. */
+    readonly admission_reservation?: AdmissionReservation;
     /** Internal gateway admission class; never sourced from a client field. */
     admission_skill_id?: 'campaign.draft';
     source_channel: RunSourceChannel;

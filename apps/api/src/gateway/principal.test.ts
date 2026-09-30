@@ -227,13 +227,30 @@ describe('createCredentialStore', () => {
 
     expect(credentials.resolveConversationSession(staticSession.token)).toBe(staticSession);
   });
+  it('never uses JWT_SECRET as a session-signing fallback', () => {
+    const originalSessionSecret = process.env.SESSION_SECRET;
+    const originalJwtSecret = process.env.JWT_SECRET;
+    delete process.env.SESSION_SECRET;
+    process.env.JWT_SECRET = SESSION_SIGNING_SECRET;
+    try {
+      const credentials = createCredentialStore({ operators: [], sessions: [], widgets: [] });
+      expect(credentials.resolveConversationSession(signedSessionToken())).toBeNull();
+    } finally {
+      if (originalSessionSecret === undefined) delete process.env.SESSION_SECRET;
+      else process.env.SESSION_SECRET = originalSessionSecret;
+      if (originalJwtSecret === undefined) delete process.env.JWT_SECRET;
+      else process.env.JWT_SECRET = originalJwtSecret;
+    }
+  });
 });
 
 describe('verifyConversationSessionToken', () => {
   it('accepts a valid binding and rejects tampered or expired tokens', () => {
     const valid = signedSessionToken();
     const parts = valid.split('.');
-    const tampered = `${parts[0]}.${parts[1]?.slice(0, -1)}${parts[1]?.endsWith('A') ? 'B' : 'A'}`;
+    const signatureMiddle = Math.floor((parts[1]?.length ?? 0) / 2);
+    const tamperedCharacter = parts[1]?.charAt(signatureMiddle) === 'A' ? 'B' : 'A';
+    const tampered = `${parts[0]}.${parts[1]?.slice(0, signatureMiddle)}${tamperedCharacter}${parts[1]?.slice(signatureMiddle + 1)}`;
 
     expect(verifyConversationSessionToken(valid, SESSION_SIGNING_SECRET, SESSION_NOW)).toMatchObject({
       tenant_id: TENANT_A,
@@ -252,25 +269,38 @@ describe('verifyConversationSessionToken', () => {
   });
 
   it('authenticates a signed session without a static row and refuses tampering or expiry', async () => {
-    const credentials = createCredentialStore({
-      operators: [],
-      sessions: [],
-      widgets: [],
-      session_secret: SESSION_SIGNING_SECRET,
-    });
-    const valid = signedSessionToken({ exp: Math.floor(Date.now() / 1000) + 60 });
-    const tamperedParts = valid.split('.');
-    const tampered = `${tamperedParts[0]}.${tamperedParts[1]?.slice(0, -1)}${tamperedParts[1]?.endsWith('A') ? 'B' : 'A'}`;
-    const expired = signedSessionToken({ exp: Math.floor(Date.now() / 1000) - 1 });
-    for (const [token, expectedStatus] of [[valid, 200], [tampered, 401], [expired, 401]] as const) {
-      const app = createApp(credentials, createTestRuntime());
-      const response = await app.inject({
-        method: 'POST',
-        url: '/api/v1/probe',
-        headers: bearer(token),
+    // Keep this case independent of any SESSION_SECRET left by another test or the test runner.
+    const originalSessionSecret = process.env.SESSION_SECRET;
+    delete process.env.SESSION_SECRET;
+    try {
+      const credentials = createCredentialStore({
+        operators: [],
+        sessions: [],
+        widgets: [],
+        session_secret: SESSION_SIGNING_SECRET,
       });
-      expect(response.statusCode).toBe(expectedStatus);
-      await app.close();
+      const valid = signedSessionToken({ exp: Math.floor(Date.now() / 1000) + 60 });
+      const tamperedParts = valid.split('.');
+      const signatureMiddle = Math.floor((tamperedParts[1]?.length ?? 0) / 2);
+      const tamperedCharacter = tamperedParts[1]?.charAt(signatureMiddle) === 'A' ? 'B' : 'A';
+      const tampered = `${tamperedParts[0]}.${tamperedParts[1]?.slice(0, signatureMiddle)}${tamperedCharacter}${tamperedParts[1]?.slice(signatureMiddle + 1)}`;
+      const expired = signedSessionToken({ exp: Math.floor(Date.now() / 1000) - 1 });
+      for (const [token, expectedStatus] of [[valid, 200], [tampered, 401], [expired, 401]] as const) {
+        const app = createApp(credentials, createTestRuntime());
+        try {
+          const response = await app.inject({
+            method: 'POST',
+            url: '/api/v1/probe',
+            headers: bearer(token),
+          });
+          expect(response.statusCode).toBe(expectedStatus);
+        } finally {
+          await app.close();
+        }
+      }
+    } finally {
+      if (originalSessionSecret === undefined) delete process.env.SESSION_SECRET;
+      else process.env.SESSION_SECRET = originalSessionSecret;
     }
   });
 });

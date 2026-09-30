@@ -163,6 +163,8 @@ export function createConversationPort(
     setState: async (tenant_id, conversation_id, state, takeover_operator_id) => {
       await repository.setState(tenant_id, conversation_id, state, takeover_operator_id);
     },
+    clearTakeoverIfOwned: (tenant_id, conversation_id, operator_id) =>
+      repository.clearTakeoverIfOwned(tenant_id, conversation_id, operator_id),
 
     appendMessage: (input) => repository.appendMessage({
       tenant_id: input.tenant_id,

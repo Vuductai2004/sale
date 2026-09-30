@@ -1,6 +1,6 @@
 import type { CompanyCrmCampaignRow } from '@agentos/database';
 
-export type CampaignLifecycleState = 'draft' | 'in_review' | 'brand_audit' | 'awaiting_approval' | 'approved';
+export type CampaignLifecycleState = 'draft' | 'in_review' | 'brand_audit' | 'awaiting_approval' | 'in_flight' | 'approved';
 
 export interface CampaignDispatchProjection {
   readonly status: 'NOT_INTEGRATED';
@@ -51,21 +51,24 @@ function stringValue(value: unknown): string | null {
 export function deriveCampaignLifecycle(row: CompanyCrmCampaignRow): CampaignLifecycleState {
   const payload = campaignPayload(row.task_payload);
   const stage = stringValue(payload?.['stage'])?.toLowerCase();
+  const taskState = row.task_state?.toLowerCase();
+  const campaignStatus = row.campaign_status?.toLowerCase();
   if (row.approval_decision === 'APPROVED') return 'approved';
   if (
     row.approval_decision === 'PENDING' ||
-    row.task_state === 'awaiting_human'
+    taskState === 'awaiting_human'
   ) {
     return 'awaiting_approval';
   }
+  if (taskState === 'in_flight' || campaignStatus === 'in_flight') return 'in_flight';
   if (stage === 'brand_audit' || stage === 'brand-audit' || payload?.['brand_audit'] !== undefined) {
     return 'brand_audit';
   }
   if (
-    row.task_state === 'queued' ||
-    row.task_state === 'running' ||
-    row.task_state === 'waiting' ||
-    row.task_state === 'completed'
+    taskState === 'queued' ||
+    taskState === 'running' ||
+    taskState === 'waiting' ||
+    taskState === 'completed'
   ) {
     return 'in_review';
   }

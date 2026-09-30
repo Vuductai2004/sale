@@ -1,6 +1,8 @@
 import { randomUUID } from 'node:crypto';
+
 import { OpenAICompatibleLLMAdapter } from '@agentos/adapters';
 import type { OpenAICompatibleUsage } from '@agentos/adapters';
+import type { LlmUsageRecorder } from '@agentos/core-engine';
 
 import type { SalesTurnRequirements } from '../../routes/v1/turn-classifier.js';
 
@@ -10,6 +12,22 @@ export interface TurnIntentMetadata {
   readonly request_id?: string;
   readonly latency_ms: number;
   readonly usage?: OpenAICompatibleUsage;
+}
+
+
+export const DEFAULT_LLM_REQUEST_TIMEOUT_MS = 30_000;
+export const MAX_LLM_REQUEST_TIMEOUT_MS = 86_400_000;
+
+/** Parses the provider deadline once at boot; malformed values never reach the adapter. */
+export function parseLlmRequestTimeoutMs(raw: string | undefined): number {
+  if (raw === undefined) return DEFAULT_LLM_REQUEST_TIMEOUT_MS;
+  const parsed = Number(raw);
+  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
+    throw new TypeError(
+      `LLM_REQUEST_TIMEOUT_MS must be a positive integer number of milliseconds (maximum ${MAX_LLM_REQUEST_TIMEOUT_MS})`,
+    );
+  }
+  return Math.min(parsed, MAX_LLM_REQUEST_TIMEOUT_MS);
 }
 
 export interface TurnIntentProposal {
@@ -135,11 +153,25 @@ export function validateTurnIntent(value: unknown): TurnIntentProposal {
 }
 
 export interface TurnIntentPort {
-  propose(input: { readonly message: string; readonly correlation_id: string }): Promise<TurnIntentProposal>;
+  propose(input: {
+    readonly message: string;
+    readonly correlation_id: string;
+    readonly tenant_id?: string;
+    readonly run_id?: string;
+    readonly step_index?: number;
+    readonly attempt?: number;
+  }): Promise<TurnIntentProposal>;
+}
+
+export interface TurnIntentPortOptions {
+  readonly usageRecorder?: LlmUsageRecorder;
 }
 
 /** The provider proposes intent only; it never supplies tenant/customer/authority or a response. */
-export function createTurnIntentPort(env: NodeJS.ProcessEnv): TurnIntentPort | undefined {
+export function createTurnIntentPort(
+  env: NodeJS.ProcessEnv,
+  options: TurnIntentPortOptions = {},
+): TurnIntentPort | undefined {
   const offlineDemo = env.DEMO_MODE === 'true'
     && env.DEMO_PROVIDER_MODE?.trim().toLowerCase() === 'offline'
     && (env.APP_ENV === 'local' || env.APP_ENV === 'ci');
@@ -148,16 +180,26 @@ export function createTurnIntentPort(env: NodeJS.ProcessEnv): TurnIntentPort | u
   if (!env.OPENAI_API_KEY || !model) return undefined;
   const adapter = new OpenAICompatibleLLMAdapter({
     apiKey: env.OPENAI_API_KEY,
-    baseUrl: env.OPENAI_BASE_URL ?? 'https://api.openai.com/v1',
-    timeoutMs: Number(env.LLM_REQUEST_TIMEOUT_MS ?? 30000),
+    baseUrl: env.OPENAI_BASE_URL?.trim() || 'https://api.openai.com/v1',
+    timeoutMs: parseLlmRequestTimeoutMs(env.LLM_REQUEST_TIMEOUT_MS),
     maxOutputTokens: Number(env.MAX_TOKENS_PER_RUN ?? 4096),
     structuredOutputMode: env.OPENAI_STRUCTURED_OUTPUT_MODE === 'json_schema' ? 'json_schema' : 'json_object',
   });
   return {
     async propose(input) {
+      const run_id = input.run_id ?? randomUUID();
+      if (options.usageRecorder !== undefined && input.tenant_id !== undefined) {
+        await options.usageRecorder.beforeCall({
+          tenant_id: input.tenant_id,
+          run_id,
+          correlation_id: input.correlation_id,
+          step_index: input.step_index ?? 0,
+          attempt: input.attempt ?? 0,
+        });
+      }
       const result = await adapter.completeStructured({
         model,
-        run_id: randomUUID(),
+        run_id,
         correlation_id: input.correlation_id,
         max_tokens: Math.min(300, Number(env.MAX_TOKENS_PER_RUN ?? 4096)),
         messages: [
@@ -169,6 +211,19 @@ export function createTurnIntentPort(env: NodeJS.ProcessEnv): TurnIntentPort | u
         ],
         validate: validateTurnIntent,
       });
+      if (options.usageRecorder !== undefined && input.tenant_id !== undefined) {
+        await options.usageRecorder.record({
+          tenant_id: input.tenant_id,
+          run_id,
+          correlation_id: input.correlation_id,
+          step_index: input.step_index ?? 0,
+          attempt: input.attempt ?? 0,
+          provider: result.provider,
+          model: result.model,
+          request_id: result.request_id,
+          usage: result.usage,
+        });
+      }
       return {
         ...result.value,
         metadata: {

@@ -8,6 +8,14 @@ import type {
   PlatformProvidersPort,
 } from '../../gateway/ports.js';
 import type { CredentialStore } from '../../gateway/principal.js';
+import {
+  platformProvidersRouteSchema,
+  platformReadinessRouteSchema,
+  platformTenantRouteSchema,
+  platformTenantsRouteSchema,
+  platformUsageRouteSchema,
+  registerOpenApiSchemas,
+} from './openapi-schemas.js';
 
 export interface PlatformRouteDependencies {
   readonly platform: PlatformDirectoryPort;
@@ -63,6 +71,7 @@ function usageWindow(request: FastifyRequest): { readonly from: string; readonly
 
 /** Registers platform-only, cross-tenant directory and aggregate projections. */
 export function registerPlatformRoutes(app: FastifyInstance, deps: PlatformRouteDependencies): void {
+  registerOpenApiSchemas(app);
   const authenticateRequest = authenticate(deps);
   const preHandler = async (request: FastifyRequest, reply: FastifyReply): Promise<void> => {
     if (hasTenantAssertion(request)) {
@@ -71,7 +80,7 @@ export function registerPlatformRoutes(app: FastifyInstance, deps: PlatformRoute
     await authenticateRequest(request, reply);
   };
 
-  app.get('/platform/tenants', { preHandler }, async (request, reply) => {
+  app.get('/platform/tenants', { preHandler, schema: platformTenantsRouteSchema }, async (request, reply) => {
     const runtime = deps.runtime;
     try {
       requirePlatformAdmin(request);
@@ -82,7 +91,7 @@ export function registerPlatformRoutes(app: FastifyInstance, deps: PlatformRoute
     }
   });
 
-  app.get('/platform/tenants/:id', { preHandler }, async (request, reply) => {
+  app.get('/platform/tenants/:id', { preHandler, schema: platformTenantRouteSchema }, async (request, reply) => {
     const runtime = deps.runtime;
     try {
       requirePlatformAdmin(request);
@@ -94,7 +103,7 @@ export function registerPlatformRoutes(app: FastifyInstance, deps: PlatformRoute
     }
   });
 
-  app.get('/platform/tenants/:id/readiness', { preHandler }, async (request, reply) => {
+  app.get('/platform/tenants/:id/readiness', { preHandler, schema: platformReadinessRouteSchema }, async (request, reply) => {
     const runtime = deps.runtime;
     try {
       requirePlatformAdmin(request);
@@ -106,7 +115,7 @@ export function registerPlatformRoutes(app: FastifyInstance, deps: PlatformRoute
     }
   });
 
-  app.get('/platform/usage', { preHandler }, async (request, reply) => {
+  app.get('/platform/usage', { preHandler, schema: platformUsageRouteSchema }, async (request, reply) => {
     const runtime = deps.runtime;
     try {
       requirePlatformAdmin(request);
@@ -118,7 +127,7 @@ export function registerPlatformRoutes(app: FastifyInstance, deps: PlatformRoute
     }
   });
 
-  app.get('/platform/providers', { preHandler }, async (request, reply) => {
+  app.get('/platform/providers', { preHandler, schema: platformProvidersRouteSchema }, async (request, reply) => {
     const runtime = deps.runtime;
     try {
       requirePlatformAdmin(request);

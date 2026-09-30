@@ -26,6 +26,12 @@ import type {
   ApprovalDecisionResponse,
 } from '../../gateway/contracts.js';
 import { correlationIdOf, fail, replyFailure } from '../../gateway/http.js';
+import {
+  approvalDecisionRouteSchema,
+  approvalDetailRouteSchema,
+  approvalsListRouteSchema,
+  registerOpenApiSchemas,
+} from './openapi-schemas.js';
 
 /** The five baseline SCR-003 decisions. */
 const DECISIONS: readonly ApprovalDecision[] = ['APPROVE', 'REJECT', 'MODIFY', 'PAUSE', 'CANCEL'];
@@ -49,6 +55,7 @@ export function registerApprovalRoutes(
   app: FastifyInstance,
   deps: { readonly runtime: GatewayRuntime; readonly credentials: CredentialStore },
 ): void {
+  registerOpenApiSchemas(app);
   const preHandler = authenticate(deps);
 
   // -------------------------------------------------------------------------
@@ -57,7 +64,7 @@ export function registerApprovalRoutes(
 
   app.get<{ Querystring: { status?: string; cursor?: string; limit?: string } }>(
     '/approvals',
-    { preHandler },
+    { preHandler, schema: approvalsListRouteSchema },
     async (request, reply) => {
       const runtime = deps.runtime;
       const correlation_id = correlationIdOf(request, runtime);
@@ -102,7 +109,7 @@ export function registerApprovalRoutes(
 
   app.get<{ Params: { approval_id: string } }>(
     '/approvals/:approval_id',
-    { preHandler },
+    { preHandler, schema: approvalDetailRouteSchema },
     async (request, reply) => {
       const runtime = deps.runtime;
       const correlation_id = correlationIdOf(request, runtime);
@@ -140,7 +147,7 @@ export function registerApprovalRoutes(
 
   app.post<{ Params: { approval_id: string } }>(
     '/approvals/:approval_id/decision',
-    { preHandler },
+    { preHandler, schema: approvalDecisionRouteSchema },
     async (request, reply) => {
       const runtime = deps.runtime;
       const correlation_id = correlationIdOf(request, runtime);
@@ -184,6 +191,10 @@ export function registerApprovalRoutes(
         if (detail === null) {
           fail('NOT_FOUND', 'this tenant holds no approval with that identifier');
         }
+        if (detail.status === 'EXPIRED') {
+          fail('APPROVAL_EXPIRED', 'this approval crossed its review deadline and cannot receive a decision');
+        }
+
 
         let require_distinct_approver = false;
         const governance = runtime.governance;

@@ -26,6 +26,7 @@ import {
   createStartRunPort,
   createTakeoverLeasePort,
 } from './bindings.js';
+import { parseLlmRequestTimeoutMs } from './bindings/turn-intent.js';
 
 const TENANT = '11111111-1111-4111-8111-111111111111';
 const RUN = 'run-a';
@@ -412,6 +413,7 @@ describe('createApprovalReadPort', () => {
       is_paused: true,
       review_comment: null,
       decided_at: null,
+      expires_at: '2026-09-26T00:00:00.000Z',
       created_at: NOW,
     },
     action: {
@@ -446,9 +448,32 @@ describe('createApprovalReadPort', () => {
       next_cursor: null,
     });
     await expect(port.detail(TENANT, detail.approval.id)).resolves.toEqual(
-      expect.objectContaining({ tenant_id: TENANT, expires_at: null }),
+      expect.objectContaining({ tenant_id: TENANT, expires_at: '2026-09-26T00:00:00.000Z' }),
     );
   });
+  it('maps an expired approval detail with its deadline instead of treating it as an internal error', async () => {
+    const expired = {
+      ...detail,
+      approval: {
+        ...detail.approval,
+        decision: 'EXPIRED' as const,
+        is_paused: false,
+        decided_at: NOW,
+      },
+    };
+    const port = createApprovalReadPort({
+      listPending: async () => ({ items: [], next_cursor: null }),
+      getDetail: async () => expired,
+    });
+
+    await expect(port.detail(TENANT, detail.approval.id)).resolves.toEqual(
+      expect.objectContaining({
+        status: 'EXPIRED',
+        expires_at: '2026-09-26T00:00:00.000Z',
+      }),
+    );
+  });
+
 });
 
 describe('createTakeoverLeasePort', () => {
@@ -713,6 +738,8 @@ describe('createStartRunPort', () => {
       correlation_id: 'corr-1',
       lifecycle_state: 'queued',
       admission: 'ADMITTED',
+      conversation_id: 'conv-1',
+      session_id: 'session-1',
     });
     expect(persistedStatePayload).toMatchObject({
       signal: {
@@ -887,5 +914,69 @@ describe('createStartRunPort', () => {
         http_status: 409,
       },
     });
+  });
+
+  it('persists a preclaimed queued admission without reserving a second effect slot', async () => {
+    const createQueuedAdmissionTask = vi.fn(async (input: {
+      readonly tenant_id: string;
+      readonly run_id: string;
+      readonly correlation_id: string;
+      readonly state_payload?: unknown;
+    }) => task({
+      tenant_id: input.tenant_id,
+      run_id: input.run_id,
+      correlation_id: input.correlation_id,
+      current_step: 0,
+      state: 'queued',
+      state_payload: input.state_payload,
+    }));
+    const port = createStartRunPort({
+      guard,
+      workflows: { getTask: async () => null, createQueuedAdmissionTask },
+      ids: () => 'unused-run-id',
+    });
+
+    const started = await port.start({
+      tenant_id: TENANT,
+      correlation_id: 'corr-preclaimed',
+      request_id: 'req-preclaimed',
+      admission_reservation: {
+        run_id: 'preclaimed-run',
+        effect_key: 'effect-care-1',
+        request_fingerprint: DIGEST_A,
+      },
+      source_channel: 'WEB_CHAT',
+      event_type: 'message.received',
+      session_id: 'session-1',
+      channel_type: 'WEB_CHAT',
+      payload: { message: 'hello', conversation_id: 'conv-1' },
+    });
+
+    expect(started).toMatchObject({
+      run_id: 'preclaimed-run',
+      task_version: 4,
+      lifecycle_state: 'queued',
+      admission: 'ADMITTED',
+    });
+    expect(createQueuedAdmissionTask).toHaveBeenCalledWith(expect.objectContaining({
+      run_id: 'preclaimed-run',
+      correlation_id: 'corr-preclaimed',
+      state_payload: expect.objectContaining({ signal: expect.any(Object) }),
+    }));
+  });
+});
+
+describe('LLM timeout configuration', () => {
+  it('defaults when the timeout is omitted', () => {
+    expect(parseLlmRequestTimeoutMs(undefined)).toBe(30_000);
+  });
+
+  it('rejects non-positive or non-integer timeout values', () => {
+    expect(() => parseLlmRequestTimeoutMs('0')).toThrow(/positive integer/);
+    expect(() => parseLlmRequestTimeoutMs('1.5')).toThrow(/positive integer/);
+  });
+
+  it('clamps a configured timeout to the adapter maximum', () => {
+    expect(parseLlmRequestTimeoutMs(String(86_400_001))).toBe(86_400_000);
   });
 });

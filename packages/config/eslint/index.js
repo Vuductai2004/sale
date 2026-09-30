@@ -129,7 +129,7 @@ const LEGACY_ROLE_TEMPLATE_SELECTOR =
  * One entry per named preset. `patterns` is the `no-restricted-imports` patterns group; negated
  * patterns (`!...`) re-allow the granted contract subpath, exactly as the DAG requires.
  *
- * @type {Record<string, { patterns: readonly string[], message: string, forbidLegacyRoleNames?: boolean }>}
+ * @type {Record<string, { patterns: readonly string[], typeOnlyImports?: readonly string[], message: string, forbidLegacyRoleNames?: boolean }>}
  */
 const PRESET_DEFINITIONS = Object.freeze({
   base: {
@@ -158,10 +158,12 @@ const PRESET_DEFINITIONS = Object.freeze({
       '!@agentos/ui-foundation/i18n',
       '!@agentos/ui-foundation/status',
       '!@agentos/ui-foundation/tailwind-preset',
+      '!@agentos/api-contract',
       ...SHARED_DEV_CONFIG_PACKAGES.map((name) => `!${name}`),
       ...DATASTORE_DRIVERS,
       ...PRIVATE_MODULE_TREES,
     ],
+    typeOnlyImports: ['@agentos/api-contract'],
     forbidLegacyRoleNames: true,
     message: 'apps/tenant-console consumes only /api/v1 and @agentos/ui-foundation; data and runtime packages are forbidden.',
   },
@@ -176,10 +178,12 @@ const PRESET_DEFINITIONS = Object.freeze({
       '!@agentos/ui-foundation/i18n',
       '!@agentos/ui-foundation/status',
       '!@agentos/ui-foundation/tailwind-preset',
+      '!@agentos/api-contract',
       ...SHARED_DEV_CONFIG_PACKAGES.map((name) => `!${name}`),
       ...DATASTORE_DRIVERS,
       ...PRIVATE_MODULE_TREES,
     ],
+    typeOnlyImports: ['@agentos/api-contract'],
     forbidLegacyRoleNames: true,
     message: 'apps/platform-admin consumes only /api/v1 and @agentos/ui-foundation; data and runtime packages are forbidden.',
   },
@@ -265,6 +269,23 @@ function restrictedImportsRule(definition) {
 }
 
 /**
+ * Builds syntax restrictions for packages that permit type-only imports but forbid runtime edges.
+ *
+ * @param {{ typeOnlyImports?: readonly string[], message: string }} definition
+ * @returns {['error', ...{ selector: string, message: string }[]]}
+ */
+function restrictedRuntimeImportsRule(definition) {
+  const packages = definition.typeOnlyImports ?? [];
+  return [
+    'error',
+    ...packages.map((packageName) => ({
+      selector: `ImportDeclaration[source.value='${packageName}']:not([importKind='type'])`,
+      message: `${definition.message} Use a type-only import for ${packageName}.`,
+    })),
+  ];
+}
+
+/**
  * Builds the role-name restriction used by the browser console presets.
  *
  * @returns {['error', ...{ selector: string, message: string }[]]}
@@ -301,11 +322,26 @@ function createFlatPreset(name) {
           files: [...ROLE_NAME_RESTRICTION_FILES],
           ignores: [...ROLE_NAME_RESTRICTION_IGNORES],
           rules: {
-            'no-restricted-syntax': restrictedRoleNamesRule(),
+            'no-restricted-syntax': [
+              'error',
+              ...restrictedRuntimeImportsRule(definition).slice(1),
+              ...restrictedRoleNamesRule().slice(1),
+            ],
           },
         },
       ]
     : [];
+  const runtimeImportRestriction = definition.typeOnlyImports === undefined
+    ? []
+    : [
+        {
+          name: `agentos/${name}/type-only-imports`,
+          files: [...LINTED_FILES],
+          rules: {
+            'no-restricted-syntax': restrictedRuntimeImportsRule(definition),
+          },
+        },
+      ];
 
   return [
     {
@@ -327,6 +363,7 @@ function createFlatPreset(name) {
         'no-restricted-imports': restrictedImportsRule(definition),
       },
     },
+    ...runtimeImportRestriction,
     ...roleNameRestriction,
   ];
 }
@@ -348,7 +385,14 @@ const flatPresets = Object.fromEntries(
 const eslintrcPresets = Object.fromEntries(
   Object.entries(PRESET_DEFINITIONS).map(([name, definition]) => [
     name,
-    { rules: { 'no-restricted-imports': restrictedImportsRule(definition) } },
+    {
+      rules: {
+        'no-restricted-imports': restrictedImportsRule(definition),
+        ...(definition.typeOnlyImports === undefined
+          ? {}
+          : { 'no-restricted-syntax': restrictedRuntimeImportsRule(definition) }),
+      },
+    },
   ]),
 );
 

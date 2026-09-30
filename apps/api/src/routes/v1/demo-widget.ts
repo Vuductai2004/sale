@@ -1,14 +1,20 @@
-import { createHmac, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 import type { FastifyInstance } from 'fastify';
 
+import { signMockRequest } from '@agentos/adapters';
 import { correlationIdOf, fail, replyFailure } from '../../gateway/http.js';
 import { authenticate, requireOperator } from '../../gateway/principal.js';
 import type { GatewayRuntime } from '../../gateway/ports.js';
 import { DEMO_TENANT_ID, type DemoCredentialStore } from '../../runtime/demo-auth.js';
+import { nodeHmacSha256Hex } from '../../runtime/adapters.js';
+
+type DemoEnvironment = Readonly<Record<string, string | undefined>>;
 
 interface WidgetMintDependencies {
   readonly demoAuth: DemoCredentialStore;
   readonly runtime: GatewayRuntime;
+  /** Read environment at request time so a long-lived process cannot pin stale demo gating. */
+  readonly env?: () => DemoEnvironment;
 }
 
 interface CatalogItem {
@@ -43,8 +49,8 @@ function sessionIdForPersona(persona: unknown): string {
   return DEMO_PERSONA_SESSIONS[persona];
 }
 
-function requireDemoEnvironment(): void {
-  if (process.env.DEMO_MODE !== 'true' || !['local', 'ci'].includes(process.env.APP_ENV ?? '')) {
+function requireDemoEnvironment(env: DemoEnvironment): void {
+  if (env.DEMO_MODE !== 'true' || !['local', 'ci'].includes(env.APP_ENV ?? '')) {
     fail('CAPABILITY_NOT_ENABLED', 'the demo widget is available only in local or CI demo mode');
   }
 }
@@ -75,11 +81,12 @@ export function registerDemoWidgetRoutes(app: FastifyInstance, deps: WidgetMintD
   app.post('/demo/widget-session', { preHandler: authenticate({ credentials: deps.demoAuth, runtime: deps.runtime }) },
     async (request, reply) => {
       try {
+        const env = deps.env?.() ?? process.env;
         const principal = requireOperator(request, 'conversation:takeover');
-        requireDemoEnvironment();
+        requireDemoEnvironment(env);
         requireCanonicalDemoTenant(principal.tenant_id);
+        const allowed = (env.DEMO_WIDGET_ORIGINS ?? '').split(',').map((value) => value.trim());
         const origin = request.headers.origin;
-        const allowed = (process.env.DEMO_WIDGET_ORIGINS ?? '').split(',').map((value) => value.trim());
         if (typeof origin !== 'string' || !allowed.includes(origin) || !/^https?:\/\/[^/]+$/.test(origin)) {
           fail('AUTHENTICATION_FAILED', 'this origin is not approved for the demo widget');
         }
@@ -99,22 +106,30 @@ export function registerDemoWidgetRoutes(app: FastifyInstance, deps: WidgetMintD
   app.get('/demo/catalog', { preHandler: authenticate({ credentials: deps.demoAuth, runtime: deps.runtime }) },
     async (request, reply) => {
       try {
+        const env = deps.env?.() ?? process.env;
         const principal = requireOperator(request, 'conversation:takeover');
-        requireDemoEnvironment();
+        requireDemoEnvironment(env);
         requireCanonicalDemoTenant(principal.tenant_id);
-        const secret = process.env.MOCK_SECRET_KEY;
-        const configured = process.env.ERP_API_BASE_URL;
-        if (!secret || !configured || process.env.MOCK_ERP_ENABLED !== 'true') {
+        const secret = env.MOCK_SECRET_KEY;
+        const configured = env.ERP_API_BASE_URL;
+        if (!secret || !configured || env.MOCK_ERP_ENABLED !== 'true') {
           fail('CAPABILITY_NOT_ENABLED', 'demo catalog source is not configured');
         }
         const base = new URL(configured);
         if (!['http:', 'https:'].includes(base.protocol) || base.username || base.password || base.search || base.hash) {
           fail('CAPABILITY_NOT_ENABLED', 'demo catalog source is invalid');
         }
-        const response = await fetch(`${configured.replace(/\/+$/, '')}/catalog/items`, {
+        const catalogUrl = new URL(`${configured.replace(/\/+$/, '')}/catalog/items`);
+        const response = await fetch(catalogUrl.toString(), {
           headers: {
             'x-tenant-id': principal.tenant_id,
-            'x-mock-signature': createHmac('sha256', secret).update('').digest('hex'),
+            'x-mock-signature': signMockRequest(
+              secret,
+              'GET',
+              catalogUrl.pathname,
+              '',
+              nodeHmacSha256Hex,
+            ),
           },
           signal: AbortSignal.timeout(5000),
         });

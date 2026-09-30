@@ -26,11 +26,13 @@ function row(overrides: Partial<CompanyCrmCampaignRow> = {}): CompanyCrmCampaign
 }
 
 describe('campaign projection', () => {
-  it('derives lifecycle from task and approval rows, not campaign status', () => {
+  it('derives lifecycle from persisted task, campaign and approval state', () => {
     expect(deriveCampaignLifecycle(row())).toBe('in_review');
     expect(deriveCampaignLifecycle(row({ task_state: 'awaiting_human', approval_decision: 'PENDING' }))).toBe('awaiting_approval');
     expect(deriveCampaignLifecycle(row({ task_state: 'completed', approval_decision: 'APPROVED' }))).toBe('approved');
     expect(deriveCampaignLifecycle(row({ task_state: 'running', task_payload: { signal: { payload: { module: 'marketing', stage: 'brand_audit' } } } }))).toBe('brand_audit');
+    expect(deriveCampaignLifecycle(row({ task_state: 'running', campaign_status: 'IN_FLIGHT' }))).toBe('in_flight');
+    expect(deriveCampaignLifecycle(row({ task_state: 'IN_FLIGHT' }))).toBe('in_flight');
   });
 
   it('never advertises dispatch integration', () => {

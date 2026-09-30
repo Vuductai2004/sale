@@ -13,6 +13,14 @@ import { mapAttention } from '../../projections/attention.js';
 import { mapActivity } from '../../projections/activity.js';
 import { mapIntegrations } from '../../projections/integrations.js';
 import { mapOverview } from '../../projections/overview.js';
+import {
+  companyActivityRouteSchema,
+  companyAiTeamRouteSchema,
+  companyAttentionRouteSchema,
+  companyIntegrationsRouteSchema,
+  companyOverviewRouteSchema,
+  registerOpenApiSchemas,
+} from './openapi-schemas.js';
 
 export interface CompanyRouteDependencies {
   readonly runtime: GatewayRuntime;
@@ -136,9 +144,9 @@ async function audit(
 
 /** Registers the five tenant company-console projections. */
 export function registerCompanyRoutes(app: FastifyInstance, dependencies: CompanyRouteDependencies): void {
+  registerOpenApiSchemas(app);
   const preHandler = authenticate(dependencies);
-
-  app.get('/company/attention', { preHandler }, async (request, reply) => {
+  app.get('/company/attention', { preHandler, schema: companyAttentionRouteSchema }, async (request, reply) => {
     const runtime = dependencies.runtime;
     try {
       const principal = requireOperator(request, 'telemetry:read');
@@ -151,7 +159,7 @@ export function registerCompanyRoutes(app: FastifyInstance, dependencies: Compan
     }
   });
 
-  app.get('/company/ai-team', { preHandler }, async (request, reply) => {
+  app.get('/company/ai-team', { preHandler, schema: companyAiTeamRouteSchema }, async (request, reply) => {
     const runtime = dependencies.runtime;
     try {
       const principal = requireOperator(request, 'telemetry:read');
@@ -164,7 +172,7 @@ export function registerCompanyRoutes(app: FastifyInstance, dependencies: Compan
     }
   });
 
-  app.get<{ Querystring: { limit?: string; cursor?: string } }>('/company/activity', { preHandler }, async (request, reply) => {
+  app.get<{ Querystring: { limit?: string; cursor?: string } }>('/company/activity', { preHandler, schema: companyActivityRouteSchema }, async (request, reply) => {
     const runtime = dependencies.runtime;
     try {
       const principal = requireOperator(request, 'run:read');
@@ -181,7 +189,7 @@ export function registerCompanyRoutes(app: FastifyInstance, dependencies: Compan
     }
   });
 
-  app.get('/company/integrations', { preHandler }, async (request, reply) => {
+  app.get('/company/integrations', { preHandler, schema: companyIntegrationsRouteSchema }, async (request, reply) => {
     const runtime = dependencies.runtime;
     try {
       const principal = requireOperator(request, 'telemetry:read');
@@ -194,7 +202,7 @@ export function registerCompanyRoutes(app: FastifyInstance, dependencies: Compan
     }
   });
 
-  app.get('/company/overview', { preHandler }, async (request, reply) => {
+  app.get('/company/overview', { preHandler, schema: companyOverviewRouteSchema }, async (request, reply) => {
     const runtime = dependencies.runtime;
     try {
       const principal = requireOperator(request, 'telemetry:read');

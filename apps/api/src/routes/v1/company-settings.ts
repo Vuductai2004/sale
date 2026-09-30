@@ -5,13 +5,16 @@ import { authenticate, requireOperator } from '../../gateway/principal.js';
 import { correlationIdOf, fail, replyFailure } from '../../gateway/http.js';
 import type { GatewayRuntime } from '../../gateway/ports.js';
 
+import { companyGovernanceRouteSchema, registerOpenApiSchemas } from './openapi-schemas.js';
+
 export function registerCompanySettingsRoutes(
   app: FastifyInstance,
   deps: { readonly runtime: GatewayRuntime; readonly credentials: CredentialStore },
 ): void {
+  registerOpenApiSchemas(app);
   const preHandler = authenticate(deps);
 
-  app.get('/company/settings/governance', { preHandler }, async (request, reply) => {
+  app.get('/company/settings/governance', { preHandler, schema: companyGovernanceRouteSchema }, async (request, reply) => {
     const runtime = deps.runtime;
     const correlation_id = correlationIdOf(request, runtime);
 

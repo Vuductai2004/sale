@@ -13,6 +13,7 @@ function validEnv() {
     NODE_ENV: 'development',
     SERVICE_NAME: 'agentos-api',
     JWT_SECRET: 'abcdefghijklmnopqrstuvwxyz012345',
+    SESSION_SECRET: 'session-signing-value-6d2e',
     INTERNAL_API_KEY: 'zyxwvutsrqponmlkjihgfedcba987654',
     WEBHOOK_HMAC_SECRET: 'webhook-signing-value-4d7a91',
     AUDIT_HMAC_SECRET: 'audit-chain-signing-value-9b3e17',

@@ -16,6 +16,7 @@
  */
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
+import { sha256CanonicalJson } from '@agentos/core-engine';
 
 import type {
   AgentModule,
@@ -29,8 +30,10 @@ import { IDEMPOTENCY_KEY_MAX_LENGTH, MESSAGE_MAX_LENGTH } from '../../gateway/co
 import { correlationIdOf, fail, mapError, replyFailure } from '../../gateway/http.js';
 import {
   admitCareTurn,
+  InMemoryTurnRateLimiter,
   parseEnabledAgentModules,
   validateAdmissionEventType,
+  type TurnRateLimiter,
 } from './care-turn.js';
 import type { CredentialStore } from '../../gateway/principal.js';
 import { authenticate, requirePrincipal } from '../../gateway/principal.js';
@@ -73,6 +76,7 @@ export interface StorefrontRouteDeps {
   readonly salesSignalEventTypes?: readonly string[];
   readonly marketingSignalEventTypes?: readonly string[];
   readonly intentProposer?: TurnIntentPort;
+  readonly turnRateLimiter?: TurnRateLimiter;
 }
 
 /** An ISO-8601 instant: a date, a time to the second, and an explicit UTC offset or `Z`. */
@@ -182,7 +186,17 @@ interface StorefrontEvent {
   readonly session_id: string;
 }
 
-/** Uses the authenticated widget session as the only session identity. */
+/** Digest of the accepted R12 envelope, independent of object member insertion order. */
+function eventDigest(event: StorefrontEvent): string {
+  return sha256CanonicalJson({
+    event_id: event.event_id,
+    event_type: event.event_type,
+    occurred_at: event.occurred_at,
+    payload: event.payload,
+    session_id: event.session_id,
+  });
+}
+
 function boundWidgetSessionId(principal: GatewayPrincipal, requested: string | null): string {
   const session_id = principal.session_id;
   if (session_id === undefined || session_id.length === 0) {
@@ -386,6 +400,7 @@ async function handleStream(
       event_type: turn.event_type,
       ...(turn.attachments === undefined ? {} : { attachments: turn.attachments }),
       ...(deps.intentProposer === undefined ? {} : { intentProposer: deps.intentProposer }),
+      ...(deps.turnRateLimiter === undefined ? {} : { rateLimiter: deps.turnRateLimiter }),
       operation: STREAM_OPERATION,
     });
     receipt = admission.receipt;
@@ -496,9 +511,18 @@ async function handleEvent(
     return;
   }
 
+  const digest = eventDigest(event);
   let response: EventIngestionResponse;
   let detail: Record<string, unknown>;
   try {
+    const prior = await runtime.events.receipt(principal.tenant_id, event.event_id);
+    if (prior !== null && prior.payload_sha256 !== null && prior.payload_sha256 !== digest) {
+      fail(
+        'IDEMPOTENCY_CONFLICT',
+        'this event_id was already accepted with different bytes; the delivery is not recorded a second time',
+      );
+    }
+
     const derived =
       deps.normalizer === undefined
         ? null
@@ -513,8 +537,18 @@ async function handleEvent(
       channel: WIDGET_CHANNEL,
       customer_id: null,
       occurred_at: event.occurred_at,
-      payload: event.payload,
+      payload: { ...event.payload, payload_sha256: digest },
     });
+
+    if (!appended.inserted) {
+      const winner = await runtime.events.receipt(principal.tenant_id, event.event_id);
+      if (winner !== null && winner.payload_sha256 !== null && winner.payload_sha256 !== digest) {
+        fail(
+          'IDEMPOTENCY_CONFLICT',
+          'this event_id was already accepted with different bytes; the delivery is not recorded a second time',
+        );
+      }
+    }
 
     const status: EventIngestionStatus =
       derived !== null && appended.inserted ? 'QUEUED' : 'IGNORED';
@@ -552,11 +586,17 @@ async function handleEvent(
  * @param deps The runtime bundle, the credential store, and the optional connector-layer normalizer.
  */
 export function registerStorefrontRoutes(app: FastifyInstance, deps: StorefrontRouteDeps): void {
-  app.post('/storefront/stream', { preHandler: authenticate(deps) }, (request, reply) =>
-    handleStream(request, reply, deps),
+  const routeDeps: StorefrontRouteDeps = deps.turnRateLimiter === undefined
+    ? {
+        ...deps,
+        turnRateLimiter: new InMemoryTurnRateLimiter({ clock: deps.runtime.clock }),
+      }
+    : deps;
+  app.post('/storefront/stream', { preHandler: authenticate(routeDeps) }, (request, reply) =>
+    handleStream(request, reply, routeDeps),
   );
 
-  app.post('/storefront/events', { preHandler: authenticate(deps) }, (request, reply) =>
-    handleEvent(request, reply, deps),
+  app.post('/storefront/events', { preHandler: authenticate(routeDeps) }, (request, reply) =>
+    handleEvent(request, reply, routeDeps),
   );
 }

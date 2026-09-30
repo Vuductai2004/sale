@@ -230,19 +230,25 @@ export function registerConversationTakeoverRoutes(
           operator_id,
         });
 
+        // A persisted paused marker is owned by this operator only when the durable row says so;
+        // all expiry cleanup below is compare-and-clear against that owner.
+        const persistedTakeoverBelongedToOperator =
+          conversation.state === 'paused_takeover'
+          && conversation.takeover_operator_id === operator_id;
+        const staleLeaseBelongedToOperator =
+          released.outcome === 'NOT_HELD' && persistedTakeoverBelongedToOperator;
         // A release is owner-checked and idempotent: a repeat by the operator who already handed the
         // conversation back is answered from the same terminal state, never as a double release.
         if (released.outcome === 'HELD_BY_ANOTHER_OPERATOR') {
           fail('TAKEOVER_LEASE_HELD', 'another operator holds the takeover lease for this conversation');
         }
 
-        if (released.outcome === 'NOT_HELD' && conversation.state !== 'open') {
+        if (released.outcome === 'NOT_HELD' && conversation.state !== 'open' && !staleLeaseBelongedToOperator) {
           fail(
             'TAKEOVER_LEASE_EXPIRED',
             'this operator holds no live takeover lease, and the conversation is not already back under agent control',
           );
         }
-
         const handoffCompletion = await runtime.handoffs.complete({
           tenant_id: principal.tenant_id,
           conversation_id,
@@ -256,7 +262,21 @@ export function registerConversationTakeoverRoutes(
           fail('TAKEOVER_LEASE_LOST', 'this human handoff is not assigned to the authenticated operator');
         }
         if (handoffCompletion === 'NO_HANDOFF') {
-          await runtime.conversations.setState(principal.tenant_id, conversation_id, 'open', null);
+          if (persistedTakeoverBelongedToOperator) {
+            const cleared = await runtime.conversations.clearTakeoverIfOwned(
+              principal.tenant_id,
+              conversation_id,
+              operator_id,
+            );
+            if (!cleared) {
+              const liveLease = await runtime.takeover.holder(principal.tenant_id, conversation_id);
+              if (liveLease !== null && liveLease.operator_id !== operator_id) {
+                fail('TAKEOVER_LEASE_HELD', 'another operator now holds the takeover lease for this conversation');
+              }
+            }
+          } else {
+            await runtime.conversations.setState(principal.tenant_id, conversation_id, 'open', null);
+          }
         }
 
         await runtime.audit.record({

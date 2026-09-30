@@ -8,7 +8,7 @@
  * origin that is not listed — an unlisted caller gets the plain refusal, not a browser exemption.
  */
 
-import type { FastifyInstance } from 'fastify';
+import type { FastifyInstance, FastifyReply } from 'fastify';
 
 /** Headers a browser caller may send: the widget's bearer plus correlation/idempotency metadata. */
 const ALLOWED_REQUEST_HEADERS = [
@@ -30,6 +30,30 @@ const ALLOWED_RESPONSE_HEADERS = [
 ] as const;
 
 const ALLOWED_METHODS = 'GET,HEAD,POST,PUT,PATCH,DELETE,OPTIONS';
+
+/** The same scoped headers are used by Fastify replies and raw hijacked responses. */
+export function corsHeadersForOrigin(
+  origin: string | undefined,
+  allowed: readonly string[],
+): Readonly<Record<string, string>> | undefined {
+  if (origin === undefined || !isAllowedOrigin(origin, allowed)) return undefined;
+  return {
+    'access-control-allow-origin': origin,
+    vary: 'origin',
+    'access-control-allow-headers': ALLOWED_REQUEST_HEADERS.join(','),
+    'access-control-allow-methods': ALLOWED_METHODS,
+    'access-control-expose-headers': ALLOWED_RESPONSE_HEADERS.join(','),
+    'access-control-max-age': '600',
+  };
+}
+
+function applyCorsHeaders(reply: FastifyReply, headers: Readonly<Record<string, string>>): void {
+  for (const [name, value] of Object.entries(headers)) {
+    reply.header(name, value);
+    // Hijacked handlers write directly to raw, bypassing Fastify's normal response finaliser.
+    reply.raw.setHeader(name, value);
+  }
+}
 
 /** Parses the configured allowlist; a blank configuration allows no origin. */
 export function parseAllowedOrigins(raw: string | undefined): readonly string[] {
@@ -57,16 +81,10 @@ export function installCors(app: FastifyInstance, rawAllowlist: string | undefin
   if (allowed.length === 0) return;
 
   app.addHook('onRequest', async (request, reply) => {
-    const origin = request.headers.origin;
-    if (typeof origin !== 'string' || !isAllowedOrigin(origin, allowed)) return;
+    const headers = corsHeadersForOrigin(request.headers.origin, allowed);
+    if (headers === undefined) return;
 
-    reply
-      .header('access-control-allow-origin', origin)
-      .header('vary', 'origin')
-      .header('access-control-allow-headers', ALLOWED_REQUEST_HEADERS.join(','))
-      .header('access-control-allow-methods', ALLOWED_METHODS)
-      .header('access-control-expose-headers', ALLOWED_RESPONSE_HEADERS.join(','))
-      .header('access-control-max-age', '600');
+    applyCorsHeaders(reply, headers);
 
     // A preflight never reaches a route: it asks only whether the real request may be sent.
     if (request.method === 'OPTIONS' && request.headers['access-control-request-method'] !== undefined) {

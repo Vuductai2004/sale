@@ -113,7 +113,7 @@ const SKILL_CODE_MAP: Readonly<Record<string, GatewayErrorCode_>> = Object.freez
   INSUFFICIENT_AUTHORITY: 'INSUFFICIENT_AUTHORITY',
   PROHIBITED_ACTION: 'PROHIBITED_ACTION',
   APPROVAL_REQUIRED: 'APPROVAL_REQUIRED',
-  REQUIRE_HUMAN_APPROVAL: 'APPROVAL_REQUIRED',
+  REQUIRE_HUMAN_APPROVAL: 'REQUIRE_HUMAN_APPROVAL',
   APPROVAL_PAYLOAD_MISMATCH: 'APPROVAL_STALE_PAYLOAD',
   SCHEMA_VALIDATION_ERROR: 'VALIDATION_FAILED',
   OUTPUT_SCHEMA_VALIDATION_ERROR: 'PROVIDER_REJECTED',
@@ -142,6 +142,7 @@ const REPOSITORY_CODE_MAP: Readonly<Record<string, GatewayErrorCode_>> = Object.
   PORT_UNBOUND: 'CAPABILITY_NOT_ENABLED',
   APPROVAL_STALE_PAYLOAD: 'APPROVAL_STALE_PAYLOAD',
   APPROVAL_NOT_CLAIMABLE: 'APPROVAL_NOT_CLAIMABLE',
+  APPROVAL_EXPIRED: 'APPROVAL_EXPIRED',
   APPROVAL_NOT_FOUND: 'NOT_FOUND',
   DURABLE_TASK_NOT_FOUND: 'TASK_NOT_FOUND',
   TASK_NOT_FOUND: 'TASK_NOT_FOUND',
@@ -225,7 +226,12 @@ export function mapError(error: unknown, correlation_id: string): ErrorResponse 
   if (repositoryMapped !== undefined) {
     return toErrorResponse(failureFor(repositoryMapped, `${repositoryMapped} [${repositoryCode}]`), correlation_id);
   }
-
+  if (isCodedError(error) && error.code === 'FST_ERR_VALIDATION') {
+    return toErrorResponse(
+      failureFor('VALIDATION_FAILED', 'the request failed schema validation'),
+      correlation_id,
+    );
+  }
 
   return toErrorResponse(
     failureFor('INTERNAL_ERROR', 'the request could not be completed'),
@@ -246,17 +252,22 @@ declare module 'fastify' {
   }
 }
 
-/** Correlation id for one request: the caller's when present, else a server-issued one. */
+/** Correlation ids accepted from callers: UUIDs and bounded opaque request labels. */
+const CORRELATION_ID_PATTERN = /^[A-Za-z0-9-]{1,64}$/;
+
+/** Returns whether a caller-provided correlation id is safe to carry into logs and responses. */
+export function isValidCorrelationId(value: unknown): value is string {
+  return typeof value === 'string' && CORRELATION_ID_PATTERN.test(value);
+}
+
+/** Correlation id for one request: the caller's when valid, else a server-issued one. */
 export function correlationIdOf(request: FastifyRequest, runtime: GatewayRuntime): string {
   const existing = request.gatewayCorrelationId;
-  if (typeof existing === 'string' && existing.length > 0) return existing;
+  if (isValidCorrelationId(existing)) return existing;
 
   const header = request.headers[CORRELATION_HEADER];
   const fromHeader = Array.isArray(header) ? header[0] : header;
-  const resolved =
-    typeof fromHeader === 'string' && fromHeader.length > 0 && fromHeader.length <= 128
-      ? fromHeader
-      : runtime.ids();
+  const resolved = isValidCorrelationId(fromHeader) ? fromHeader : runtime.ids();
 
   request.gatewayCorrelationId = resolved;
   return resolved;

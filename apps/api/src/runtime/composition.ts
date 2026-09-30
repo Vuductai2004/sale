@@ -10,7 +10,7 @@
  */
 
 import { ConnectorRegistry, type EventAliasNormalizer, type HmacSha256Hex } from '@agentos/adapters';
-import { createRuntimeRedisClient, type RuntimeRedisClient } from '@agentos/core-engine';
+import { LlmUsageRecorder, createRuntimeRedisClient, type RuntimeRedisClient } from '@agentos/core-engine';
 import {
   ApprovalRepository,
   AuditRepository,
@@ -20,6 +20,7 @@ import {
   CompanyCrmProjectionRepository,
   CompanyProjectionRepository,
   PlatformDirectoryRepository,
+  P5AutonomyRepository,
   DurableWorkflowRepository,
   EffectReservationRepository,
   EvidenceRepository,
@@ -120,15 +121,17 @@ export interface GatewayEnv {
   readonly FAST_COMPLETION_MODEL?: string;
   readonly LLM_REQUEST_TIMEOUT_MS?: string;
   readonly MAX_TOKENS_PER_RUN?: string;
+  /** Tenant-wide LLM token ceiling checked against persisted token_cost_records; omitted = no limit. */
+  readonly LLM_TENANT_TOKEN_BUDGET?: string;
   readonly OPENAI_STRUCTURED_OUTPUT_MODE?: string;
   readonly MOCK_ERP_ENABLED?: string;
   readonly ERP_API_BASE_URL?: string;
   readonly EVENT_INGESTION_BASE_URL?: string;
   readonly SESSION_SECRET?: string;
   readonly PLATFORM_SECRET?: string;
-  /** The deployment's identity/session signing key; the session binding falls back to it. */
+  /** JWT signing key for API tokens; it is never used as a session-signing fallback. */
   readonly JWT_SECRET?: string;
-  /** The deployment's ingress HMAC secret; the platform ingress signature falls back to it. */
+  /** Generic callback signature secret; it is never reused for platform webhook or session signing. */
   readonly WEBHOOK_HMAC_SECRET?: string;
   /** Presence of a non-empty URL enables database-backed P5 route ports. */
   readonly DATABASE_URL?: string;
@@ -148,6 +151,7 @@ export interface GatewayComposition {
   readonly credentials: CredentialStore;
   readonly demoAuth?: DemoCredentialStore;
   readonly intentProposer?: TurnIntentPort;
+  readonly env?: () => Readonly<Record<string, string | undefined>>;
   readonly demoMode: boolean;
   readonly readiness: DemoReadinessPort;
   readonly trace: RunTracePort;
@@ -179,24 +183,20 @@ function requireSecret(value: string | undefined, name: 'SESSION_SECRET' | 'PLAT
 /**
  * Resolves the gateway's signing material from the deployment's validated secrets.
  *
- * The gateway needs two secrets: the one that signs a conversation-session binding, and the one the
- * platform presents as its own ingress signature. The deployment already defines exactly those two
- * purposes (`JWT_SECRET`, the identity/session signing key, and `WEBHOOK_HMAC_SECRET`, the ingress
- * HMAC secret), and both are validated at boot, so this reuses them instead of introducing a third
- * and fourth key that a managed profile would have to learn. A dedicated `SESSION_SECRET` or
- * `PLATFORM_SECRET` overrides its binding when a deployment wants the gateway on its own material.
- *
- * @param env Process environment.
- * @returns The two secrets the composition binds.
- * @throws Error when neither the dedicated key nor its deployment counterpart is present.
+ * Session signing requires its dedicated SESSION_SECRET. The platform webhook secret is optional
+ * at composition time: production verification resolves tenant/source secrets from the injected
+ * server-side store, and no other purpose-specific secret is used as a fallback.
  */
 function resolveSecrets(env: GatewayEnv): {
   readonly session_secret: string;
-  readonly platform_secret: string;
+  readonly platform_secret?: string;
 } {
+  const platform_secret = env.PLATFORM_SECRET;
   return {
-    session_secret: requireSecret(env.SESSION_SECRET ?? env.JWT_SECRET, 'SESSION_SECRET'),
-    platform_secret: requireSecret(env.PLATFORM_SECRET ?? env.WEBHOOK_HMAC_SECRET, 'PLATFORM_SECRET'),
+    session_secret: requireSecret(env.SESSION_SECRET, 'SESSION_SECRET'),
+    ...(platform_secret === undefined
+      ? {}
+      : { platform_secret: requireSecret(platform_secret, 'PLATFORM_SECRET') }),
   };
 }
 
@@ -257,6 +257,28 @@ function demoCredentialStore(env: GatewayEnv): DemoCredentialStore {
 }
 
 /**
+ * Tenant LLM token limits. `LLM_TENANT_TOKEN_BUDGET` is the tenant's persisted-usage ceiling and
+ * `MAX_TOKENS_PER_RUN` the per-run ceiling; an omitted value means no limit. A malformed value
+ * refuses composition instead of silently disabling the guard.
+ */
+export function parseLlmBudgetConfig(env: GatewayEnv): { token_budget?: number; per_run_token_budget?: number } {
+  const parse = (name: string, raw: string | undefined): number | undefined => {
+    if (raw === undefined || raw.trim() === '') return undefined;
+    const value = Number(raw);
+    if (!Number.isSafeInteger(value) || value <= 0) {
+      throw new TypeError(`${name} must be a positive integer token count`);
+    }
+    return value;
+  };
+  const token_budget = parse('LLM_TENANT_TOKEN_BUDGET', env.LLM_TENANT_TOKEN_BUDGET);
+  const per_run_token_budget = parse('MAX_TOKENS_PER_RUN', env.MAX_TOKENS_PER_RUN);
+  return {
+    ...(token_budget === undefined ? {} : { token_budget }),
+    ...(per_run_token_budget === undefined ? {} : { per_run_token_budget }),
+  };
+}
+
+/**
  * Assembles the durable gateway over the repositories that already own their tables.
  *
  * @param env The process environment; only the fields of {@link GatewayEnv} are read.
@@ -286,8 +308,24 @@ export function createGatewayComposition(
   const marketingSignalEventTypes = parseMarketingSignalEventTypes(env.MARKETING_SIGNAL_EVENT_TYPES);
   const demo_enabled = demoModeEnabled(env);
   const demoAuth = demo_enabled ? demoCredentialStore(env) : undefined;
-  const intentProposer = createTurnIntentPort(env as NodeJS.ProcessEnv);
+  const hasDatabase = options?.databaseRunner !== undefined
+    || (typeof env.DATABASE_URL === 'string' && env.DATABASE_URL.trim().length > 0);
+  // E3: provider-reported LLM usage lands in token_cost_records (idempotent per run/step/attempt),
+  // and the tenant budget is checked against persisted usage before any provider call.
+  const tokenCosts = hasDatabase ? new P5AutonomyRepository(options?.databaseRunner) : undefined;
+  const usageRecorder = tokenCosts === undefined
+    ? undefined
+    : new LlmUsageRecorder({
+        sink: tokenCosts,
+        reader: { totalTokensForTenant: (tenant_id) => tokenCosts.totalTokenUsage(tenant_id) },
+        budgetConfig: parseLlmBudgetConfig(env),
+      });
+  const intentProposer = createTurnIntentPort(
+    env as NodeJS.ProcessEnv,
+    usageRecorder === undefined ? {} : { usageRecorder },
+  );
   const { session_secret, platform_secret } = resolveSecrets(env);
+  const useGlobalWebhookFallback = env.APP_ENV === 'local' || env.APP_ENV === 'ci';
   const credentials = options?.credentials ?? demoAuth ?? createCredentialStore({
     operators: [],
     sessions: [],
@@ -295,8 +333,7 @@ export function createGatewayComposition(
     session_secret,
   });
   const hmac = options?.hmac ?? nodeHmacSha256Hex;
-  const hasDatabase = options?.databaseRunner !== undefined
-    || (typeof env.DATABASE_URL === 'string' && env.DATABASE_URL.trim().length > 0);
+
   const p5: P5Ports | undefined = hasDatabase
     ? createP5Ports(options?.databaseRunner === undefined ? {} : { databaseRunner: options.databaseRunner })
     : undefined;
@@ -352,7 +389,7 @@ export function createGatewayComposition(
     && env.DEMO_PROVIDER_MODE?.trim().toLowerCase() === 'offline'
     && (env.APP_ENV === 'local' || env.APP_ENV === 'ci');
   const configuredProvider = !offlineDemoProvider
-    && Boolean(env.OPENAI_API_KEY && env.OPENAI_BASE_URL && env.PRIMARY_REASONING_MODEL);
+    && Boolean(env.OPENAI_API_KEY?.trim() && env.PRIMARY_REASONING_MODEL?.trim());
   const providers: PlatformProvidersPort = {
     list: async () => [{
       provider: 'openai-compatible',
@@ -477,7 +514,8 @@ export function createGatewayComposition(
         options?.channelSecrets ??
         ({
           resolve: async () => null,
-          resolvePlatform: async () => platform_secret,
+          resolvePlatform: async () =>
+            useGlobalWebhookFallback ? (platform_secret ?? null) : null,
         } satisfies ChannelSecretStore),
       hmac,
     }),
@@ -497,6 +535,7 @@ export function createGatewayComposition(
     credentials,
     ...(demoAuth === undefined ? {} : { demoAuth }),
     ...(intentProposer === undefined ? {} : { intentProposer }),
+    env: () => process.env,
     demoMode: demo_enabled,
     readiness: {
       snapshot: async ({ tenant_id }) => {
@@ -505,7 +544,7 @@ export function createGatewayComposition(
           && providerMode === 'offline'
           && (env.APP_ENV === 'local' || env.APP_ENV === 'ci');
         const configuredProvider = !offlineDemo
-          && Boolean(env.OPENAI_API_KEY && env.OPENAI_BASE_URL && env.PRIMARY_REASONING_MODEL);
+          && Boolean(env.OPENAI_API_KEY?.trim() && env.PRIMARY_REASONING_MODEL?.trim());
         const providerProbe = configuredProvider ? 'NOT_RUN' as const : 'UNBOUND' as const;
         const isMock = env.MOCK_ERP_ENABLED === 'true' && env.ERP_API_BASE_URL?.includes('mock-erp') === true;
         const eventsMock = env.MOCK_ERP_ENABLED === 'true' && env.EVENT_INGESTION_BASE_URL?.includes('mock-erp') === true;

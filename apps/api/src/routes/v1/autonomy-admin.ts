@@ -67,9 +67,17 @@ export function registerAutonomyAdminRoutes(
     const runtime = deps.runtime;
     try {
       const principal = requireOperator(request, 'platform:admin');
-      const result = await deps.autonomyAdmin.pauseTenant(
-        commandOf(request.body, principal.tenant_id, principal.operator_id, false),
-      );
+      const command = commandOf(request.body, principal.tenant_id, principal.operator_id, false);
+      const result = await deps.autonomyAdmin.pauseTenant(command);
+      await runtime.audit.record({
+        tenant_id: principal.tenant_id,
+        correlation_id: correlationIdOf(request, runtime),
+        operation: 'autonomy.pause',
+        principal_kind: principal.kind,
+        ...(principal.operator_id === undefined ? {} : { operator_id: principal.operator_id }),
+        outcome: 'ACCEPTED',
+        detail: { reason: command.reason ?? null },
+      });
       return reply.code(200).send(result);
     } catch (error) {
       return replyFailure(reply, error, correlationIdOf(request, runtime));
@@ -80,9 +88,17 @@ export function registerAutonomyAdminRoutes(
     const runtime = deps.runtime;
     try {
       const principal = requireOperator(request, 'platform:admin');
-      const result = await deps.autonomyAdmin.resumeTenant(
-        commandOf(request.body, principal.tenant_id, principal.operator_id, false),
-      );
+      const command = commandOf(request.body, principal.tenant_id, principal.operator_id, false);
+      const result = await deps.autonomyAdmin.resumeTenant(command);
+      await runtime.audit.record({
+        tenant_id: principal.tenant_id,
+        correlation_id: correlationIdOf(request, runtime),
+        operation: 'autonomy.resume',
+        principal_kind: principal.kind,
+        ...(principal.operator_id === undefined ? {} : { operator_id: principal.operator_id }),
+        outcome: 'ACCEPTED',
+        detail: { reason: command.reason ?? null },
+      });
       return reply.code(200).send(result);
     } catch (error) {
       return replyFailure(reply, error, correlationIdOf(request, runtime));
@@ -93,14 +109,23 @@ export function registerAutonomyAdminRoutes(
     const runtime = deps.runtime;
     try {
       const principal = requireOperator(request, 'platform:admin');
-      const result = await deps.autonomyAdmin.demote(
-        commandOf(request.body, principal.tenant_id, principal.operator_id, true),
-      );
+      const command = commandOf(request.body, principal.tenant_id, principal.operator_id, true);
+      const result = await deps.autonomyAdmin.demote(command);
+      await runtime.audit.record({
+        tenant_id: principal.tenant_id,
+        correlation_id: correlationIdOf(request, runtime),
+        operation: 'autonomy.demote',
+        principal_kind: principal.kind,
+        ...(principal.operator_id === undefined ? {} : { operator_id: principal.operator_id }),
+        outcome: 'ACCEPTED',
+        detail: { skill_id: command.skill_id, reason: command.reason ?? null },
+      });
       return reply.code(200).send(result);
     } catch (error) {
       return replyFailure(reply, error, correlationIdOf(request, runtime));
     }
   });
+
 
   app.get('/admin/autonomy', { preHandler }, async (request, reply) => {
     const runtime = deps.runtime;
