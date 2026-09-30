@@ -9,7 +9,6 @@
  * 4. EvidenceCardDrawer renders segregated sections with distinct visual hierarchies.
  */
 
-import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { describe, expect, it } from 'vitest';
 import type { EvidenceClassification } from '@agentos/ui-foundation';
