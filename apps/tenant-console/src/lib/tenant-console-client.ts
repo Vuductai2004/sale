@@ -255,6 +255,19 @@ export class TenantConsoleClient extends HttpClient {
     );
   }
 
+  async postOperatorMessage(
+    conversationId: string,
+    body: { readonly message: string; readonly idempotency_key?: string },
+    options?: RequestOptions | undefined,
+  ): Promise<{ readonly conversation_id: string; readonly message_id: string; readonly status: string }> {
+    return this.request<{ readonly conversation_id: string; readonly message_id: string; readonly status: string }>(
+      `/conversations/${encodeURIComponent(conversationId)}/operator-messages`,
+      { method: 'POST', body: JSON.stringify(body) },
+      undefined,
+      options,
+    );
+  }
+
   async postStorefrontStream(
     body: StorefrontStreamRequest,
     options?: RequestOptions | undefined,

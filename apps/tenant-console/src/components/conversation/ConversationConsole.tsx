@@ -131,23 +131,38 @@ export function ConversationConsole({
     addLocalMessage(pendingMessage);
 
     try {
-      const receipt = await tenantConsoleClient.postConversationMessage(
-        conversationId,
-        {
-          module,
-          message: text,
-          idempotency_key: idempotencyKey,
-          sender: 'operator',
-        },
-        { tenantId, operatorId }
-      );
+      if (isTakenOver) {
+        const opReceipt = await tenantConsoleClient.postOperatorMessage(
+          conversationId,
+          {
+            message: text,
+            idempotency_key: idempotencyKey,
+          },
+          { tenantId, operatorId }
+        );
+        updateMessage(tempMessageId, {
+          status: 'accepted',
+          id: opReceipt.message_id || tempMessageId,
+        });
+      } else {
+        const receipt = await tenantConsoleClient.postConversationMessage(
+          conversationId,
+          {
+            module,
+            message: text,
+            idempotency_key: idempotencyKey,
+            sender: 'operator',
+          },
+          { tenantId, operatorId }
+        );
 
-      // On 202 TaskAcceptedResponse, update message status to 'accepted' with task_id
-      updateMessage(tempMessageId, {
-        status: receipt.status || 'accepted',
-        task_id: receipt.task_id,
-        correlation_id: receipt.correlation_id,
-      });
+        // On 202 TaskAcceptedResponse, update message status to 'accepted' with task_id
+        updateMessage(tempMessageId, {
+          status: receipt.status || 'accepted',
+          task_id: receipt.task_id,
+          correlation_id: receipt.correlation_id,
+        });
+      }
     } catch (err) {
       console.error('Failed to dispatch operator message:', err);
       const errMsg = err instanceof ApiError ? err.message : 'Message dispatch failed.';

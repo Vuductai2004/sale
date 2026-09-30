@@ -26,15 +26,33 @@ interface CatalogItem {
 function projectCatalogItem(value: unknown): CatalogItem | null {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
   const item = value as Record<string, unknown>;
-  for (const field of ['sku_id', 'name', 'brand', 'category', 'use_case', 'description', 'currency']) {
-    if (typeof item[field] !== 'string') return null;
+  const sku_id = typeof item['sku_id'] === 'string' && item['sku_id'].trim().length > 0
+    ? item['sku_id'].trim()
+    : (typeof item['sku'] === 'string' && item['sku'].trim().length > 0 ? item['sku'].trim() : null);
+  const name = typeof item['name'] === 'string' && item['name'].trim().length > 0 ? item['name'].trim() : null;
+  const currency = typeof item['currency'] === 'string' && item['currency'].trim().length > 0 ? item['currency'].trim() : null;
+  const list_price = typeof item['list_price'] === 'number' && Number.isFinite(item['list_price'])
+    ? item['list_price']
+    : (typeof item['original_list_price'] === 'number' && Number.isFinite(item['original_list_price']) ? item['original_list_price'] : null);
+
+  if (!sku_id || !name || !currency || list_price === null || list_price < 0 || item['is_active'] !== true) {
+    return null;
   }
-  if (item.is_active !== true || typeof item.list_price !== 'number' || !Number.isFinite(item.list_price)) return null;
+  const brand = typeof item['brand'] === 'string' && item['brand'].trim().length > 0 ? item['brand'].trim() : 'NovaMart';
+  const category = typeof item['category'] === 'string' && item['category'].trim().length > 0 ? item['category'].trim() : 'general';
+  const use_case = typeof item['use_case'] === 'string' && item['use_case'].trim().length > 0 ? item['use_case'].trim() : 'general';
+  const description = typeof item['description'] === 'string' && item['description'].trim().length > 0 ? item['description'].trim() : name;
+
   return {
-    sku_id: item.sku_id as string, name: item.name as string, brand: item.brand as string,
-    category: item.category as string, use_case: item.use_case as string,
-    description: item.description as string, currency: item.currency as string,
-    list_price: item.list_price, is_active: true,
+    sku_id,
+    name,
+    brand,
+    category,
+    use_case,
+    description,
+    currency,
+    list_price,
+    is_active: true,
   };
 }
 
@@ -78,7 +96,8 @@ export function registerDemoWidgetRoutes(app: FastifyInstance, deps: WidgetMintD
         if (!['http:', 'https:'].includes(base.protocol) || base.username || base.password || base.search || base.hash) {
           fail('CAPABILITY_NOT_ENABLED', 'demo catalog source is invalid');
         }
-        const response = await fetch(`${configured.replace(/\/+$/, '')}/catalog/items`, {
+        const catalogPath = configured.endsWith('/api/v1') ? '/catalog/items' : '/api/v1/catalog/items';
+        const response = await fetch(`${configured.replace(/\/+$/, '')}${catalogPath}`, {
           headers: {
             'x-tenant-id': principal.tenant_id,
             'x-mock-signature': createHmac('sha256', secret).update('').digest('hex'),

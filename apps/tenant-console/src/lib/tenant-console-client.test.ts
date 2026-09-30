@@ -366,4 +366,35 @@ describe('SCR-005 Conversation Console Contracts', () => {
     expect(spy.getBodyJson()).toEqual(messageReq);
     expect(result.status).toBe('accepted');
   });
+
+  it('postOperatorMessage dispatches to /conversations/{id}/operator-messages with expected headers and body', async () => {
+    const spy = createFetchSpy(
+      createMockJsonResponse(
+        {
+          conversation_id: 'conv-101',
+          message_id: 'msg-op-1',
+          status: 'persisted',
+        },
+        201
+      )
+    );
+    const client = new TenantConsoleClient({ baseUrl: 'http://localhost:4000', fetch: spy.mockFetch });
+
+    const operatorReq = {
+      message: 'Hello, this is human support.',
+      idempotency_key: 'idem-op-uuid-1',
+    };
+
+    const result = await client.postOperatorMessage('conv-101', operatorReq, {
+      tenantId: 'tenant-1',
+      operatorId: 'operator-1',
+    });
+
+    expect(spy.getLastUrl()).toBe('http://localhost:4000/api/v1/conversations/conv-101/operator-messages');
+    expect(spy.getLastInit()?.method).toBe('POST');
+    expect(spy.getBodyJson()).toEqual(operatorReq);
+    expect(result.status).toBe('persisted');
+    expect(result.message_id).toBe('msg-op-1');
+  });
 });
+

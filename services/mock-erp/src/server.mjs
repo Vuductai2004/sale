@@ -247,7 +247,7 @@ export function createServer(env = process.env, deps = {}) {
       return;
     }
     if (boot.latency > 0) await sleep(boot.latency);
-    if (req.method === 'GET' && url.pathname === '/api/v1/catalog/items') {
+    if (req.method === 'GET' && (url.pathname === '/api/v1/catalog/items' || url.pathname === '/catalog/items')) {
       if (demoPack) {
         if (scope !== demoPack.tenant_id) {
           unavailable(res);

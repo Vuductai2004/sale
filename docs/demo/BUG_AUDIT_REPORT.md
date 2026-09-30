@@ -62,8 +62,10 @@ Tính đến thời điểm hiện tại, remote `phong/feat/demo-live-3agent` (
 | **B-31** | 🔴 Critical | Worker / `marketing/factory.ts` | Giới hạn instruction 500 ký tự lệch hợp đồng API Gateway (2000 ký tự) làm sập Worker | *Đã sửa trên `tai`* |
 | **B-32** | 🟠 High | Mock ERP / `server.mjs` | Tra cứu khách hàng & lịch sử theo `key` ở chế độ non-demo bị trả 404 | *Đã sửa trên `tai`* |
 | **B-33** | 🟡 Medium | Console / `analytics` & `settings` | Sập 500 khi thiếu biến môi trường `PLATFORM_ADMIN_URL` | *Đã sửa trên `tai`* |
+| **B-34** | 🟠 High | API / `demo-widget.ts` & Mock ERP | Sai lệch routing `/catalog/items` và lọc projection khiến catalog sập | *Đã sửa trên `tai`* |
+| **B-35** | 🔴 Critical | Console / `ConversationConsole.tsx` & Client | Thiếu `postOperatorMessage` khiến tin nhắn tiếp quản gửi nhầm vào luồng bot | *Đã sửa trên `tai`* |
 | **B-06** | 🟢 Low | Mock ERP / `server.mjs` | Tra cứu khách hàng theo `key` ở chế độ non-demo bị thiếu | *Đã xử lý trong B-32* |
-| **B-07** | 🟢 Low | API / `demo-widget.ts` | Catalog projection loại bỏ các sản phẩm không có trường `use_case` | Cân nhắc |
+| **B-07** | 🟢 Low | API / `demo-widget.ts` | Catalog projection loại bỏ các sản phẩm không có trường `use_case` | *Đã xử lý trong B-34* |
 
 ---
 
@@ -305,6 +307,22 @@ Tính đến thời điểm hiện tại, remote `phong/feat/demo-live-3agent` (
   - Khi người dùng hoặc người đánh giá chạy ứng dụng ở chế độ local hoặc demo độc lập, việc click vào menu Analytics hoặc Settings sẽ làm sập trang trắng với lỗi 500 Internal Server Error.
 - **Giải pháp khắc phục:** Cập nhật hàm điều hướng để trả về `null` khi thiếu `PLATFORM_ADMIN_URL` và tự động fallback về route nội bộ phù hợp (`/demo/operations`), bảo đảm trải nghiệm mượt mà không crash.
 
+#### 29. Bug B-34: Sai lệch URL route `/catalog/items` và lọc projection khiến endpoint Catalog sập khi chạy non-demo
+- **File:** [apps/api/src/routes/v1/demo-widget.ts:L26-L39, L99](file:///d:/New%20folder/apps/api/src/routes/v1/demo-widget.ts#L26-L39), [services/mock-erp/src/server.mjs:L250](file:///d:/New%20folder/services/mock-erp/src/server.mjs#L250), [services/mock-erp/src/fixtures.mjs:L4-L12](file:///d:/New%20folder/services/mock-erp/src/fixtures.mjs#L4-L12)
+- **Nguyên nhân gốc rễ:**
+  1. Khi biến `ERP_API_BASE_URL` trỏ vào root `http://localhost:8081` (không có hậu tố `/api/v1`), `demo-widget.ts` gọi fetch đến `/catalog/items`, nhưng Mock ERP chỉ lắng nghe `/api/v1/catalog/items`, trả về 404 NOT_FOUND.
+  2. Ở chế độ non-demo hoặc fixture tối giản, `CATALOG_ITEM` dùng các trường gốc (`sku`, `original_list_price`) thay vì `sku_id` và `list_price`, đồng thời thiếu các trường metadata giao diện (`brand`, `category`, `use_case`, `description`). Hàm `projectCatalogItem` kiểm tra cứng nhắc `typeof item[field] === 'string'` và loại bỏ 100% sản phẩm, khiến API ném lỗi `CAPABILITY_NOT_ENABLED: demo catalog contains no active products`.
+- **Giải pháp khắc phục:**
+  - Hỗ trợ bí danh route `/catalog/items` song song với `/api/v1/catalog/items` trong Mock ERP server.
+  - Làm giàu `CATALOG_ITEM` fixture và mở rộng `projectCatalogItem` để đọc linh hoạt `sku_id ?? sku`, `list_price ?? original_list_price` cùng các giá trị mặc định cho metadata hiển thị.
+
+#### 30. Bug B-35: SCR-005 Conversation Console & Client thiếu tích hợp endpoint `postOperatorMessage` khiến tin nhắn tiếp quản gửi nhầm vào luồng bot
+- **File:** [apps/tenant-console/src/lib/tenant-console-client.ts:L245-L265](file:///d:/New%20folder/apps/tenant-console/src/lib/tenant-console-client.ts#L245-L265), [apps/tenant-console/src/components/conversation/ConversationConsole.tsx:L134-L151](file:///d:/New%20folder/apps/tenant-console/src/components/conversation/ConversationConsole.tsx#L134-L151)
+- **Nguyên nhân gốc rễ:**
+  - Trong quy trình tiếp quản con người (Human Takeover), operator giữ quyền điều khiển thông qua mutex lease. Mọi tin nhắn phản hồi của nhân viên phải được gửi đến `POST /api/v1/conversations/{id}/operator-messages` để ghi nhận trực tiếp vào lịch sử hội thoại dưới vai trò `operator`.
+  - Tuy nhiên, `TenantConsoleClient` hoàn toàn không có hàm `postOperatorMessage`. Component `ConversationConsole.tsx` gọi `postConversationMessage` (luồng `/messages` dành cho lượt nói của khách hàng vào bot/AI agent), dẫn đến tin nhắn bị từ chối hoặc agent AI hiểu nhầm và tự động kích hoạt workflow sai.
+- **Giải pháp khắc phục:** Bổ sung phương thức `postOperatorMessage` vào `TenantConsoleClient`, cập nhật `ConversationConsole.tsx` để điều hướng tin nhắn chính xác tới `/operator-messages` khi `isTakenOver` đang hoạt động, đồng thời thêm unit test bảo chứng hợp đồng.
+
 ---
 
 ## IV. LỘ TRÌNH KHUYẾN NGHỊ TRIỂN KHAI SỬA LỖI
@@ -326,6 +344,11 @@ Tính đến thời điểm hiện tại, remote `phong/feat/demo-live-3agent` (
 2. **Sửa Bug B-32:** Hỗ trợ generic `key` cho Customer Lookup & Sales History trong Mock ERP (`server.mjs`), bổ sung unit test. *(Đã xong)*
 3. **Sửa Bug B-33:** Thêm fallback êm cho `/analytics` và `/settings` khi không có `PLATFORM_ADMIN_URL`, chống sập 500. *(Đã xong)*
 
+### Giai đoạn 4: Hoàn thiện tính năng tương tác Demo Catalog & Human Takeover Console (B-34 đến B-35) (Đã hoàn thành trên nhánh `tai`)
+1. **Sửa Bug B-34:** Đồng bộ route `/catalog/items`, làm giàu fixture và chuẩn hóa projection sản phẩm trong `demo-widget.ts`, bổ sung unit test Mock ERP. *(Đã xong)*
+2. **Sửa Bug B-35:** Tích hợp `postOperatorMessage` vào `TenantConsoleClient` và kết nối với `ConversationConsole.tsx` cho phiên tiếp quản con người, bổ sung unit test. *(Đã xong)*
+
 ---
 *Báo cáo được lưu trữ và cập nhật trực tiếp tại: `docs/demo/BUG_AUDIT_REPORT.md`.*
+
 

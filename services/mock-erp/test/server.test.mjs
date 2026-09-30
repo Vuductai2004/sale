@@ -501,3 +501,20 @@ test('customer lookup and sales history resolve key parameter without demoPack',
   }
 });
 
+test('catalog items is accessible via both /api/v1/catalog/items and /catalog/items', async () => {
+  const server = await start();
+  try {
+    const prefixed = await get(server, '/api/v1/catalog/items');
+    assert.equal(prefixed.status, 200);
+    assert.equal(Array.isArray(prefixed.body.items), true);
+
+    const alias = await get(server, '/catalog/items');
+    assert.equal(alias.status, 200);
+    assert.equal(Array.isArray(alias.body.items), true);
+    assert.equal(alias.body.items.length, prefixed.body.items.length);
+  } finally {
+    server.close();
+  }
+});
+
+
