@@ -1,10 +1,11 @@
 import type { FastifyInstance } from 'fastify';
 
 import type { CredentialStore } from '../gateway/principal.js';
-import type { GatewayRuntime } from '../gateway/ports.js';
+import type { GatewayRuntime, CompanyProjectionPort, PlatformDirectoryPort, PlatformProvidersPort } from '../gateway/ports.js';
 import type { DemoCredentialStore } from '../runtime/demo-auth.js';
 import type { TurnIntentPort } from '../runtime/bindings/turn-intent.js';
 import { registerAnalyticsRoutes } from './v1/analytics.js';
+import { registerCustomerRoutes } from './v1/customers.js';
 import { registerApprovalRoutes } from './v1/approvals.js';
 import { registerCompanySettingsRoutes } from './v1/company-settings.js';
 import { registerCampaignRoutes } from './v1/campaigns.js';
@@ -21,6 +22,8 @@ import { registerDemoReadinessRoutes, type DemoReadinessPort, type RunTracePort 
 import { registerStorefrontRoutes } from './v1/storefront.js';
 import { registerTelemetryRoutes } from './v1/telemetry.js';
 import { registerWebhookRoutes } from './v1/webhooks.js';
+import { registerPlatformRoutes } from './v1/platform.js';
+import { registerCompanyRoutes } from './v1/company.js';
 
 /** The one base path the gateway serves (`06` §8.0). It is a literal, not configuration. */
 export const API_PREFIX = '/api/v1';
@@ -52,6 +55,9 @@ export interface RouteDependencies {
   /** Optional P5 route groups; omitted dependencies leave existing composition unchanged. */
   readonly provisioning?: ProvisioningRoutePort;
   readonly autonomyAdmin?: AutonomyAdminPort;
+  readonly platform?: PlatformDirectoryPort;
+  readonly providers?: PlatformProvidersPort;
+  readonly companyProjections?: CompanyProjectionPort;
   /** Releases resources owned by this composition. Test doubles may omit it. */
   readonly close?: () => Promise<void>;
 }
@@ -89,6 +95,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDependencies): v
       registerCompanySettingsRoutes(scope, deps);
       registerOperationRoutes(scope, deps);
       registerTelemetryRoutes(scope, deps);
+      registerCustomerRoutes(scope, deps);
       registerAnalyticsRoutes(scope, deps);
       registerStorefrontRoutes(scope, deps);
       registerCampaignRoutes(scope, deps);
@@ -115,6 +122,26 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDependencies): v
           autonomyAdmin: deps.autonomyAdmin,
           credentials: deps.credentials,
           runtime: deps.runtime,
+        });
+      }
+      if (deps.platform !== undefined && deps.providers !== undefined) {
+        registerPlatformRoutes(scope, {
+          platform: deps.platform,
+          providers: deps.providers,
+          credentials: deps.credentials,
+          runtime: deps.runtime,
+        });
+      }
+      const companyProjections = deps.companyProjections ?? deps.runtime.companyProjections;
+      if (companyProjections !== undefined) {
+        registerCompanyRoutes(scope, {
+          projections: companyProjections,
+          credentials: deps.credentials,
+          runtime: deps.runtime,
+          ...(deps.readiness === undefined ? {} : { readiness: deps.readiness }),
+          ...(deps.provisioning === undefined ? {} : { provisioning: deps.provisioning }),
+          ...(deps.providers === undefined ? {} : { providers: deps.providers }),
+          ...(deps.enabledModules === undefined ? {} : { enabledModules: deps.enabledModules }),
         });
       }
       done();

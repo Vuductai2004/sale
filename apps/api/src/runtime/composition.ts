@@ -17,6 +17,9 @@ import {
   CareHandoffRepository,
   ConversationRepository,
   CustomerEventRepository,
+  CompanyCrmProjectionRepository,
+  CompanyProjectionRepository,
+  PlatformDirectoryRepository,
   DurableWorkflowRepository,
   EffectReservationRepository,
   EvidenceRepository,
@@ -25,12 +28,16 @@ import {
   TenantGovernanceRepository,
   withTenantContext,
   type RedisInjectedClient,
+  type PlatformTransactionRunner,
   type TenantTransactionRunner,
 } from '@agentos/database';
 
 import type {
   ApprovalPort,
+  CompanyProjectionPort,
   GatewayAuditPort,
+  PlatformDirectoryPort,
+  PlatformProvidersPort,
   GatewayRuntime,
   IdentityPort,
   KpiPort,
@@ -50,10 +57,13 @@ import {
   createApprovalDecisionPort,
   createApprovalReadPort,
   createCareHandoffPort,
+  createCompanyCrmPort,
+  createCompanyProjectionPort,
   createConversationPort,
   createDurableRunPort,
   createEffectGuard,
   createGovernancePort,
+  createPlatformDirectoryPort,
   createStartRunPort,
   createEventPort,
   createIdentityPort,
@@ -142,6 +152,9 @@ export interface GatewayComposition {
   readonly readiness: DemoReadinessPort;
   readonly trace: RunTracePort;
   readonly normalizer: EventAliasNormalizer;
+  readonly companyProjections: CompanyProjectionPort;
+  readonly platform?: PlatformDirectoryPort;
+  readonly providers: PlatformProvidersPort;
   /** P5 ports are present only when this composition has a database binding. */
   readonly provisioning?: P5Ports['provisioning'];
   readonly autonomyAdmin?: P5Ports['autonomyAdmin'];
@@ -264,6 +277,8 @@ export function createGatewayComposition(
     readonly redis?: RedisInjectedClient;
     /** Injected tenant transaction runner for database-backed P5 ports. */
     readonly databaseRunner?: TenantTransactionRunner;
+    /** Injected platform transaction runner for directory projections. */
+    readonly platformDatabaseRunner?: PlatformTransactionRunner;
   },
 ): GatewayComposition {
   const enabledModules = parseEnabledAgentModules(env.ENABLED_AGENT_MODULES);
@@ -293,6 +308,15 @@ export function createGatewayComposition(
   const workflowsRepository = new DurableWorkflowRepository();
   const approvalsRepository = new ApprovalRepository();
   const governanceRepository = new TenantGovernanceRepository(options?.databaseRunner);
+  const companyCrmRepository = new CompanyCrmProjectionRepository(options?.databaseRunner);
+  const companyProjectionRepository = new CompanyProjectionRepository(options?.databaseRunner);
+  const platformDirectoryRepository = hasDatabase
+    ? new PlatformDirectoryRepository(
+        options?.platformDatabaseRunner === undefined
+          ? {}
+          : { transaction: options.platformDatabaseRunner },
+      )
+    : undefined;
   const evidenceRepository = new EvidenceRepository();
   const responseRepository = new RunResponseRepository(options?.databaseRunner);
   const auditRepository = new AuditRepository();
@@ -308,6 +332,11 @@ export function createGatewayComposition(
   );
   const approvalReads = createApprovalReadPort(approvalsRepository);
   const governance = createGovernancePort(governanceRepository);
+  const companyCrm = createCompanyCrmPort(companyCrmRepository);
+  const companyProjections = createCompanyProjectionPort(companyProjectionRepository);
+  const platform = platformDirectoryRepository === undefined
+    ? undefined
+    : createPlatformDirectoryPort(platformDirectoryRepository);
   const handoffs = createCareHandoffPort(careHandoffsRepository);
 
   let ownedRedis: RuntimeRedisClient | null = null;
@@ -319,6 +348,18 @@ export function createGatewayComposition(
 
   const unbound_ports: string[] = [];
 
+  const offlineDemoProvider = env.DEMO_MODE === 'true'
+    && env.DEMO_PROVIDER_MODE?.trim().toLowerCase() === 'offline'
+    && (env.APP_ENV === 'local' || env.APP_ENV === 'ci');
+  const configuredProvider = !offlineDemoProvider
+    && Boolean(env.OPENAI_API_KEY && env.OPENAI_BASE_URL && env.PRIMARY_REASONING_MODEL);
+  const providers: PlatformProvidersPort = {
+    list: async () => [{
+      provider: 'openai-compatible',
+      configured: configuredProvider,
+      mode: offlineDemoProvider ? 'DEMO_MOCK' : configuredProvider ? 'LIVE' : 'NOT_CONFIGURED',
+    }],
+  };
   const startRunPort = createStartRunPort({
     guard: effectGuard,
     workflows: workflowsRepository,
@@ -424,6 +465,8 @@ export function createGatewayComposition(
     runs,
     approvals,
     governance,
+    companyCrm,
+    companyProjections,
     events: createEventPort(eventsRepository),
     timeline: createEventPort(eventsRepository),
     streams,
@@ -448,6 +491,9 @@ export function createGatewayComposition(
 
   return {
     runtime,
+    companyProjections,
+    ...(platform === undefined ? {} : { platform }),
+    providers,
     credentials,
     ...(demoAuth === undefined ? {} : { demoAuth }),
     ...(intentProposer === undefined ? {} : { intentProposer }),

@@ -5,6 +5,7 @@ import type { GatewayPrincipal } from '../../gateway/contracts.js';
 import type { ConversationRecord, GatewayRuntime } from '../../gateway/ports.js';
 import { correlationIdOf, fail, replyFailure } from '../../gateway/http.js';
 import type { CredentialStore } from '../../gateway/principal.js';
+import { toConversationSummary } from '../../projections/conversation-summary.js';
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 200;
@@ -120,12 +121,56 @@ function requireOperatorId(principal: GatewayPrincipal): string {
   return principal.operator_id;
 }
 
+async function handleConversationSummary(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  deps: OperatorConversationRouteDeps,
+): Promise<void> {
+  const runtime = deps.runtime;
+  try {
+    const principal = requirePrincipal(request);
+    if (principal.kind !== 'OPERATOR' || !principal.permissions.includes('conversation:takeover')) {
+      fail('INSUFFICIENT_AUTHORITY', 'this operation requires conversation:takeover');
+    }
+    if (runtime.companyCrm === undefined) {
+      fail('CAPABILITY_NOT_ENABLED', 'the company CRM projection is not configured');
+    }
+    const conversation_id = typeof request.params === 'object' && request.params !== null
+      ? (request.params as Record<string, unknown>)['id']
+      : undefined;
+    if (typeof conversation_id !== 'string' || conversation_id.length === 0) {
+      fail('VALIDATION_FAILED', 'conversation id is required in the path');
+    }
+    const summary = await runtime.companyCrm.getConversationSummary(principal.tenant_id, conversation_id);
+    if (summary === null) fail('CONVERSATION_NOT_FOUND', 'this tenant holds no conversation with that identifier');
+    const lease = await runtime.takeover.holder(principal.tenant_id, conversation_id);
+    await runtime.audit.record({
+      tenant_id: principal.tenant_id,
+      correlation_id: correlationIdOf(request, runtime),
+      operation: 'GET /api/v1/conversations/{id}/summary',
+      principal_kind: principal.kind,
+      outcome: 'ACCEPTED',
+      ...(principal.operator_id === undefined ? {} : { operator_id: principal.operator_id }),
+      detail: { conversation_id },
+    });
+    return reply.code(200).send(toConversationSummary(summary, lease));
+  } catch (error) {
+    return replyFailure(reply, error, correlationIdOf(request, runtime));
+  }
+}
+
 /** Registers tenant-scoped operator conversation reads and the lease-owned human reply endpoint. */
 export function registerOperatorConversationRoutes(
   app: FastifyInstance,
   deps: OperatorConversationRouteDeps,
 ): void {
+
   const preHandler = authenticate(deps);
+  app.get<{ Params: { id: string } }>(
+    '/conversations/:id/summary',
+    { preHandler },
+    (request, reply) => handleConversationSummary(request, reply, deps),
+  );
 
   app.get('/conversations', { preHandler }, async (request, reply) => {
     const runtime = deps.runtime;

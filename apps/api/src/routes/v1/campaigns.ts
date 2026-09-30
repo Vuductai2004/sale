@@ -6,13 +6,14 @@
  * and dispatch refusal/approval path.
  */
 
-import type { FastifyInstance, FastifyRequest } from 'fastify';
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 
 import type { CredentialStore } from '../../gateway/principal.js';
-import { authenticate, requireOperator } from '../../gateway/principal.js';
+import { authenticate, requireOperator, requirePrincipal } from '../../gateway/principal.js';
 import type { GatewayRuntime } from '../../gateway/ports.js';
 import type { TaskAcceptedResponse, TaskStoredState } from '../../gateway/contracts.js';
 import { correlationIdOf, fail, replyFailure } from '../../gateway/http.js';
+import { toCampaignProjection } from '../../projections/campaigns.js';
 
 const CAMPAIGN_DRAFT_SKILL = 'campaign.draft';
 const CAMPAIGN_DRAFT_ENTRY_SKILL = 'skill.mkt.generate_content';
@@ -239,8 +240,98 @@ function receiptForStarted(started: {
   };
 }
 
+function campaignProjectionPort(runtime: GatewayRuntime) {
+  if (runtime.companyCrm === undefined) {
+    fail('CAPABILITY_NOT_ENABLED', 'the company CRM projection is not configured');
+  }
+  return runtime.companyCrm;
+}
+
+function requireCampaignReader(request: FastifyRequest) {
+  const principal = requirePrincipal(request);
+  if (
+    principal.kind !== 'OPERATOR' ||
+    (!principal.permissions.includes('campaign:draft') && !principal.permissions.includes('approval:read'))
+  ) {
+    fail('INSUFFICIENT_AUTHORITY', 'this operation requires campaign:draft or approval:read');
+  }
+  return principal;
+}
+
+function queryString(request: FastifyRequest, key: string): string | undefined {
+  if (typeof request.query !== 'object' || request.query === null || Array.isArray(request.query)) return undefined;
+  const value = (request.query as Record<string, unknown>)[key];
+  return typeof value === 'string' && value.length > 0 ? value : undefined;
+}
+
+async function handleCampaignList(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  deps: CampaignRouteDeps,
+): Promise<void> {
+  const runtime = deps.runtime;
+  try {
+    const principal = requireCampaignReader(request);
+    const rawLimit = queryString(request, 'limit');
+    const cursor = queryString(request, 'cursor');
+    const page = await campaignProjectionPort(runtime).listCampaigns({
+      tenant_id: principal.tenant_id,
+      ...(cursor === undefined ? {} : { cursor }),
+      ...(rawLimit === undefined ? {} : { limit: Number(rawLimit) }),
+    });
+    await runtime.audit.record({
+      tenant_id: principal.tenant_id,
+      correlation_id: correlationIdOf(request, runtime),
+      operation: 'GET /api/v1/campaigns',
+      principal_kind: principal.kind,
+      outcome: 'ACCEPTED',
+      ...(principal.operator_id === undefined ? {} : { operator_id: principal.operator_id }),
+      detail: { result_count: page.items.length },
+    });
+    return reply.code(200).send({ items: page.items.map(toCampaignProjection), next_cursor: page.next_cursor });
+  } catch (error) {
+    return replyFailure(reply, error, correlationIdOf(request, runtime));
+  }
+}
+
+async function handleCampaignDetail(
+  request: FastifyRequest,
+  reply: FastifyReply,
+  deps: CampaignRouteDeps,
+): Promise<void> {
+  const runtime = deps.runtime;
+  try {
+    const principal = requireCampaignReader(request);
+    const run_id = typeof request.params === 'object' && request.params !== null
+      ? (request.params as Record<string, unknown>)['runId']
+      : undefined;
+    if (typeof run_id !== 'string' || run_id.length === 0) fail('VALIDATION_FAILED', 'runId is required in the path');
+    const row = await campaignProjectionPort(runtime).getCampaign(principal.tenant_id, run_id);
+    if (row === null) fail('NOT_FOUND', 'the campaign run was not found');
+    await runtime.audit.record({
+      tenant_id: principal.tenant_id,
+      correlation_id: correlationIdOf(request, runtime),
+      operation: 'GET /api/v1/campaigns/{runId}',
+      principal_kind: principal.kind,
+      outcome: 'ACCEPTED',
+      ...(principal.operator_id === undefined ? {} : { operator_id: principal.operator_id }),
+      detail: { run_id },
+    });
+    return reply.code(200).send(toCampaignProjection(row));
+  } catch (error) {
+    return replyFailure(reply, error, correlationIdOf(request, runtime));
+  }
+}
+
 export function registerCampaignRoutes(app: FastifyInstance, deps: CampaignRouteDeps): void {
   const preHandler = authenticate(deps);
+
+  app.get('/campaigns', { preHandler }, (request, reply) => handleCampaignList(request, reply, deps));
+  app.get<{ Params: { runId: string } }>(
+    '/campaigns/:runId',
+    { preHandler },
+    (request, reply) => handleCampaignDetail(request, reply, deps),
+  );
 
   app.post('/campaigns/drafts', { preHandler }, async (request: FastifyRequest, reply) => {
     const runtime = deps.runtime;

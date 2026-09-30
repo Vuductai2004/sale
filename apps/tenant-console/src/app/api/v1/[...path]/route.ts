@@ -54,9 +54,9 @@ function isAllowedPath(path: string, method: string): boolean {
   if (path === 'demo/widget-session') return method === 'POST';
   if (path === 'demo/catalog') return method === 'GET';
   if (/^approvals(?:\/[^/]+(?:\/decision)?)?$/.test(path)) return true;
-  if (/^customers\/[^/]+\/timeline$/.test(path)) return true;
+  if (path === 'customers' || /^customers\/[^/]+\/(?:profile|timeline)$/.test(path)) return method === 'GET';
   if (/^telemetry(?:\/kpi-snapshot|\/stream)?$/.test(path)) return true;
-  if (/^conversations(?:\/[^/]+(?:\/(?:takeover|takeover\/heartbeat|resume|messages|operator-messages))?)?$/.test(path)) return true;
+  if (/^conversations(?:\/[^/]+\/summary|\/[^/]+(?:\/(?:takeover|takeover\/heartbeat|resume|messages|operator-messages))?)?$/.test(path)) return true;
   if (/^storefront\/(?:stream|events)$/.test(path)) return true;
   if (/^tasks\/[^/]+$/.test(path)) return true;
   if (/^runs\/[^/]+\/trace$/.test(path)) return method === 'GET';

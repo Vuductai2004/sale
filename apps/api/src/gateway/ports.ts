@@ -18,6 +18,11 @@ import type {
   CareHandoffCompletionOutcome,
   ClaimCareHandoffInput,
   CompleteCareHandoffInput,
+  CompanyCrmCampaignRow,
+  CompanyCrmConversationSummaryRow,
+  CompanyCrmCustomerProfileRow,
+  CompanyCrmCustomerRow,
+  CompanyProjectionSources,
 } from '@agentos/database';
 
 import type {
@@ -408,6 +413,84 @@ export interface GovernancePort {
     readonly require_distinct_approver: boolean;
   }>;
 }
+/** Cross-tenant platform directory; implementations call only the privileged SQL projections. */
+export interface PlatformDirectoryPort {
+  listTenants(): Promise<readonly {
+    readonly tenant_id: string;
+    readonly display_name: string;
+    readonly status: string;
+    readonly created_at: string;
+    readonly enabled_modules: readonly string[] | null;
+  }[]>;
+  getTenant(tenant_id: string): Promise<{
+    readonly tenant_id: string;
+    readonly display_name: string;
+    readonly status: string;
+    readonly created_at: string;
+    readonly enabled_modules: readonly string[] | null;
+  } | null>;
+  readiness(tenant_id: string): Promise<{
+    readonly tenant_id: string;
+    readonly capability_count: number | null;
+    readonly capability_statuses: Readonly<Record<string, string>> | null;
+    readonly connector_count: number | null;
+    readonly connector_statuses: Readonly<Record<string, string>> | null;
+    readonly owner_input_count: number | null;
+    readonly owner_input_statuses: Readonly<Record<string, string>> | null;
+    readonly workspace_status: string | null;
+    readonly residency_status: string | null;
+  } | null>;
+  usage(from: string, to: string): Promise<readonly {
+    readonly tenant_id: string;
+    readonly runs_count: number | null;
+    readonly token_cost_records_count: number | null;
+    readonly estimated_cost_total: string | null;
+    readonly input_tokens_total: number | null;
+    readonly output_tokens_total: number | null;
+    readonly cached_tokens_total: number | null;
+  }[]>;
+}
+
+/** Provider metadata intentionally contains no credentials, URLs, or model secrets. */
+export interface PlatformProvidersPort {
+  list(): Promise<readonly {
+    readonly provider: string;
+    readonly configured: boolean;
+    readonly mode: string;
+  }[]>;
+}
+/** Tenant-scoped read-only sources for the company console projections. */
+export interface CompanyProjectionPort {
+  getSources(tenant_id: string): Promise<CompanyProjectionSources>;
+}
+export type CompanyProjectionsPort = CompanyProjectionPort;
+/** Tenant-scoped Customer 360, campaign, and operator conversation projections. */
+export interface CompanyCrmPort {
+  listCustomers(input: {
+    readonly tenant_id: string;
+    readonly query?: string;
+    readonly limit?: number;
+    readonly cursor?: string;
+  }): Promise<{
+    readonly items: readonly CompanyCrmCustomerRow[];
+    readonly next_cursor: string | null;
+  }>;
+  getCustomerProfile(tenant_id: string, customer_id: string): Promise<CompanyCrmCustomerProfileRow | null>;
+  listCampaigns(input: {
+    readonly tenant_id: string;
+    readonly limit?: number;
+    readonly cursor?: string;
+  }): Promise<{
+    readonly items: readonly CompanyCrmCampaignRow[];
+    readonly next_cursor: string | null;
+  }>;
+  getCampaign(tenant_id: string, run_id: string): Promise<CompanyCrmCampaignRow | null>;
+  getConversationSummary(
+    tenant_id: string,
+    conversation_id: string,
+  ): Promise<CompanyCrmConversationSummaryRow | null>;
+}
+
 
 /** The single exit path from a route to the durable reservation protocol (`04` §4.4). */
 export interface ReceiptPort {
@@ -437,6 +520,8 @@ export interface GatewayRuntime {
   readonly kpi: KpiPort;
   readonly identity: IdentityPort;
   readonly webhooks: WebhookVerificationPort;
+  readonly companyCrm?: CompanyCrmPort;
+  readonly companyProjections?: CompanyProjectionPort;
   readonly governance?: GovernancePort;
   readonly audit: GatewayAuditPort;
   readonly providerCalls?: ProviderCallPort;
