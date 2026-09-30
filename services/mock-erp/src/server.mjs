@@ -2,21 +2,36 @@ import http from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { readFileSync } from 'node:fs';
-import { pathToFileURL } from 'node:url';
+import { isAbsolute, relative, resolve } from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 import { CANONICAL_EVENTS, CATALOG_ITEM, CUSTOMER, TENANT_ID, WAREHOUSE } from './fixtures.mjs';
-import { signBody, signaturesMatch } from './hmac.mjs';
+import { signRequest, signaturesMatch } from './hmac.mjs';
 
 const MANAGED = new Set(['staging', 'sandbox', 'production']);
+const MAX_BODY_BYTES = 1024 * 1024;
 
-/** The API-001 mutating path (`06` §2, `ERP_ACTION_PATH_TEMPLATE`) with a bounded action id. */
-const ACTION_PATH = /^\/api\/v1\/actions\/([A-Za-z0-9._:-]{1,128})$/;
+/** The API-001 mutating path (`06` §2, `ERP_ACTION_PATH_TEMPLATE`) with a bounded encoded id. */
+const ACTION_PATH = /^\/api\/v1\/actions\/([^/]{1,512})$/;
 
 const ORDERS_FIXTURE_URL = new URL('../../../testcases/fixtures/offline/orders.json', import.meta.url);
 const DEMO_PACK_NAME = 'novamart';
 const DEMO_PACK_URL = new URL('./demo/novamart.json', import.meta.url);
 const DEMO_PACK_TTL_SECONDS = 900;
-
+function resolveOrdersFixture(env, deps) {
+  const configured = deps.ordersFixturePath ?? env.MOCK_ERP_ORDERS_FIXTURE_PATH;
+  if (configured === undefined || configured === '') return ORDERS_FIXTURE_URL;
+  if (typeof configured !== 'string' || isAbsolute(configured)) {
+    throw new Error('mock-erp orders fixture path must be relative to the offline fixture root');
+  }
+  const root = fileURLToPath(new URL('../../../testcases/fixtures/offline/', import.meta.url));
+  const candidate = resolve(root, configured);
+  const withinRoot = relative(root, candidate);
+  if (withinRoot === '' || withinRoot.startsWith('..') || isAbsolute(withinRoot)) {
+    throw new Error('mock-erp orders fixture path escapes the offline fixture root');
+  }
+  return pathToFileURL(candidate);
+}
 function loadDemoPack() {
   let pack;
   try {
@@ -162,11 +177,20 @@ function send(res, status, body) {
   res.end(payload);
 }
 
-function readBody(req) {
-  return new Promise((resolve, reject) => {
+function readBody(req, maxBytes) {
+  return new Promise((resolveBody, reject) => {
     const chunks = [];
-    req.on('data', (chunk) => chunks.push(chunk));
-    req.on('end', () => resolve(Buffer.concat(chunks)));
+    let size = 0;
+    let tooLarge = false;
+    req.on('data', (chunk) => {
+      size += chunk.length;
+      if (size > maxBytes) {
+        tooLarge = true;
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on('end', () => resolveBody(tooLarge ? null : Buffer.concat(chunks)));
     req.on('error', reject);
   });
 }
@@ -207,6 +231,7 @@ export function createServer(env = process.env, deps = {}) {
     throw error;
   }
   const demoPack = boot.demoPack === DEMO_PACK_NAME ? loadDemoPack() : null;
+  const ordersFixture = resolveOrdersFixture(env, deps);
   const effects = deps.effects ?? new Map();
   const actions = deps.actions ?? new Map();
   const random = deps.random ?? Math.random;
@@ -220,7 +245,11 @@ export function createServer(env = process.env, deps = {}) {
       return;
     }
 
-    const raw = await readBody(req);
+    const raw = await readBody(req, MAX_BODY_BYTES);
+    if (raw === null) {
+      send(res, 413, { code: 'REQUEST_BODY_TOO_LARGE' });
+      return;
+    }
     let body = {};
     if (raw.length > 0) {
       try {
@@ -231,7 +260,7 @@ export function createServer(env = process.env, deps = {}) {
       }
     }
 
-    const expected = signBody(boot.secret, raw);
+    const expected = signRequest(boot.secret, req.method ?? 'GET', url.pathname, raw);
     const provided = req.headers['x-mock-signature'];
     if (!signaturesMatch(expected, typeof provided === 'string' ? provided : '')) {
       send(res, 401, { code: 'SIGNATURE_INVALID' });
@@ -351,7 +380,7 @@ export function createServer(env = process.env, deps = {}) {
             expires_at: expiresAt,
           },
         };
-        const signature = signBody(boot.secret, JSON.stringify(quote));
+        const signature = signRequest(boot.secret, 'POST', '/api/v1/prices/lookup', JSON.stringify(quote));
         send(res, 200, { ...quote, signature, quote_signature: signature });
         return;
       }
@@ -432,7 +461,7 @@ export function createServer(env = process.env, deps = {}) {
       }
       let orders = [];
       try {
-        const raw = await readFile(ORDERS_FIXTURE_URL, 'utf8');
+        const raw = await readFile(ordersFixture, 'utf8');
         const parsed = JSON.parse(raw);
         orders = Array.isArray(parsed.orders) ? parsed.orders : [];
       } catch {
@@ -446,14 +475,78 @@ export function createServer(env = process.env, deps = {}) {
         send(res, 404, { code: 'AUTHORITATIVE_SOURCE_UNAVAILABLE' });
         return;
       }
-      if (body?.customer_id !== undefined && match.customer_id !== body.customer_id) {
+      if (typeof body?.customer_id !== 'string' || match.customer_id !== body.customer_id) {
         send(res, 404, { code: 'AUTHORITATIVE_SOURCE_UNAVAILABLE' });
         return;
       }
       send(res, 200, {
-        snapshot_at: new Date().toISOString(),
+        snapshot_at: now().toISOString(),
         ...match,
       });
+      return;
+    }
+    if (req.method === 'POST' && (url.pathname === '/api/v1/shipments/lookup' || url.pathname === '/api/v1/returns/lookup')) {
+      const reference = typeof body?.key === 'string'
+        ? body.key
+        : (typeof body?.order_identifier === 'string'
+          ? body.order_identifier
+          : (typeof body?.order_id === 'string' ? body.order_id : null));
+      const customerId = typeof body?.customer_id === 'string' ? body.customer_id : null;
+      let match = null;
+      if (reference !== null && customerId !== null) {
+        if (demoPack) {
+          match = scope === demoPack.tenant_id
+            ? demoPack.orders.find(
+              (order) => (order.order_id === reference || order.order_number === reference)
+                && order.customer_id === customerId,
+            ) ?? null
+            : null;
+        } else {
+          try {
+            const raw = await readFile(ordersFixture, 'utf8');
+            const parsed = JSON.parse(raw);
+            const orders = Array.isArray(parsed.orders) ? parsed.orders : [];
+            match = orders.find(
+              (order) => order.tenant_id === scope
+                && (order.order_id === reference || order.order_number === reference)
+                && order.customer_id === customerId,
+            ) ?? null;
+          } catch {
+            match = null;
+          }
+        }
+      }
+      const isShipment = url.pathname === '/api/v1/shipments/lookup';
+      const available = match !== null
+        && (isShipment
+          ? typeof match.tracking_number === 'string' && match.tracking_number.length > 0
+          : match.status === 'RETURNED' || match.return_status === 'RETURNED');
+      if (!available) {
+        unavailable(res);
+        return;
+      }
+      if (isShipment) {
+        send(res, 200, {
+          snapshot_at: now().toISOString(),
+          shipment_id: match.tracking_number,
+          tracking_number: match.tracking_number,
+          order_id: match.order_id,
+          order_number: match.order_number,
+          customer_id: match.customer_id,
+          status: match.fulfillment_status ?? match.status,
+          shipped_at: match.shipped_at ?? null,
+          delivered_at: match.delivered_at ?? null,
+        });
+      } else {
+        send(res, 200, {
+          snapshot_at: now().toISOString(),
+          return_id: match.return_id ?? `RETURN:${match.order_id}`,
+          order_id: match.order_id,
+          order_number: match.order_number,
+          customer_id: match.customer_id,
+          status: match.return_status ?? match.status,
+        });
+      }
       return;
     }
     if (req.method === 'POST' && url.pathname === '/api/v1/customers/lookup') {
@@ -542,7 +635,17 @@ export function createServer(env = process.env, deps = {}) {
     // find by `action_id` — the one scenario a retry loop must never resolve by guessing.
     const action = ACTION_PATH.exec(url.pathname);
     if (action !== null && (req.method === 'POST' || req.method === 'GET')) {
-      const action_id = decodeURIComponent(action[1]);
+      let action_id;
+      try {
+        action_id = decodeURIComponent(action[1]);
+      } catch {
+        send(res, 400, { code: 'ACTION_ID_INVALID' });
+        return;
+      }
+      if (action_id.length === 0 || action_id.length > 128) {
+        send(res, 400, { code: 'ACTION_ID_INVALID' });
+        return;
+      }
       const key = `${scope}:${action_id}`;
       const existing = actions.get(key);
 

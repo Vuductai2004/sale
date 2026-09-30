@@ -14,8 +14,14 @@ import {
   ERP_RESOURCE_ROUTES,
   ErpRefusalError,
 } from '../erp/api-001-erp.js';
-import type { ConnectorDescriptor, RegisteredConnector } from './registry.js';
-import { ConnectorRegistry, DuplicateConnectorError, UnknownConnectorError } from './registry.js';
+import { createAdapterDispatcher } from './dispatcher.js';
+import {
+  ConnectorRegistry,
+  DuplicateConnectorError,
+  UnknownConnectorError,
+  type ConnectorDescriptor,
+  type RegisteredConnector,
+} from './registry.js';
 
 /** One host-side call the transport double observed. */
 interface RecordedCall {
@@ -386,6 +392,45 @@ describe('Api001ErpConnector', () => {
     expect(receipt.provider_reference).toBe('SO-1001');
     expect(receipt.response_payload.provider_status).toBe(201);
   });
+  it('forwards the orchestrator abort signal through the dispatcher to the HTTP transport', async () => {
+    const controller = new AbortController();
+    let observedSignal: AbortSignal | undefined;
+    let transportAborted = false;
+    const transport: ErpTransport = {
+      request(input) {
+        observedSignal = input.signal;
+        return new Promise((_, reject) => {
+          if (input.signal?.aborted) {
+            transportAborted = true;
+            reject(new Error('transport aborted'));
+            return;
+          }
+          input.signal?.addEventListener('abort', () => {
+            transportAborted = true;
+            reject(new Error('transport aborted'));
+          }, { once: true });
+        });
+      },
+    };
+    const connector = new Api001ErpConnector({
+      transport,
+      authority: createAuthorityDouble(true).authority,
+    });
+    const registry = new ConnectorRegistry();
+    registry.register({
+      descriptor,
+      dispatch: (action, options) => connector.dispatch(action, options),
+    });
+    const dispatcher = createAdapterDispatcher({ registry });
+
+    const pending = dispatcher.dispatch(draft, { signal: controller.signal });
+    expect(observedSignal).toBe(controller.signal);
+    controller.abort();
+
+    await expect(pending).rejects.toThrow('transport aborted');
+    expect(transportAborted).toBe(true);
+  });
+
 
   it('never claims success when the provider outcome is unconfirmed', async () => {
     const { transport, calls } = createTransportDouble([

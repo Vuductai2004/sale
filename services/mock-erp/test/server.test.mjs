@@ -1,13 +1,15 @@
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
+import { createHmac } from 'node:crypto';
+import { once } from 'node:events';
 import { readFileSync } from 'node:fs';
 import http from 'node:http';
-import { once } from 'node:events';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
 
+import { signMockRequest } from '../../../packages/adapters/dist/index.js';
 import { TENANT_ID } from '../src/fixtures.mjs';
-import { signBody } from '../src/hmac.mjs';
+import { signRequest } from '../src/hmac.mjs';
 import { createServer } from '../src/server.mjs';
 
 const SECRET = 'local-mock-erp-hmac-secret-value';
@@ -15,9 +17,11 @@ const DEMO_TENANT_ID = '99999999-9999-4999-8999-999999999999';
 const SERVER_PATH = fileURLToPath(new URL('../src/server.mjs', import.meta.url));
 const DEMO_PACK_PATH = fileURLToPath(new URL('../src/demo/novamart.json', import.meta.url));
 
+const nodeHmacSha256Hex = (secret, message) => createHmac('sha256', secret).update(message, 'utf8').digest('hex');
+
 function post(server, path, body, { secret = SECRET, tenant = TENANT_ID, signature } = {}) {
   const raw = JSON.stringify(body);
-  const sig = signature === undefined ? signBody(secret, raw) : signature;
+  const sig = signature === undefined ? signRequest(secret, 'POST', path, raw) : signature;
   const { port } = server.address();
   return new Promise((resolve, reject) => {
     const req = http.request({
@@ -47,7 +51,7 @@ function post(server, path, body, { secret = SECRET, tenant = TENANT_ID, signatu
 /**
  * A signed read: the tenant scope travels in the header, because a GET has no body to carry it.
  */
-function get(server, path, { secret = SECRET, tenant = TENANT_ID } = {}) {
+function get(server, path, { secret = SECRET, tenant = TENANT_ID, signature = signRequest(secret, 'GET', path, '') } = {}) {
   const { port } = server.address();
   return new Promise((resolve, reject) => {
     const req = http.request({
@@ -57,7 +61,7 @@ function get(server, path, { secret = SECRET, tenant = TENANT_ID } = {}) {
       method: 'GET',
       headers: {
         'content-length': 0,
-        'x-mock-signature': signBody(secret, ''),
+        'x-mock-signature': signature,
         ...(tenant === null ? {} : { 'x-tenant-id': tenant }),
       },
     }, (res) => {
@@ -184,6 +188,18 @@ test('catalog and inventory lookups return timestamped authoritative envelopes',
     server.close();
   }
 });
+
+test('mock verifier accepts the shared adapter signer', async () => {
+  const server = await start();
+  const path = '/api/v1/catalog/items';
+  try {
+    const signature = signMockRequest(SECRET, 'GET', path, '', nodeHmacSha256Hex);
+    const catalog = await get(server, path, { signature });
+    assert.equal(catalog.status, 200);
+  } finally {
+    server.close();
+  }
+});
 test('NovaMart selection serves 28 SKUs, strict stock, and signed owner-approved prices', async () => {
   const server = await start(
     { MOCK_ERP_DEMO_PACK: 'novamart' },
@@ -219,7 +235,7 @@ test('NovaMart selection serves 28 SKUs, strict stock, and signed owner-approved
     assert.equal(price.body.quote_expires_at, '2026-09-28T00:15:00.000Z');
     assert.equal(price.body.signature, price.body.quote_signature);
     const { signature, quote_signature, ...unsigned } = price.body;
-    assert.equal(signature, signBody(SECRET, JSON.stringify(unsigned)));
+    assert.equal(signature, signRequest(SECRET, 'POST', '/api/v1/prices/lookup', JSON.stringify(unsigned)));
     assert.equal(JSON.stringify(price.body).includes(SECRET), false);
 
     const unknownSku = await post(server, '/api/v1/inventory/lookup', {
@@ -489,7 +505,7 @@ test('orders status returns documented order DTO or indistinguishable 404 for un
     const success = await post(
       server,
       '/api/v1/orders/status',
-      { key: 'ORD-A-1' },
+      { key: 'ORD-A-1', customer_id: 'aaaaaaaa-0000-4000-8000-00000000000a' },
       { tenant: careTenant },
     );
     assert.equal(success.status, 200);
