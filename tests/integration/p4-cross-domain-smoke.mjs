@@ -1096,10 +1096,32 @@ describe('P4 cross-domain handoff ledger (real PostgreSQL)', () => {
       registry: context.registry,
     });
 
+    const salesToCareBeforeInjection = (await context.db.listCrossDomainHandoffs(context.tenant_id, customer_id, 20)).find(
+      (row) => row.source_domain === 'sales' && row.target_domain === 'care',
+    );
+    assert.equal(
+      salesToCareBeforeInjection,
+      undefined,
+      'an unbound Care onboarding itinerary must not admit a Sales→Care handoff',
+    );
+
+    // The broker can still be given a stray Care leg by an external caller. Keep that injected-leg
+    // refusal covered independently from the Sales planner's owner-input gate.
+    const injectedCareAdmission = await liveBroker().admit(brokerDraft({
+      customer_id,
+      source_domain: 'sales',
+      source_agent: 'SAL-02',
+      source_run_id: firstLedger.target_run_id,
+      target_domain: 'care',
+      target_agent: 'CS-01',
+      reason: 'Injected stray Sales→Care leg for refusal coverage',
+    }));
+    assert.equal(injectedCareAdmission.admitted, true, 'the injected leg must be durable before Care refuses it');
+
     const careLedger = (await context.db.listCrossDomainHandoffs(context.tenant_id, customer_id, 20)).find(
       (row) => row.source_domain === 'sales' && row.target_domain === 'care',
     );
-    assert.ok(careLedger, 'the real Sales worker must admit the sales→care handoff');
+    assert.ok(careLedger, 'the injected Sales→Care handoff must be claimable for refusal coverage');
     assert.match(careLedger.handoff_id, /^[0-9a-f-]{36}$/i, 'the Care handoff has one durable handoff identity');
     assert.equal(
       await countRows(

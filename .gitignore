@@ -30,3 +30,4 @@ dist/
 coverage/
 *.tsbuildinfo
 pnpm-debug.log
+test-results/
