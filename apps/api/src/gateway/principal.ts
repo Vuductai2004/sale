@@ -71,6 +71,7 @@ export interface OperatorCredential {
   readonly token: string;
   readonly tenant_id: string;
   readonly operator_id: string;
+  readonly scope?: 'company' | 'platform';
   readonly permissions: readonly OperatorPermission[];
 }
 
@@ -272,6 +273,7 @@ function resolvePrincipal(
       kind: 'OPERATOR',
       tenant_id: operator.tenant_id,
       operator_id: operator.operator_id,
+      ...(operator.scope === undefined ? {} : { scope: operator.scope }),
       permissions: operator.permissions,
     };
   }

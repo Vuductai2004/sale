@@ -22,6 +22,7 @@ import {
   EvidenceRepository,
   RunResponseRepository,
   RunStageEventsRepository,
+  TenantGovernanceRepository,
   withTenantContext,
   type RedisInjectedClient,
   type TenantTransactionRunner,
@@ -52,6 +53,7 @@ import {
   createConversationPort,
   createDurableRunPort,
   createEffectGuard,
+  createGovernancePort,
   createStartRunPort,
   createEventPort,
   createIdentityPort,
@@ -92,9 +94,13 @@ function unbound(port: string, capability: string): never {
 export interface GatewayEnv {
   readonly APP_ENV?: string;
   readonly DEMO_MODE?: string;
+  readonly DEMO_COMPANY_ADMIN_EMAIL?: string;
+  readonly DEMO_COMPANY_ADMIN_PASSWORD?: string;
+  readonly DEMO_PLATFORM_ADMIN_EMAIL?: string;
+  readonly DEMO_PLATFORM_ADMIN_PASSWORD?: string;
+  /** Legacy names remain readable only to produce an explicit migration error. */
   readonly DEMO_TENANT_OPERATOR_PASSWORD?: string;
   readonly DEMO_MARKETING_APPROVER_PASSWORD?: string;
-  readonly DEMO_PLATFORM_ADMIN_PASSWORD?: string;
   /** Local/CI demo switch that disables provider calls while retaining boot-time schema checks. */
   readonly DEMO_PROVIDER_MODE?: string;
   readonly OPENAI_API_KEY?: string;
@@ -212,18 +218,28 @@ function demoModeEnabled(env: GatewayEnv): boolean {
 }
 
 function demoCredentialStore(env: GatewayEnv): DemoCredentialStore {
-  const tenantOperatorPassword = env.DEMO_TENANT_OPERATOR_PASSWORD;
-  const marketingApproverPassword = env.DEMO_MARKETING_APPROVER_PASSWORD;
-  const platformAdminPassword = env.DEMO_PLATFORM_ADMIN_PASSWORD;
-  if (tenantOperatorPassword === undefined
-    || marketingApproverPassword === undefined
-    || platformAdminPassword === undefined) {
-    throw new Error('DEMO_MODE requires all three role password environment values');
+  const required = [
+    env.DEMO_COMPANY_ADMIN_EMAIL,
+    env.DEMO_COMPANY_ADMIN_PASSWORD,
+    env.DEMO_PLATFORM_ADMIN_EMAIL,
+    env.DEMO_PLATFORM_ADMIN_PASSWORD,
+  ];
+  const missing = required.some((value) => typeof value !== 'string' || value.length === 0);
+  if (missing && (env.DEMO_TENANT_OPERATOR_PASSWORD !== undefined || env.DEMO_MARKETING_APPROVER_PASSWORD !== undefined)) {
+    throw new Error(
+      'DEMO_AUTH_ENV_MIGRATION_REQUIRED: DEMO_COMPANY_ADMIN_EMAIL, DEMO_COMPANY_ADMIN_PASSWORD, DEMO_PLATFORM_ADMIN_EMAIL, DEMO_PLATFORM_ADMIN_PASSWORD',
+    );
+  }
+  if (missing) {
+    throw new Error(
+      'DEMO_MODE requires DEMO_COMPANY_ADMIN_EMAIL, DEMO_COMPANY_ADMIN_PASSWORD, DEMO_PLATFORM_ADMIN_EMAIL, and DEMO_PLATFORM_ADMIN_PASSWORD',
+    );
   }
   return createDemoCredentialStore({
-    tenantOperatorPassword,
-    marketingApproverPassword,
-    platformAdminPassword,
+    companyAdminEmail: env.DEMO_COMPANY_ADMIN_EMAIL as string,
+    companyAdminPassword: env.DEMO_COMPANY_ADMIN_PASSWORD as string,
+    platformAdminEmail: env.DEMO_PLATFORM_ADMIN_EMAIL as string,
+    platformAdminPassword: env.DEMO_PLATFORM_ADMIN_PASSWORD as string,
   });
 }
 
@@ -276,6 +292,7 @@ export function createGatewayComposition(
   const reservationsRepository = new EffectReservationRepository();
   const workflowsRepository = new DurableWorkflowRepository();
   const approvalsRepository = new ApprovalRepository();
+  const governanceRepository = new TenantGovernanceRepository(options?.databaseRunner);
   const evidenceRepository = new EvidenceRepository();
   const responseRepository = new RunResponseRepository(options?.databaseRunner);
   const auditRepository = new AuditRepository();
@@ -290,6 +307,7 @@ export function createGatewayComposition(
     responseRepository,
   );
   const approvalReads = createApprovalReadPort(approvalsRepository);
+  const governance = createGovernancePort(governanceRepository);
   const handoffs = createCareHandoffPort(careHandoffsRepository);
 
   let ownedRedis: RuntimeRedisClient | null = null;
@@ -405,6 +423,7 @@ export function createGatewayComposition(
     handoffs,
     runs,
     approvals,
+    governance,
     events: createEventPort(eventsRepository),
     timeline: createEventPort(eventsRepository),
     streams,

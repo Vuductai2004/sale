@@ -47,7 +47,10 @@ export type RuleErrorCode =
   | 'SKILL_DISABLED';
 
 /** Approval-claim refusals of `06` §8.1.1 / `04` §4.2. */
-export type ApprovalErrorCode = 'APPROVAL_STALE_PAYLOAD' | 'APPROVAL_NOT_CLAIMABLE';
+export type ApprovalErrorCode =
+  | 'APPROVAL_STALE_PAYLOAD'
+  | 'APPROVAL_NOT_CLAIMABLE'
+  | 'APPROVER_MUST_DIFFER';
 
 /** Gateway-owned refusals that are not business rules. */
 export type GatewayErrorCode =
@@ -68,6 +71,7 @@ export type GatewayErrorCode =
   | 'RUN_LEASE_HELD'
   /** Client event payload attempted to provide a server-owned evidence field (06 §8.1.1/§8.1.2). */
   | 'CUSTOMER_EVENT_RESERVED_PAYLOAD_FIELD'
+  | 'TOO_MANY_ATTEMPTS'
   | 'INTERNAL_ERROR';
 
 export type GatewayErrorCode_ = BaselineErrorCode | RuleErrorCode | ApprovalErrorCode | GatewayErrorCode;
@@ -100,6 +104,7 @@ export const FAILURE_STATUS: Readonly<Partial<Record<GatewayErrorCode_, number>>
   SIGNATURE_INVALID: 401,
   TENANT_BINDING_MISMATCH: 403,
   CUSTOMER_UNVERIFIED: 403,
+  APPROVER_MUST_DIFFER: 403,
   INSUFFICIENT_AUTHORITY: 403,
   INVALID_CLEARANCE: 403,
   PROHIBITED_ACTION: 403,
@@ -132,6 +137,7 @@ export const FAILURE_STATUS: Readonly<Partial<Record<GatewayErrorCode_, number>>
   SKILL_NOT_FOUND: 404,
   SKILL_DISABLED: 422,
   RATE_LIMITED: 429,
+  TOO_MANY_ATTEMPTS: 429,
   PROVIDER_TIMEOUT: 503,
   PROVIDER_REJECTED: 502,
   INTERNAL_ERROR: 500,
@@ -168,6 +174,8 @@ export interface GatewayPrincipal {
   readonly tenant_id: string;
   /** Present for `OPERATOR`; the authenticated decision principal, never payload-only authority. */
   readonly operator_id?: string;
+  /** Present for an operator: the audience scope bound to the account. */
+  readonly scope?: 'company' | 'platform';
   /** Present for a channel session: the channel the signed credential was issued for. */
   readonly channel?: ChannelId;
   /** Present for a session-bound caller: the conversation/session the credential is bound to. */

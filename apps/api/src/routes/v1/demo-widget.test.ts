@@ -10,9 +10,10 @@ import {
 } from '../../runtime/demo-auth.js';
 
 const ORIGIN = 'https://demo.example.test';
-const PASSWORDS = {
-  tenantOperatorPassword: 'tenant-password-123',
-  marketingApproverPassword: 'marketing-password-123',
+const ACCOUNTS = {
+  companyAdminEmail: 'company.admin@example.test',
+  companyAdminPassword: 'company-password-123',
+  platformAdminEmail: 'platform.admin@example.test',
   platformAdminPassword: 'platform-password-123',
 } as const;
 
@@ -30,10 +31,10 @@ function restoreEnv(key: keyof typeof originalEnv): void {
 }
 
 function buildHarness() {
-  const demoAuth = createDemoCredentialStore(PASSWORDS);
-  const operator = demoAuth.login('tenant_operator', PASSWORDS.tenantOperatorPassword);
-  const approver = demoAuth.login('marketing_approver', PASSWORDS.marketingApproverPassword);
-  if (operator === null || approver === null) throw new Error('demo test operator credentials did not issue');
+  const demoAuth = createDemoCredentialStore(ACCOUNTS);
+  const operator = demoAuth.login(ACCOUNTS.companyAdminEmail, ACCOUNTS.companyAdminPassword, 'company');
+  const approver = demoAuth.login(ACCOUNTS.platformAdminEmail, ACCOUNTS.platformAdminPassword, 'platform');
+  if (operator === null || approver === null) throw new Error('demo test account credentials did not issue');
 
   const runtime = { ids: () => 'demo-widget-test-correlation' } as unknown as GatewayRuntime;
   const app = Fastify({ logger: false });

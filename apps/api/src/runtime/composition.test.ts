@@ -67,8 +67,9 @@ describe('createGatewayComposition', () => {
       ...ENV,
       APP_ENV: 'local',
       DEMO_MODE: 'true',
-      DEMO_TENANT_OPERATOR_PASSWORD: 'tenant-password',
-      DEMO_MARKETING_APPROVER_PASSWORD: 'marketing-password',
+      DEMO_COMPANY_ADMIN_EMAIL: 'company.admin@example.test',
+      DEMO_COMPANY_ADMIN_PASSWORD: 'tenant-password',
+      DEMO_PLATFORM_ADMIN_EMAIL: 'platform.admin@example.test',
       DEMO_PLATFORM_ADMIN_PASSWORD: 'platform-password',
     });
     const snapshot = await composition.readiness.snapshot({ tenant_id: '99999999-9999-4999-8999-999999999999' });
@@ -84,8 +85,9 @@ describe('createGatewayComposition', () => {
       APP_ENV: 'local',
       DEMO_MODE: 'true',
       DEMO_PROVIDER_MODE: 'offline',
-      DEMO_TENANT_OPERATOR_PASSWORD: 'tenant-password',
-      DEMO_MARKETING_APPROVER_PASSWORD: 'marketing-password',
+      DEMO_COMPANY_ADMIN_EMAIL: 'company.admin@example.test',
+      DEMO_COMPANY_ADMIN_PASSWORD: 'tenant-password',
+      DEMO_PLATFORM_ADMIN_EMAIL: 'platform.admin@example.test',
       DEMO_PLATFORM_ADMIN_PASSWORD: 'platform-password',
       OPENAI_API_KEY: 'offline-provider-disabled',
       OPENAI_BASE_URL: 'http://127.0.0.1:9/v1',
@@ -94,5 +96,16 @@ describe('createGatewayComposition', () => {
     expect(composition.intentProposer).toBeUndefined();
     expect((await composition.readiness.snapshot({ tenant_id: 'tenant-a' })).provider.configured).toBe(false);
     await composition.close();
+  });
+  it('requires migration to account environment variables when legacy variables remain', () => {
+    expect(() => createGatewayComposition({
+      ...ENV,
+      APP_ENV: 'local',
+      DEMO_MODE: 'true',
+      DEMO_TENANT_OPERATOR_PASSWORD: 'legacy-tenant',
+      DEMO_MARKETING_APPROVER_PASSWORD: 'legacy-approver',
+    })).toThrow(
+      'DEMO_AUTH_ENV_MIGRATION_REQUIRED: DEMO_COMPANY_ADMIN_EMAIL, DEMO_COMPANY_ADMIN_PASSWORD, DEMO_PLATFORM_ADMIN_EMAIL, DEMO_PLATFORM_ADMIN_PASSWORD',
+    );
   });
 });

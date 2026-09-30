@@ -1,12 +1,12 @@
 import type { FastifyInstance } from 'fastify';
 
+import { GatewayFailureError, fail, replyFailure } from '../../gateway/http.js';
 import { authenticate, requireOperator } from '../../gateway/principal.js';
-import { fail, replyFailure } from '../../gateway/http.js';
 import type { GatewayRuntime } from '../../gateway/ports.js';
 import {
-  DEMO_ROLES,
+  type DemoAudience,
   type DemoCredentialStore,
-  type DemoRole,
+  type DemoSession,
 } from '../../runtime/demo-auth.js';
 
 export interface DemoAuthRouteDependencies {
@@ -42,40 +42,58 @@ function requireDemoSession(
   return { token: token as string, session };
 }
 
-function parseLoginBody(body: unknown): { readonly role: DemoRole; readonly password: string } {
+function parseLoginBody(body: unknown): { readonly email: string; readonly password: string; readonly audience: DemoAudience } {
   if (!isPlainRecord(body)) {
-    fail('VALIDATION_FAILED', 'the request body must contain a role and password');
+    fail('VALIDATION_FAILED', 'the request body must contain an email, password, and audience');
   }
-  const role = body.role;
+  const email = body.email;
   const password = body.password;
-  if (typeof role !== 'string' || !(DEMO_ROLES as readonly string[]).includes(role)) {
-    fail('VALIDATION_FAILED', 'role must be one of the supported demo roles');
+  const audience = body.audience;
+  if (typeof email !== 'string' || email.trim().length === 0) {
+    fail('VALIDATION_FAILED', 'email is required');
   }
   if (typeof password !== 'string' || password.length === 0) {
     fail('VALIDATION_FAILED', 'password is required');
   }
-  return { role: role as DemoRole, password };
+  if (audience !== 'company' && audience !== 'platform') {
+    fail('VALIDATION_FAILED', 'audience must be company or platform');
+  }
+  return { email, password, audience };
 }
 
-/** Registers local/CI-only operator login, session inspection, and revocation. */
+function sessionWithoutToken(session: DemoSession) {
+  return {
+    expires_at: session.expires_at,
+    identity: session.identity,
+    membership: session.membership,
+    permissions: session.permissions,
+  };
+}
+
+/** Registers local/CI-only account login, session inspection, and revocation. */
 export function registerDemoAuthRoutes(
   app: FastifyInstance,
   deps: DemoAuthRouteDependencies,
 ): void {
   app.post('/demo/login', async (request, reply) => {
     try {
-      const { role, password } = parseLoginBody(request.body);
-      const session = deps.demoAuth.login(role, password);
+      const { email, password, audience } = parseLoginBody(request.body);
+      const session = deps.demoAuth.login(email, password, audience, request.ip);
       if (session === null) {
+        const retryAfter = deps.demoAuth.retryAfter(email, request.ip);
+        if (retryAfter !== null) {
+          fail('TOO_MANY_ATTEMPTS', 'too many authentication attempts', { retry_after: retryAfter });
+        }
         fail('AUTHENTICATION_FAILED', 'the demo credentials were not accepted');
       }
-      return reply.code(200).send({
-        access_token: session.access_token,
-        expires_at: session.expires_at,
-        role: session.role,
-        tenant_id: session.tenant_id,
-      });
+      return reply.code(200).send(session);
     } catch (error) {
+      if (error instanceof GatewayFailureError && error.failure.error_code === 'TOO_MANY_ATTEMPTS') {
+        const retryAfter = error.failure.details?.retry_after;
+        if (typeof retryAfter === 'number' && Number.isFinite(retryAfter)) {
+          reply.header('retry-after', String(Math.max(1, Math.ceil(retryAfter))));
+        }
+      }
       return replyFailure(reply, error, 'demo-login');
     }
   });
@@ -84,12 +102,7 @@ export function registerDemoAuthRoutes(
     try {
       const { session } = requireDemoSession(request, deps);
       requireOperator(request);
-      return reply.code(200).send({
-        role: session.role,
-        tenant_id: session.tenant_id,
-        operator_id: session.operator_id,
-        permissions: session.permissions,
-      });
+      return reply.code(200).send(sessionWithoutToken(session));
     } catch (error) {
       return replyFailure(reply, error, 'demo-session');
     }
