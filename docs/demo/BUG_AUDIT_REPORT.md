@@ -248,37 +248,51 @@ Tính đến thời điểm hiện tại, remote `phong/feat/demo-live-3agent` (
 - **Nguyên nhân:** Có nhận param `run_id` trên thanh địa chỉ nhưng thiếu `useEffect` tự động gọi API `loadTrace()` khi mở trang.
 - **Giải pháp khắc phục:** Thêm hook `useEffect` kích hoạt tải vết thực thi khi có `run_id`.
 
-#### 18. Bug B-05: Màn hình Operations Console làm mất trạng thái lease khi chọn lại hội thoại
-- **File:** [apps/tenant-console/src/app/demo/operations/page.tsx](file:///d:/New%20folder/apps/tenant-console/src/app/demo/operations/page.tsx)
-- **Nguyên nhân:** Gọi `setLease(null)` mỗi khi chuyển đổi giữa các hội thoại đang tiếp quản (`paused_takeover`), làm mất quyền can thiệp của operator.
+#### 21. Bug B-26: Customer Care Intent & Order Reference Extraction thất bại với mẫu câu tiếng Việt tự nhiên
+- **File:** [apps/worker/src/runtime/care/agent-runtime.ts:L314-L401](file:///d:/New%20folder/apps/worker/src/runtime/care/agent-runtime.ts#L314-L401)
+- **Nguyên nhân gốc rễ:**
+  1. `extractOrderReference` chỉ bắt các tiền tố `(ORD|SO)-` và từ khóa tiếng Anh `order|tracking|package|shipment`. Hoàn toàn thiếu tiền tố `DH-` (Đơn Hàng) và từ khóa tiếng Việt như `đơn hàng`, `mã đơn`, `mã vận đơn`, `đơn`.
+  2. `classifyCareIntent` có regex `order_status` chỉ bắt `\b(don hang.*(dau|nao|toi dau)|tinh trang don|don cua toi)\b`. Khi người dùng gõ câu hỏi tự nhiên như *"kiểm tra đơn hàng 12345"*, *"tra cứu đơn DH-9988"*, regex không khớp và `orderRef` là `null`, khiến yêu cầu bị rơi xuống `requires_clarification` thay vì tra cứu đơn.
+  3. `isOrderStatusMessage` và `isQuestionMessage` không chạy qua `normalizeIntentText`, làm mất khả năng nhận diện tiếng Việt không dấu hoặc có dấu khi không có ký tự `?`.
+- **Giải pháp khắc phục:** Bổ sung tiền tố `DH-`, mở rộng regex keyword tiếng Việt (`don hang|ma don|ma van don|don`) và tích hợp `normalizeIntentText` vào `isOrderStatusMessage`, `isQuestionMessage`.
 
----
+#### 22. Bug B-27: Mất Heartbeat Lease khi Operator chuyển qua lại giữa các hội thoại trong Operations Console
+- **File:** [apps/tenant-console/src/app/demo/operations/page.tsx:L202-L221](file:///d:/New%20folder/apps/tenant-console/src/app/demo/operations/page.tsx#L202-L221)
+- **Nguyên nhân gốc rễ:** Hook `useEffect` của heartbeat chỉ thiết lập interval cho duy nhất `selectedId`. Khi operator đang giữ lease của Conversation A, nếu click sang xem Conversation B (chưa có lease), `lease` của conversation hiện tại là `null`, interval heartbeat bị hủy. Sau 60 giây (TTL backend), lease của Conversation A sẽ âm thầm hết hạn trên Redis/server mà operator không hề hay biết.
+- **Giải pháp khắc phục:** Thiết lập heartbeat định kỳ chạy trên toàn bộ danh sách `leases` đang hoạt động (`Object.entries(leases)`), đồng thời gọi `setLease(null, convId)` riêng biệt cho từng conversation gặp lỗi thay vì phụ thuộc vào `selectedId`.
 
-### NHÓM D: LỖI NHỎ & CẢI THIỆN MÔI TRƯỜNG (LOW PRIORITY)
+#### 23. Bug B-28: Nút hành động phê duyệt trong Campaigns Console bị disable vĩnh viễn khi list endpoint thiếu digest
+- **File:** [apps/tenant-console/src/app/demo/campaigns/page.tsx:L272](file:///d:/New%20folder/apps/tenant-console/src/app/demo/campaigns/page.tsx#L272)
+- **Nguyên nhân gốc rễ:** Trong `handleDecision()`, tác giả đã chủ động xử lý fallback gọi API `GET /api/v1/approvals/:id` để đọc `payload_sha256` nếu item danh sách chưa có. Tuy nhiên, trên nút bấm giao diện (Approve, Reject, Pause, Cancel), điều kiện lại để: `disabled={approvalBusy === approval.approval_id || !approval.payload_sha256}`. Điều này chặn người dùng bấm nút khi digest chưa có, biến đoạn logic fallback lấy detail thành dead code.
+- **Giải pháp khắc phục:** Bỏ `|| !approval.payload_sha256` trên nút bấm để cho phép người dùng click kích hoạt quy trình kiểm tra và tải digest authoritative.
 
-#### 19. Bug B-06: Tra cứu khách hàng theo `key` ở chế độ non-demo trong Mock ERP
-- **File:** [services/mock-erp/src/server.mjs](file:///d:/New%20folder/services/mock-erp/src/server.mjs)
-- **Khắc phục:** Bổ sung tìm kiếm linh hoạt theo cả `customer_id`, `email`, và `key`.
+#### 24. Bug B-29: Sales Worker `handleCheckPrice` trả về `discount_allowed: true` khi phần trăm giảm giá không hợp lệ
+- **File:** [apps/worker/src/runtime/sales/skills/read-handlers.ts:L605-L622](file:///d:/New%20folder/apps/worker/src/runtime/sales/skills/read-handlers.ts#L605-L622)
+- **Nguyên nhân gốc rễ:** Biến `let discount_allowed = true;` được khởi tạo mặc định. Khi người dùng truyền `requested_discount_percent` âm (`< 0`) hoặc vượt trần (`> 100`), điều kiện `if` bị bỏ qua và giá giữ nguyên `list_price`. Tuy nhiên kết quả trả về vẫn là `discount_allowed: true`, gây hiểu nhầm cho agent/UI rằng mức giảm giá yêu cầu đã được chấp thuận.
+- **Giải pháp khắc phục:** Khởi tạo `discount_allowed = false;` nếu có yêu cầu giảm giá nhưng không hợp lệ hoặc không đủ điều kiện so với sàn giá (`p_floor`).
 
-#### 20. Bug B-07: Catalog projection loại bỏ sản phẩm không có trường `use_case`
-- **File:** [apps/api/src/routes/v1/demo-widget.ts](file:///d:/New%20folder/apps/api/src/routes/v1/demo-widget.ts)
-- **Khắc phục:** Fallback `use_case: item.use_case ?? 'general'`.
+#### 25. Bug B-30: Storefront Stream ghi `[pending: unknown]` cho hội thoại đã chuyển giao người (`HUMAN_OWNED`) & Mất tin nhắn khi lỗi
+- **File:** [apps/api/src/routes/v1/storefront.ts:L426-L431](file:///d:/New%20folder/apps/api/src/routes/v1/storefront.ts#L426-L431) & [apps/tenant-console/src/app/demo/storefront/page.tsx:L415](file:///d:/New%20folder/apps/tenant-console/src/app/demo/storefront/page.tsx#L415)
+- **Nguyên nhân gốc rễ:**
+  1. Khi hội thoại đã chuyển giao quyền điều khiển cho con người (`HUMAN_OWNED`), receipt không có `task_id`. Backend `storefront.ts` ghi vào luồng stream chunk `\n[pending: unknown]\n`. Đây là thông tin sai lệch ngữ nghĩa (trạng thái thực tế là đã chuyển giao cho chuyên viên tư vấn).
+  2. Trên Storefront UI, `setMessage('')` được gọi ngay trước khi gửi request. Nếu request bị ngắt kết nối mạng hoặc server trả 500, nội dung tin nhắn của khách bị mất trắng.
+- **Giải pháp khắc phục:** Không xuất `[pending: unknown]` khi status là `HUMAN_OWNED`, và khôi phục lại input text khi `fetch` bị lỗi.
 
 ---
 
 ## IV. LỘ TRÌNH KHUYẾN NGHỊ TRIỂN KHAI SỬA LỖI
 
-### Giai đoạn 1: Vá ngay các lỗi Block kịch bản Demo trực tiếp (Trong ngày hôm nay)
-1. **Sửa Bug B-24 & B-16:** Viết lại bộ regex nhận diện tiền tệ, ngân sách và phân loại danh mục trong `turn-classifier.ts` để thông suốt kịch bản tư vấn bằng tiếng Việt tự nhiên.
-2. **Sửa Bug B-20:** Cập nhật `storefront/page.tsx` và `care-turn.ts` xử lý êm receipt `HUMAN_OWNED` khi con người tiếp quản hội thoại.
-3. **Sửa Bug B-23:** Khắc phục race condition heartbeat trong `worker-polling.ts` ngăn chặn hủy nhầm task đã chạy xong.
-4. **Sửa Bug B-13:** Chuẩn hóa `segment_id` trong `smoke.mjs` thành `'inactive_90d'`.
-5. **Sửa Bug B-19:** Fallback an toàn cho governance port trong `approvals.ts`.
+### Giai đoạn 1: Vá ngay các lỗi Block kịch bản Demo trực tiếp (Đã hoàn thành trên nhánh `tai`)
+1. **Sửa Bug B-24 & B-15:** Viết lại bộ regex nhận diện tiền tệ, ngân sách và phân loại danh mục trong `turn-classifier.ts` để thông suốt kịch bản tư vấn bằng tiếng Việt tự nhiên. *(Đã xong)*
+2. **Sửa Bug B-20:** Cập nhật `storefront/page.tsx` và `care-turn.ts` xử lý êm receipt `HUMAN_OWNED` khi con người tiếp quản hội thoại. *(Đã xong)*
+3. **Sửa Bug B-01, B-03, B-04, B-05:** Vá lỗi FAQ parser, giới hạn trần discount, trace autoload và duy trì map lease theo conversation ID. *(Đã xong)*
 
-### Giai đoạn 2: Tối ưu hiển thị và liên kết BFF (Sau giai đoạn 1)
-1. **Sửa Bug B-22:** Bổ sung route proxy `/company/*` vào BFF của Tenant Console.
-2. **Sửa Bug B-21:** Đổi `INNER JOIN` thành `LEFT JOIN` trong truy vấn `getCustomerProfile`.
-3. **Sửa Bug B-10 & B-17:** Hiển thị tin nhắn đối thoại thông thường trên Storefront và map icon phù hợp theo tone màu của `StatusBadge`.
+### Giai đoạn 2: Vá các lỗi sâu mới phát hiện (B-26 đến B-30)
+1. **Sửa Bug B-26:** Mở rộng nhận diện mã đơn hàng tiếng Việt (`DH-`, `đơn hàng`, `mã đơn`) trong Care Worker runtime.
+2. **Sửa Bug B-27:** Cải tiến heartbeat lease đa hội thoại trong Operations Console.
+3. **Sửa Bug B-28:** Mở khóa nút phê duyệt chiến dịch trong Campaigns Console để kích hoạt fallback nạp detail digest.
+4. **Sửa Bug B-29:** Điều chỉnh logic cờ `discount_allowed` trong `handleCheckPrice` của Sales Worker.
+5. **Sửa Bug B-30:** Chuẩn hóa stream phản hồi cho trạng thái `HUMAN_OWNED` và bảo toàn input text khi gặp lỗi kết nối.
 
 ---
 *Báo cáo được lưu trữ và cập nhật trực tiếp tại: `docs/demo/BUG_AUDIT_REPORT.md`.*

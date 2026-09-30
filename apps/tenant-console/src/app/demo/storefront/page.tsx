@@ -452,6 +452,7 @@ export default function StorefrontDemoPage() {
     } catch (error) {
       const textError = error instanceof Error ? error.message : 'The message could not be completed.';
       setSendError(textError);
+      setMessage(text);
       setEntries((current) => current.map((entry) => entry.id === assistantId ? { ...entry, status: 'failed', error: textError } : entry));
       setActiveTaskId(null);
     }

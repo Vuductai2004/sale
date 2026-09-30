@@ -329,7 +329,10 @@ function classifyCareIntent(text: string): CareIntent {
   }
 
   const orderRef = extractOrderReference(text);
-  if (matches(/\b(order status|where is my order|track my order|order tracking|delivery status)\b/, /\b(don hang.*(dau|nao|toi dau)|tinh trang don|don cua toi)\b/)) {
+  if (matches(
+    /\b(order status|where is my order|track my order|order tracking|delivery status)\b/,
+    /\b(don hang.*(dau|nao|toi dau)|tinh trang don|don cua toi|kiem tra don|tra cuu don)\b/,
+  )) {
     return 'order_status';
   }
   if (matches(/\b(shipping|shipment|delivery|parcel|pickup point|carrier|tracking number)\b/, /\b(giao hang|van chuyen|van don|diem nhan|buu kien)\b/)) {
@@ -356,22 +359,24 @@ function classifyCareIntent(text: string): CareIntent {
 /**
  * Extracts order reference from message text.
  * Matches:
- *  - ORD-12345, SO-9988
- *  - order #12345, order 12345, order: 12345
+ *  - ORD-12345, SO-9988, DH-12345
+ *  - order #12345, order 12345, don hang 12345, ma don DH12345
  *  - #12345
  */
 export function extractOrderReference(text: string): string | null {
   if (!text) return null;
 
-  // 1. Prefixed canonical IDs: ORD-XXXX, SO-XXXX
-  const prefixMatch = text.match(/\b((?:ORD|SO)-[A-Za-z0-9_-]+)\b/i);
+  // 1. Prefixed canonical IDs: ORD-XXXX, SO-XXXX, DH-XXXX
+  const prefixMatch = text.match(/\b((?:ORD|SO|DH)-[A-Za-z0-9_-]+)\b/i);
   if (prefixMatch && prefixMatch[1]) return prefixMatch[1];
 
-  // 2. Keyword followed by identifier
-  const keywordMatch = text.match(/\b(?:order|tracking|package|shipment)\s*(?:#|id|number|no\.?|num)?\s*[:#]?\s*([A-Za-z0-9_-]{3,})/i);
+  // 2. Keyword followed by identifier (supporting EN & VN keywords)
+  const keywordMatch =
+    text.match(/\b(?:order|tracking|package|shipment)\s*(?:#|id|number|no\.?|num)?\s*[:#]?\s*([A-Za-z0-9_-]{3,})/i) ||
+    normalizeIntentText(text).match(/\b(?:don hang|ma don|ma van don|don)\s*(?:#|id|ma|so)?\s*[:#]?\s*([a-z0-9_-]{3,})/i);
   if (keywordMatch && keywordMatch[1]) {
     const candidate = keywordMatch[1].trim();
-    if (!/^(status|details|update|information|info|number|id|my|the|is)$/i.test(candidate)) {
+    if (!/^(status|details|update|information|info|number|id|my|the|is|hang|nay|cua|toi|nao|dau)$/i.test(candidate)) {
       return candidate;
     }
   }
@@ -388,7 +393,7 @@ export function extractOrderReference(text: string): string | null {
  */
 export function isOrderStatusMessage(text: string): boolean {
   if (!text) return false;
-  return /\b(order|status|track|tracking|shipment|delivery|package|parcel|where is my)\b/i.test(text);
+  return /\b(order|status|track|tracking|shipment|delivery|package|parcel|where is my|don hang|tinh trang don|kiem tra don|tra cuu don)\b/i.test(normalizeIntentText(text));
 }
 
 /**
@@ -397,7 +402,7 @@ export function isOrderStatusMessage(text: string): boolean {
 export function isQuestionMessage(text: string): boolean {
   if (!text) return false;
   if (text.includes('?')) return true;
-  return /\b(how|what|why|when|where|who|which|can|could|do|does|is|are|policy|refund|return|shipping|faq|help)\b/i.test(text);
+  return /\b(how|what|why|when|where|who|which|can|could|do|does|is|are|policy|refund|return|shipping|faq|help|the nao|ra sao|chinh sach|huong dan|lam sao|co duoc|tai sao|o dau|khi nao)\b/i.test(normalizeIntentText(text));
 }
 
 export interface ParsedRationale {

@@ -200,25 +200,30 @@ export default function OperationsPage() {
   }, [fetchMessages, selectedId]);
 
   useEffect(() => {
-    if (!lease || !selectedId) return undefined;
+    const activeLeaseEntries = Object.entries(leases);
+    if (activeLeaseEntries.length === 0) return undefined;
     const heartbeat = window.setInterval(() => {
-      void (async () => {
-        const { response, payload } = await demoFetch(`/api/v1/conversations/${encodeURIComponent(selectedId)}/takeover/heartbeat`, {
-          method: 'POST',
-          body: JSON.stringify({ extend_seconds: 60 }),
-        });
-        if (!response.ok) {
-          setLease(null);
-          setError(apiError(payload, 'Takeover heartbeat failed.'));
-          return;
-        }
-        if (typeof payload.lease_expires_at === 'string' && typeof payload.operator_id === 'string') {
-          setLease({ lease_expires_at: payload.lease_expires_at, operator_id: payload.operator_id });
-        }
-      })();
+      for (const [convId] of activeLeaseEntries) {
+        void (async () => {
+          const { response, payload } = await demoFetch(`/api/v1/conversations/${encodeURIComponent(convId)}/takeover/heartbeat`, {
+            method: 'POST',
+            body: JSON.stringify({ extend_seconds: 60 }),
+          });
+          if (!response.ok) {
+            setLease(null, convId);
+            if (convId === selectedId) {
+              setError(apiError(payload, 'Takeover heartbeat failed.'));
+            }
+            return;
+          }
+          if (typeof payload.lease_expires_at === 'string' && typeof payload.operator_id === 'string') {
+            setLease({ lease_expires_at: payload.lease_expires_at, operator_id: payload.operator_id }, convId);
+          }
+        })();
+      }
     }, 30000);
     return () => window.clearInterval(heartbeat);
-  }, [lease, selectedId]);
+  }, [leases, selectedId, setLease]);
 
   async function handleTakeover() {
     if (!selectedId || !takeoverReason.trim()) return;

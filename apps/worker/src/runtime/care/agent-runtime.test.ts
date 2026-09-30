@@ -799,4 +799,41 @@ describe('CareAgentRuntime', () => {
     expect(plan.steps).toHaveLength(0);
     expect(plan.fallback_strategy).toBe('FAIL_CLOSED');
   });
+
+  it('correctly classifies Vietnamese order status inquiry and extracts DH- prefix order reference', async () => {
+    const runtime = new CareAgentRuntime({
+      registry: mockRegistry,
+      verificationResolver,
+    });
+
+    const signal: SignalEnvelope = {
+      signal_id: 'sig-vn-order-1',
+      tenant_id,
+      correlation_id: 'corr-1',
+      source_channel: 'WEB_CHAT',
+      event_type: 'message.received',
+      timestamp: '2026-09-01T00:00:00Z',
+      subject: {
+        session_id: 'sess-1',
+        channel_type: 'web',
+      },
+      payload: {
+        message: 'Làm phiền bạn kiểm tra đơn hàng DH-8899 giúp tôi với ạ',
+        module: 'support',
+      },
+    };
+
+    const hypothesis = await runtime.deriveHypothesis(signal, verifiedContext);
+    expect(hypothesis.intent).toBe('order_lookup');
+    expect(hypothesis.derived_from_signals).toContain('order:DH-8899');
+
+    const routing = await runtime.resolveRouting(signal, verifiedContext, hypothesis);
+    const plan = await runtime.formulatePlan(routing, verifiedContext, hypothesis);
+
+    expect(plan.steps).toHaveLength(1);
+    expect(plan.steps[0]?.skill_id).toBe('skill.care.lookup_order');
+    expect(plan.steps[0]?.input_parameters).toMatchObject({
+      order_identifier: 'DH-8899',
+    });
+  });
 });

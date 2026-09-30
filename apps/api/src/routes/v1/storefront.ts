@@ -425,7 +425,11 @@ async function handleStream(
 
   const run_id = runIdOf(receipt);
   if (run_id === null) {
-    raw.write('\n[pending: unknown]\n');
+    if (receipt['status'] === 'HUMAN_OWNED') {
+      raw.write('\n[awaiting_human]\n');
+    } else {
+      raw.write('\n[pending: unknown]\n');
+    }
     raw.end();
     return;
   }
