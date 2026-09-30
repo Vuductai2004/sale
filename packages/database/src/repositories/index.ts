@@ -173,5 +173,48 @@ export type {
   TenantRecord,
   TenantWorkspaceRecord,
 } from './p5-provisioning.js';
+export {
+  PlatformDirectoryRepository,
+  withPlatformRole,
+} from './platform-directory.js';
+export type {
+  PlatformDirectoryRepositoryOptions,
+  PlatformTransactionRunner,
+  PlatformTenantRecord,
+  PlatformTenantReadinessRecord,
+  PlatformUsageRecord,
+} from './platform-directory.js';
 export { TenantGovernanceRepository } from './tenant-governance.js';
 export type { TenantGovernanceSettingsRecord } from './tenant-governance.js';
+export {
+  CompanyProjectionRepository,
+  CompanyProjectionsRepository,
+} from './company-projections.js';
+export type {
+  CompanyActivityProjectionSource,
+  CompanyAgentProjectionSource,
+  CompanyApprovalProjectionSource,
+  CompanyConnectorProjectionSource,
+  CompanyHandoffProjectionSource,
+  CompanyOwnerInputProjectionSource,
+  CompanyProjectionSources,
+  CompanyReconciliationProjectionSource,
+  CompanyRunProjectionSource,
+} from './company-projections.js';
+export { CompanyCrmProjectionRepository } from './company-crm-projections.js';
+export type {
+  CampaignListInput,
+  CampaignListPage,
+  CompanyCrmCampaignEngagementRow,
+  CompanyCrmCampaignRow,
+  CompanyCrmConversationRow,
+  CompanyCrmConversationSummaryRow,
+  CompanyCrmCustomerProfileRow,
+  CompanyCrmCustomerRow,
+  CompanyCrmIdentityRow,
+  CompanyCrmOrderRow,
+  CompanyCrmRecommendationRow,
+  CompanyCrmServiceCaseRow,
+  CustomerListInput,
+  CustomerListPage,
+} from './company-crm-projections.js';

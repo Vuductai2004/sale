@@ -191,6 +191,32 @@ async function asAppRole<T>(
     client.release();
   }
 }
+/** Opens a transaction as agentos_app, then explicitly enters the non-inheriting platform role. */
+async function asPlatformRole<T>(
+  pool: Pool,
+  work: (client: PoolClient) => Promise<T>,
+): Promise<T> {
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+    await client.query('SET LOCAL ROLE agentos_app');
+    await client.query('SET LOCAL ROLE agentos_platform');
+    await client.query('SET LOCAL search_path TO agentos, public');
+    const result = await work(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    try {
+      await client.query('ROLLBACK');
+    } catch {
+      // The client may already be unusable; preserve the original failure.
+    }
+    throw error;
+  } finally {
+    client.release();
+  }
+}
 
 /** Tenant ids of fixture rows visible in the current transaction. */
 async function visibleFixtureTenants(client: PoolClient): Promise<string[]> {
@@ -303,6 +329,30 @@ describe.skipIf(!hasDatabaseUrl)('agentos_app RLS rehearsal (real PostgreSQL)', 
       expect(role?.rolsuper).toBe(false);
       expect(role?.rolbypassrls).toBe(false);
     });
+ 
+    it('cannot execute tenant-shell provisioning without the platform role', async () => {
+      const digest = 'a'.repeat(64);
+      const shellFailure = await captureFailure(() =>
+        asAppRole(fixturePool, TENANT_A, (client) =>
+          client.query(
+            'SELECT agentos.provision_tenant_shell($1::char(64), $2::char(64), $3::varchar(128))',
+            [digest, digest, 'RLS rehearsal shell'],
+          ),
+        ),
+      );
+      expectSqlState(shellFailure, '42501');
+
+      const fixedIdFailure = await captureFailure(() =>
+        asAppRole(fixturePool, TENANT_A, (client) =>
+          client.query(
+            'SELECT agentos.provision_tenant_shell_for_id($1::uuid, $2::char(64), $3::char(64), $4::varchar(128))',
+            [TENANT_A, digest, digest, 'RLS rehearsal fixed shell'],
+          ),
+        ),
+      );
+      expectSqlState(fixedIdFailure, '42501');
+    });
+
 
     it('cannot disable row level security on a tenant table', async () => {
       const failure = await captureFailure(() =>
@@ -759,6 +809,46 @@ describe.skipIf(!hasDatabaseUrl)('agentos_app RLS rehearsal (real PostgreSQL)', 
         ),
       );
       expectSqlState(mismatchedCase, '23503');
+    });
+  });
+  describe('platform directory role boundary', () => {
+    const platformCalls: readonly { readonly sql: string; readonly values: unknown[] }[] = [
+      { sql: 'SELECT * FROM agentos.platform_list_tenants()', values: [] },
+      { sql: 'SELECT * FROM agentos.platform_get_tenant($1::uuid)', values: [TENANT_A] },
+      { sql: 'SELECT * FROM agentos.platform_tenant_readiness($1::uuid)', values: [TENANT_A] },
+      {
+        sql: 'SELECT * FROM agentos.platform_usage($1::timestamptz, $2::timestamptz)',
+        values: ['2026-01-01T00:00:00.000Z', '2026-02-01T00:00:00.000Z'],
+      },
+    ];
+
+    it('denies every platform projection to agentos_app without SET ROLE', async () => {
+      for (const call of platformCalls) {
+        const failure = await captureFailure(() =>
+          asAppRole(fixturePool, null, (client) => client.query(call.sql, call.values)),
+        );
+        expectSqlState(failure, '42501');
+      }
+    });
+
+    it('allows the explicit platform role and publishes no customer columns', async () => {
+      const columns = await asPlatformRole(fixturePool, async (client) => {
+        const list = await client.query('SELECT * FROM agentos.platform_list_tenants()');
+        const tenant = await client.query('SELECT * FROM agentos.platform_get_tenant($1::uuid)', [TENANT_A]);
+        const readiness = await client.query('SELECT * FROM agentos.platform_tenant_readiness($1::uuid)', [TENANT_A]);
+        const usage = await client.query(
+          'SELECT * FROM agentos.platform_usage($1::timestamptz, $2::timestamptz)',
+          ['2026-01-01T00:00:00.000Z', '2026-02-01T00:00:00.000Z'],
+        );
+        return [list, tenant, readiness, usage].map((result) => result.fields.map((field) => field.name));
+      });
+
+      for (const resultColumns of columns) {
+        expect(resultColumns).not.toContain('customer_id');
+        expect(resultColumns).not.toContain('primary_email');
+        expect(resultColumns).not.toContain('primary_phone');
+        expect(resultColumns).not.toContain('display_name_customer');
+      }
     });
   });
 });
