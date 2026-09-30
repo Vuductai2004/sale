@@ -12,7 +12,9 @@
     "test:unit": "vitest run"
   },
   "dependencies": {
+    "@agentos/api-contract": "workspace:*",
     "@agentos/ui-foundation": "workspace:*",
+    "lucide-react": "^0.460.0",
     "next": "14.2.15",
     "react": "18.3.1",
     "react-dom": "18.3.1"
