@@ -56,10 +56,13 @@ Tính đến thời điểm hiện tại, remote `phong/feat/demo-live-3agent` (
 | **B-25** | 🟡 Medium | Console Auth / `demo-provider.ts` | Hardcode `DEMO_TENANT_ID` chặn toàn bộ tenant thật đăng nhập | **Nên sửa** |
 | **B-12** | 🟡 Medium | Scripts / `seed.mjs` | Chạy lệnh node trực tiếp trên Windows không tự nạp `.env` | *Đã sửa trên `tai`* |
 | **B-03** | 🟡 Medium | Worker / `read-handlers.ts` | Thiếu chặn trần `discount_percent <= 100`, nguy cơ sinh giá âm | **Nên sửa** |
-| **B-04** | 🟡 Medium | Console / `trace/page.tsx` | Truy cập qua query `?run_id=xxx` không tự động kích hoạt tải trace | **Nên sửa** |
-| **B-05** | 🟡 Medium | Console / `operations/page.tsx` | Đổi qua lại giữa các hội thoại làm mất trạng thái lease của operator | **Nên sửa** |
+| **B-04** | 🟡 Medium | Console / `trace/page.tsx` | Truy cập qua query `?run_id=xxx` không tự động kích hoạt tải trace | *Đã sửa trên `tai`* |
+| **B-05** | 🟡 Medium | Console / `operations/page.tsx` | Đổi qua lại giữa các hội thoại làm mất trạng thái lease của operator | *Đã sửa trên `tai`* |
 | **B-02** | 🟡 Medium | Worker / `types.ts` & `catalog.ts` | Thiếu trường `specs` trong interface sản phẩm | *Đã sửa trên `tai`* |
-| **B-06** | 🟢 Low | Mock ERP / `server.mjs` | Tra cứu khách hàng theo `key` ở chế độ non-demo bị thiếu | Cân nhắc |
+| **B-31** | 🔴 Critical | Worker / `marketing/factory.ts` | Giới hạn instruction 500 ký tự lệch hợp đồng API Gateway (2000 ký tự) làm sập Worker | *Đã sửa trên `tai`* |
+| **B-32** | 🟠 High | Mock ERP / `server.mjs` | Tra cứu khách hàng & lịch sử theo `key` ở chế độ non-demo bị trả 404 | *Đã sửa trên `tai`* |
+| **B-33** | 🟡 Medium | Console / `analytics` & `settings` | Sập 500 khi thiếu biến môi trường `PLATFORM_ADMIN_URL` | *Đã sửa trên `tai`* |
+| **B-06** | 🟢 Low | Mock ERP / `server.mjs` | Tra cứu khách hàng theo `key` ở chế độ non-demo bị thiếu | *Đã xử lý trong B-32* |
 | **B-07** | 🟢 Low | API / `demo-widget.ts` | Catalog projection loại bỏ các sản phẩm không có trường `use_case` | Cân nhắc |
 
 ---
@@ -278,6 +281,30 @@ Tính đến thời điểm hiện tại, remote `phong/feat/demo-live-3agent` (
   2. Trên Storefront UI, `setMessage('')` được gọi ngay trước khi gửi request. Nếu request bị ngắt kết nối mạng hoặc server trả 500, nội dung tin nhắn của khách bị mất trắng.
 - **Giải pháp khắc phục:** Không xuất `[pending: unknown]` khi status là `HUMAN_OWNED`, và khôi phục lại input text khi `fetch` bị lỗi.
 
+#### 26. Bug B-31: Lệch giới hạn độ dài chỉ thị Marketing giữa API Gateway và Worker Runtime gây sập tác vụ
+- **File:** [apps/worker/src/runtime/marketing/factory.ts:L200](file:///d:/New%20folder/apps/worker/src/runtime/marketing/factory.ts#L200), [apps/api/src/routes/v1/campaigns.ts:L29](file:///d:/New%20folder/apps/api/src/routes/v1/campaigns.ts#L29), [apps/tenant-console/src/app/demo/campaigns/page.tsx:L264](file:///d:/New%20folder/apps/tenant-console/src/app/demo/campaigns/page.tsx#L264)
+- **Nguyên nhân gốc rễ:**
+  - Giao diện Tenant Console thiết lập `maxLength={2000}` trên ô nhập chỉ thị chiến dịch tiếp thị.
+  - API Gateway định nghĩa và xác thực theo `MAX_INSTRUCTION_LENGTH = 2000`, chấp thuận các chỉ thị dài đến 2000 ký tự và trả về mã HTTP 202 Accepted.
+  - Tuy nhiên, Marketing Worker trong `factory.ts` dòng 200 lại chặn: `instruction.length > 500` và ném lỗi `MARKETING_CAMPAIGN_INVALID`.
+  - Hậu quả: Khi nhà quản trị tạo chiến dịch có hướng dẫn chi tiết dài từ 501 đến 2000 ký tự, API Gateway trả về thành công nhưng Worker lập tức sập quy trình sinh kế hoạch tiếp thị.
+- **Giải pháp khắc phục:** Cập nhật điều kiện độ dài trong `apps/worker/src/runtime/marketing/factory.ts` thành `instruction.length > 2000` để đồng bộ hoàn toàn với hợp đồng API Gateway và UI, đồng thời bổ sung bộ test kiểm chứng độ dài tới 2000 ký tự.
+
+#### 27. Bug B-32: Mock ERP Customer Lookup & Sales History làm rơi trường generic `key` khi chạy non-demo
+- **File:** [services/mock-erp/src/server.mjs:L458-L525](file:///d:/New%20folder/services/mock-erp/src/server.mjs#L458-L525)
+- **Nguyên nhân gốc rễ:**
+  - Adapter ERP chuẩn (`packages/adapters/src/erp/api-001-erp.ts`) khi đọc resource `customers` và `customer_sales_history` gửi body theo format chuẩn generic `{ key: input.key }`.
+  - Trong Mock ERP server, nhánh fallback khi không có `demoPack` (dùng cho CI hoặc local dev chuẩn) chỉ kiểm tra `if (body.customer_id !== CUSTOMER.customer_id)`.
+  - Do client gửi `key` nên `body.customer_id` bị `undefined`, dẫn đến so sánh luôn sai và trả về mã lỗi HTTP 404 `AUTHORITATIVE_SOURCE_UNAVAILABLE`.
+- **Giải pháp khắc phục:** Trích xuất định danh khách hàng linh hoạt `const customerId = typeof body?.customer_id === 'string' ? body.customer_id : (typeof body?.key === 'string' ? body.key : null);` cho cả 2 endpoint và ràng buộc `tenant_id` theo `scope` chuẩn xác.
+
+#### 28. Bug B-33: Tenant Console `/analytics` và `/settings` gặp lỗi máy chủ 500 khi thiếu cấu hình `PLATFORM_ADMIN_URL`
+- **File:** [apps/tenant-console/src/app/(dashboard)/analytics/page.tsx:L6-L16](file:///d:/New%20folder/apps/tenant-console/src/app/(dashboard)/analytics/page.tsx#L6-L16) & [apps/tenant-console/src/app/(dashboard)/settings/page.tsx:L6-L16](file:///d:/New%20folder/apps/tenant-console/src/app/(dashboard)/settings/page.tsx#L6-L16)
+- **Nguyên nhân gốc rễ:**
+  - Cả hai trang trực tiếp gọi `platformAdminUrl(path)`, ném một unhandled exception: `throw new Error('PLATFORM_ADMIN_URL is required for tenant-console redirects.')` nếu biến môi trường `PLATFORM_ADMIN_URL` chưa được khai báo.
+  - Khi người dùng hoặc người đánh giá chạy ứng dụng ở chế độ local hoặc demo độc lập, việc click vào menu Analytics hoặc Settings sẽ làm sập trang trắng với lỗi 500 Internal Server Error.
+- **Giải pháp khắc phục:** Cập nhật hàm điều hướng để trả về `null` khi thiếu `PLATFORM_ADMIN_URL` và tự động fallback về route nội bộ phù hợp (`/demo/operations`), bảo đảm trải nghiệm mượt mà không crash.
+
 ---
 
 ## IV. LỘ TRÌNH KHUYẾN NGHỊ TRIỂN KHAI SỬA LỖI
@@ -287,12 +314,18 @@ Tính đến thời điểm hiện tại, remote `phong/feat/demo-live-3agent` (
 2. **Sửa Bug B-20:** Cập nhật `storefront/page.tsx` và `care-turn.ts` xử lý êm receipt `HUMAN_OWNED` khi con người tiếp quản hội thoại. *(Đã xong)*
 3. **Sửa Bug B-01, B-03, B-04, B-05:** Vá lỗi FAQ parser, giới hạn trần discount, trace autoload và duy trì map lease theo conversation ID. *(Đã xong)*
 
-### Giai đoạn 2: Vá các lỗi sâu mới phát hiện (B-26 đến B-30)
-1. **Sửa Bug B-26:** Mở rộng nhận diện mã đơn hàng tiếng Việt (`DH-`, `đơn hàng`, `mã đơn`) trong Care Worker runtime.
-2. **Sửa Bug B-27:** Cải tiến heartbeat lease đa hội thoại trong Operations Console.
-3. **Sửa Bug B-28:** Mở khóa nút phê duyệt chiến dịch trong Campaigns Console để kích hoạt fallback nạp detail digest.
-4. **Sửa Bug B-29:** Điều chỉnh logic cờ `discount_allowed` trong `handleCheckPrice` của Sales Worker.
-5. **Sửa Bug B-30:** Chuẩn hóa stream phản hồi cho trạng thái `HUMAN_OWNED` và bảo toàn input text khi gặp lỗi kết nối.
+### Giai đoạn 2: Vá các lỗi sâu mới phát hiện (B-26 đến B-30) (Đã hoàn thành trên nhánh `tai`)
+1. **Sửa Bug B-26:** Mở rộng nhận diện mã đơn hàng tiếng Việt (`DH-`, `đơn hàng`, `mã đơn`) trong Care Worker runtime. *(Đã xong)*
+2. **Sửa Bug B-27:** Cải tiến heartbeat lease đa hội thoại trong Operations Console. *(Đã xong)*
+3. **Sửa Bug B-28:** Mở khóa nút phê duyệt chiến dịch trong Campaigns Console để kích hoạt fallback nạp detail digest. *(Đã xong)*
+4. **Sửa Bug B-29:** Điều chỉnh logic cờ `discount_allowed` trong `handleCheckPrice` của Sales Worker. *(Đã xong)*
+5. **Sửa Bug B-30:** Chuẩn hóa stream phản hồi cho trạng thái `HUMAN_OWNED` và bảo toàn input text khi gặp lỗi kết nối. *(Đã xong)*
+
+### Giai đoạn 3: Vá các lỗi hợp đồng & hệ sinh thái Mock/Console (B-31 đến B-33) (Đã hoàn thành trên nhánh `tai`)
+1. **Sửa Bug B-31:** Đồng bộ độ dài chỉ thị chiến dịch 2000 ký tự trong Marketing Worker runtime (`factory.ts`), bổ sung unit test. *(Đã xong)*
+2. **Sửa Bug B-32:** Hỗ trợ generic `key` cho Customer Lookup & Sales History trong Mock ERP (`server.mjs`), bổ sung unit test. *(Đã xong)*
+3. **Sửa Bug B-33:** Thêm fallback êm cho `/analytics` và `/settings` khi không có `PLATFORM_ADMIN_URL`, chống sập 500. *(Đã xong)*
 
 ---
 *Báo cáo được lưu trữ và cập nhật trực tiếp tại: `docs/demo/BUG_AUDIT_REPORT.md`.*
+

@@ -481,3 +481,23 @@ test('orders status returns documented order DTO or indistinguishable 404 for un
     server.close();
   }
 });
+
+test('customer lookup and sales history resolve key parameter without demoPack', async () => {
+  const server = await start();
+  try {
+    const lookupByKey = await post(server, '/api/v1/customers/lookup', {
+      key: 'cust-local-1',
+    });
+    assert.equal(lookupByKey.status, 200);
+    assert.equal(lookupByKey.body.customer_id, 'cust-local-1');
+
+    const historyByKey = await post(server, '/api/v1/customers/sales-history', {
+      key: 'cust-local-1',
+    });
+    assert.equal(historyByKey.status, 200);
+    assert.equal(historyByKey.body.customer_id, 'cust-local-1');
+  } finally {
+    server.close();
+  }
+});
+
