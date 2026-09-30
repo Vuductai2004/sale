@@ -6,6 +6,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { ApiError } from '@agentos/ui-foundation';
+import { can, type AuthSession } from '@agentos/ui-foundation/auth';
 import { tenantConsoleClient } from '../../lib/tenant-console-client';
 import type {
   ApprovalItem,
@@ -23,27 +24,33 @@ interface ApprovalCenterProps {
 export function ApprovalCenter({ onSelectCustomer }: ApprovalCenterProps) {
   const [items, setItems] = useState<Record<string, ApprovalItem>>({});
   const [selectedItemId, setSelectedItemId] = useState<string | null>(null);
+  const [session, setSession] = useState<AuthSession | null>(null);
   const [operatorId, setOperatorId] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [queueError, setQueueError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
-    void tenantConsoleClient.getDemoSession()
-      .then((session) => {
+    void tenantConsoleClient.getAuthSession()
+      .then((currentSession) => {
         if (!active) return;
-        const validRole = session.role === 'marketing_approver';
-        const validOperator = typeof session.operator_id === 'string' && session.operator_id.trim().length > 0;
-        if (!validRole || !validOperator) {
-          setQueueError('permission_denied: the current session is not a marketing approver.');
+        setSession(currentSession);
+        if (!can(currentSession, 'approval:read')) {
+          setQueueError('permission_denied: the current session cannot read approvals.');
           setOperatorId('');
           return;
         }
-        setOperatorId(session.operator_id as string);
+        if (!currentSession.identity.user_id.trim()) {
+          setQueueError('permission_denied: authenticated identity is unavailable.');
+          setOperatorId('');
+          return;
+        }
+        setOperatorId(currentSession.identity.user_id);
       })
       .catch(() => {
         if (!active) return;
-        setQueueError('permission_denied: sign in with an authorized marketing approver session.');
+        setSession(null);
+        setQueueError('permission_denied: sign in with an authorized session.');
         setOperatorId('');
       });
     return () => { active = false; };
@@ -194,8 +201,8 @@ export function ApprovalCenter({ onSelectCustomer }: ApprovalCenterProps) {
       expectedPayloadSha256: string,
       modifiedPayload?: Record<string, unknown>
     ): Promise<ApprovalDecisionResponse> => {
-      if (!operatorId || !operatorId.trim()) {
-        throw new Error('permission_denied: Cannot submit decision without verified operator identity.');
+      if (!operatorId || !operatorId.trim() || !can(session, 'approval:decide')) {
+        throw new Error('permission_denied: this session cannot submit approval decisions.');
       }
 
       const requestBody = {
@@ -235,7 +242,7 @@ export function ApprovalCenter({ onSelectCustomer }: ApprovalCenterProps) {
 
       return responseReceipt;
     },
-    [operatorId]
+[operatorId, session]
   );
 
   const itemList = Object.values(items);

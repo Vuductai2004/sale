@@ -1,7 +1,7 @@
 'use client';
 
+import { can, type AuthSession } from '@agentos/ui-foundation/auth';
 import { useCallback, useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
-
 
 type ProviderModel = {
   readonly model?: unknown;
@@ -82,13 +82,18 @@ function formatDate(value: unknown): string {
 
 function errorMessage(status: number, payload: unknown): string {
   const code = typeof payload === 'object' && payload !== null && 'error' in payload
-    ? stringValue((payload as { error?: unknown }).error)
+    ? stringValue(payload.error)
     : '';
   if (status === 404 && code === 'NOT_FOUND') return 'Demo mode is not available in this environment.';
   if (status === 401 || code === 'UNAUTHENTICATED') return 'Sign in as a platform administrator to view demo readiness.';
   if (status === 403 || code === 'FORBIDDEN' || code === 'PERMISSION_DENIED') return 'Your platform administrator session cannot view this readiness data.';
   if (status >= 500) return 'The demo readiness service is unavailable. Try again later.';
   return 'Readiness data could not be loaded.';
+}
+
+function isPlatformAuthSession(value: unknown): value is AuthSession {
+  if (typeof value !== 'object' || value === null || Array.isArray(value) || !('permissions' in value) || !Array.isArray(value.permissions)) return false;
+  return can(value as AuthSession, 'platform:admin');
 }
 
 async function readJson(response: Response): Promise<unknown> {
@@ -140,7 +145,7 @@ export function ReadinessConsole() {
     setLoading(true);
     setMessage(null);
     try {
-      const session = await getJson('/api/demo/session');
+      const session = await getJson('/api/auth/session');
       if (!session.response.ok) {
         setSessionState(
           session.response.status === 404
@@ -154,13 +159,7 @@ export function ReadinessConsole() {
         setMessage(errorMessage(session.response.status, session.payload));
         return;
       }
-      const sessionPayload = session.payload;
-      if (
-        sessionPayload === null
-        || typeof sessionPayload !== 'object'
-        || !('role' in sessionPayload)
-        || sessionPayload.role !== 'platform_admin'
-      ) {
+      if (!isPlatformAuthSession(session.payload)) {
         setSessionState('permission');
         setMessage('Your session is not authorized for platform readiness.');
         return;
@@ -220,12 +219,12 @@ export function ReadinessConsole() {
 
   const logout = async () => {
     setMessage(null);
-    const csrf = typeof document === 'undefined' ? null : document.cookie.split(';').map((part) => part.trim()).find((part) => part.startsWith('agentos_platform_csrf='))?.slice('agentos_platform_csrf='.length) ?? null;
+    const csrf = typeof document === 'undefined' ? '' : document.cookie.split(';').map((part) => part.trim()).find((part) => part.startsWith('agentos_platform_csrf='))?.slice('agentos_platform_csrf='.length) ?? '';
     try {
-      await fetch('/api/demo/logout', {
+      await fetch('/api/auth/sign-out', {
         method: 'POST',
         credentials: 'same-origin',
-        headers: csrf ? { 'x-csrf-token': decodeURIComponent(csrf) } : {},
+        headers: { Accept: 'application/json', 'x-csrf-token': csrf ? decodeURIComponent(csrf) : '' },
       });
     } finally {
       window.location.assign('/sign-in');

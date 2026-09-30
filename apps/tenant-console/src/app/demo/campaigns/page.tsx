@@ -3,9 +3,9 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
+import { can, type AuthSession } from '@agentos/ui-foundation/auth';
+import { AuthRequestError, tenantConsoleClient } from '../../../lib/tenant-console-client';
 import { DemoBadge } from '../../../components/ui/Primitives';
-type Role = 'tenant_operator' | 'marketing_approver';
-type Session = { readonly role?: Role; readonly operator_id?: string };
 type Approval = {
   readonly approval_id: string;
   readonly run_id: string;
@@ -18,15 +18,6 @@ type Approval = {
   readonly created_at?: string;
 };
 type ApiResult = Record<string, unknown>;
-function normalizeSession(payload: ApiResult): Session | null {
-  const role = payload.role;
-  if (role !== 'tenant_operator' && role !== 'marketing_approver') return null;
-  const operatorId = payload.operator_id;
-  return typeof operatorId === 'string' && operatorId.length > 0
-    ? { role, operator_id: operatorId }
-    : { role };
-}
-
 function readCsrf(): string | undefined {
   const entry = document.cookie.split(';').map((part) => part.trim()).find((part) => part.startsWith('agentos_tenant_csrf='));
   if (!entry) return undefined;
@@ -88,7 +79,7 @@ function approvalStatusLabel(status: unknown, paused = false): string {
 
 export default function CampaignsPage() {
   const router = useRouter();
-  const [session, setSession] = useState<Session | null>(null);
+  const [session, setSession] = useState<AuthSession | null>(null);
   const [instruction, setInstruction] = useState('Create a reactivation campaign for customers who have not purchased in 90 days.');
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -138,25 +129,17 @@ export default function CampaignsPage() {
       setIsLoading(true);
       setError(null);
       try {
-        const { response, payload } = await apiFetch('/api/demo/session');
-        if (response.status === 401) {
+        const current = await tenantConsoleClient.getAuthSession();
+        if (cancelled) return;
+        setSession(current);
+        if (can(current, 'approval:read')) await loadApprovals();
+      } catch (reason: unknown) {
+        if (cancelled) return;
+        if (reason instanceof AuthRequestError && reason.status === 401) {
           router.replace('/sign-in');
           return;
         }
-        if (!response.ok) {
-          setError(describeError(payload, 'Unable to read the operator session.'));
-          return;
-        }
-        if (cancelled) return;
-        const current = normalizeSession(payload);
-        if (!current) {
-          setError('The session response was invalid; sign in again.');
-          return;
-        }
-        setSession(current);
-        if (current.role === 'marketing_approver') await loadApprovals();
-      } catch {
-        if (!cancelled) setError('Unable to reach the API. Confirm the local demo services are running.');
+        setError('Unable to read the authenticated session.');
       } finally {
         if (!cancelled) setIsLoading(false);
       }
@@ -210,6 +193,10 @@ export default function CampaignsPage() {
     approval: Approval,
     decision: 'APPROVE' | 'REJECT' | 'PAUSE' | 'CANCEL',
   ) {
+    if (!can(session, 'approval:decide')) {
+      setError('permission_denied: this session cannot submit approval decisions.');
+      return;
+    }
     if (!approval.payload_sha256) {
       setError('The approval payload digest is unavailable; decision refused until the authoritative detail is loaded.');
       return;
@@ -255,7 +242,7 @@ export default function CampaignsPage() {
 
   async function handleLogout() {
     try {
-      await apiFetch('/api/demo/logout', { method: 'POST', body: '{}' });
+      await tenantConsoleClient.signOut();
     } finally {
       router.replace('/sign-in');
     }
@@ -265,14 +252,14 @@ export default function CampaignsPage() {
     <div className="min-h-full px-4 py-6 text-slate-100 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-6xl">
         <header className="flex flex-col gap-4 border-b border-slate-800 pb-5 sm:flex-row sm:items-end sm:justify-between">
-          <div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand">NovaMart marketing</p><div className="mt-2 flex flex-wrap items-center gap-2"><h1 className="text-2xl font-semibold tracking-tight text-ink">Campaign drafts & approvals</h1><DemoBadge /></div><p className="mt-1 text-sm text-muted">Demo drafts stop at human approval; no synthetic send status is shown.</p></div>
+          <div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand">Marketing workspace</p><div className="mt-2 flex flex-wrap items-center gap-2"><h1 className="text-2xl font-semibold tracking-tight text-ink">Campaign drafts & approvals</h1><DemoBadge /></div><p className="mt-1 text-sm text-muted">Demo drafts stop at human approval; no synthetic send status is shown.</p></div>
           <div className="flex flex-wrap gap-2"><a href="/" className="ui-button ui-button--secondary">Company overview</a><a href="/takeover" className="ui-button ui-button--secondary">Customer care</a><button type="button" onClick={() => void handleLogout()} className="ui-button ui-button--quiet">Sign out</button></div>
         </header>
 
         {error && <div role="alert" className="mt-5 rounded-lg border border-rose-800/80 bg-rose-950/40 p-3 text-sm text-rose-200">{error}</div>}
         {notice && <div role="status" className="mt-5 rounded-lg border border-emerald-800/80 bg-emerald-950/30 p-3 text-sm text-emerald-200">{notice}</div>}
 
-        {isLoading ? <div className="mt-8 space-y-3" aria-busy="true" aria-label="Loading campaign workspace"><div className="h-28 animate-pulse rounded-xl bg-slate-900" /><div className="h-48 animate-pulse rounded-xl bg-slate-900" /></div> : session?.role === 'tenant_operator' ? (
+        {isLoading ? <div className="mt-8 space-y-3" aria-busy="true" aria-label="Loading campaign workspace"><div className="h-28 animate-pulse rounded-xl bg-slate-900" /><div className="h-48 animate-pulse rounded-xl bg-slate-900" /></div> : (<>{can(session, 'campaign:draft') && (
           <section className="mt-8 max-w-2xl rounded-xl border border-slate-800 bg-slate-900/60 p-5 sm:p-6" aria-labelledby="draft-heading">
             <div className="mb-5"><h2 id="draft-heading" className="text-base font-semibold">Create a campaign draft</h2><p className="mt-1 text-sm text-slate-400">The tenant operator can request a bounded reactivation draft. The API owns segmentation, consent, content, and approval evidence.</p></div>
             <form onSubmit={handleDraft} className="space-y-5">
@@ -281,12 +268,15 @@ export default function CampaignsPage() {
               <div className="flex justify-end"><button type="submit" disabled={isSubmitting || !instruction.trim()} className="rounded-lg bg-sky-600 px-4 py-2.5 text-sm font-semibold hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-50">{isSubmitting ? 'Submitting…' : 'Create draft'}</button></div>
             </form>
           </section>
-        ) : session?.role === 'marketing_approver' ? (
+        )}
+        {can(session, 'approval:read') && (
           <section className="mt-8" aria-labelledby="approval-heading">
             <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><h2 id="approval-heading" className="text-base font-semibold">Pending approvals</h2><p className="mt-1 text-sm text-slate-400">Review the exact payload digest before queuing a decision.</p></div><button type="button" onClick={() => void loadApprovals()} className="self-start rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:border-slate-500 hover:text-white sm:self-auto">Refresh</button></div>
             {approvals.length === 0 ? <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-8 text-center"><p className="text-sm font-semibold">No pending approval</p><p className="mt-1 text-sm text-slate-400">The queue is empty; no campaign decision is fabricated.</p></div> : <div className="grid gap-4">{approvals.map((approval) => <article key={approval.approval_id} className="rounded-xl border border-amber-800/70 bg-slate-900/60 p-5"><div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between"><div><p className="text-xs font-mono uppercase tracking-wider text-amber-300">{approvalStatusLabel(approval.status, approval.is_paused)}</p><h3 className="mt-1 text-base font-semibold">{approval.title || 'Marketing campaign approval'}</h3><p className="mt-1 text-sm text-slate-400">{approval.reason || 'AUTH-4 approval is required before dispatch.'}</p></div><span className="rounded-full border border-amber-700/80 bg-amber-950/40 px-2.5 py-1 text-xs font-semibold text-amber-200">{approvalStatusLabel(approval.status, approval.is_paused).toLowerCase().replaceAll('_', ' ')}</span></div><dl className="mt-4 grid gap-3 text-xs sm:grid-cols-2"><div><dt className="text-slate-500">Approval ID</dt><dd className="mt-1 break-all font-mono text-slate-300">{approval.approval_id}</dd></div><div><dt className="text-slate-500">Run ID</dt><dd className="mt-1 break-all font-mono text-slate-300">{approval.run_id || 'Unavailable'}</dd></div><div className="sm:col-span-2"><dt className="text-slate-500">Reviewed payload SHA-256</dt><dd className="mt-1 break-all font-mono text-slate-300">{approval.payload_sha256 || 'Unavailable'}</dd></div></dl>{approval.payload && <pre className="mt-4 max-h-48 overflow-auto rounded-lg border border-slate-800 bg-slate-950 p-3 text-xs text-slate-400">{JSON.stringify(approval.payload, null, 2)}</pre>}<div className="mt-5 flex flex-wrap gap-2"><button type="button" onClick={() => void handleDecision(approval, 'APPROVE')} disabled={approvalBusy === approval.approval_id || !approval.payload_sha256} className="rounded-lg bg-emerald-700 px-3 py-2 text-xs font-semibold hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50">{approvalBusy === approval.approval_id ? 'Queuing…' : 'Approve'}</button><button type="button" onClick={() => void handleDecision(approval, 'REJECT')} disabled={approvalBusy === approval.approval_id || !approval.payload_sha256} className="rounded-lg border border-rose-700 px-3 py-2 text-xs font-semibold text-rose-200 hover:bg-rose-950/40 disabled:cursor-not-allowed disabled:opacity-50">Reject</button><button type="button" onClick={() => void handleDecision(approval, 'PAUSE')} disabled={approvalBusy === approval.approval_id || !approval.payload_sha256} className="rounded-lg border border-amber-700 px-3 py-2 text-xs font-semibold text-amber-200 hover:bg-amber-950/40 disabled:cursor-not-allowed disabled:opacity-50">Pause</button><button type="button" onClick={() => void handleDecision(approval, 'CANCEL')} disabled={approvalBusy === approval.approval_id || !approval.payload_sha256} className="rounded-lg border border-slate-600 px-3 py-2 text-xs font-semibold text-slate-300 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50">Cancel</button></div></article>)}</div>}
           </section>
-        ) : <section role="alert" className="mt-8 rounded-xl border border-rose-800/80 bg-rose-950/30 p-6"><p className="font-mono text-xs text-rose-300">permission_denied</p><h2 className="mt-2 text-lg font-semibold">No campaign role is available</h2><p className="mt-1 text-sm text-slate-300">Sign in with a tenant operator or marketing approver session.</p></section>}
+        )}
+        {!can(session, 'campaign:draft') && !can(session, 'approval:read') && <section role="alert" className="mt-8 rounded-xl border border-rose-800/80 bg-rose-950/30 p-6"><p className="font-mono text-xs text-rose-300">permission_denied</p><h2 className="mt-2 text-lg font-semibold">Campaign workspace unavailable</h2><p className="mt-1 text-sm text-slate-300">Your session does not have campaign drafting or approval permissions.</p></section>}
+        </>)}
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ApiErrorEnvelope } from '@agentos/ui-foundation';
-import { TenantConsoleClient } from './tenant-console-client';
+import { AuthRequestError, TenantConsoleClient } from './tenant-console-client';
 import type {
   ApprovalDecisionRequest, ApprovalDecisionResponse, ApprovalDetailResponse,
   ConversationResumeRequest, ConversationTakeoverHeartbeatRequest, ConversationTakeoverRequest,
@@ -41,6 +41,60 @@ function createFetchSpy(mockResponse: Response) {
     getBodyJson: <T = unknown>() => (capturedInit?.body ? (JSON.parse(capturedInit.body as string) as T) : undefined),
   };
 }
+describe('Browser authentication contracts', () => {
+  const authSession = {
+    identity: { user_id: 'user-1', email: 'admin@example.test', display_name: 'Company Admin' },
+    membership: { tenant_id: 'tenant-1', tenant_name: 'Tenant', role: 'member', scope: 'company' as const },
+    permissions: ['campaign:draft', 'approval:read', 'approval:decide'] as const,
+    expires_at: '2030-01-01T00:00:00.000Z',
+  };
+  it('bootstraps CSRF then signs in with email and password', async () => {
+
+    const calls: Array<{ readonly url: string; readonly init: RequestInit | undefined }> = [];
+    const fetchImpl: typeof fetch = async (input, init) => {
+      calls.push({ url: typeof input === 'string' ? input : input.toString(), init });
+      return createMockJsonResponse(authSession);
+    };
+    const client = new TenantConsoleClient({ fetch: fetchImpl });
+
+    await client.signIn('admin@example.test', 'secret');
+
+    expect(calls.map((call) => call.url)).toEqual(['/api/auth/session', '/api/auth/sign-in']);
+    expect(calls[1]?.init?.method).toBe('POST');
+    expect(JSON.parse(calls[1]?.init?.body as string)).toEqual({ email: 'admin@example.test', password: 'secret' });
+  });
+
+  it('reads AuthSession from GET /api/auth/session', async () => {
+    const spy = createFetchSpy(createMockJsonResponse(authSession));
+    const client = new TenantConsoleClient({ fetch: spy.mockFetch });
+
+    await expect(client.getAuthSession()).resolves.toEqual(authSession);
+    expect(spy.getLastUrl()).toBe('/api/auth/session');
+    expect(spy.getLastInit()?.method).toBe('GET');
+  });
+
+  it('signs out through the JSON auth endpoint', async () => {
+    const calls: string[] = [];
+    const fetchImpl: typeof fetch = async (input) => {
+      calls.push(typeof input === 'string' ? input : input.toString());
+      return createMockJsonResponse({ ok: true });
+    };
+    const client = new TenantConsoleClient({ fetch: fetchImpl });
+
+    await client.signOut();
+
+    expect(calls).toEqual(['/api/auth/session', '/api/auth/sign-out']);
+  });
+
+  it('preserves authentication status for rate-limit handling', async () => {
+    const client = new TenantConsoleClient({
+      fetch: async () => createMockJsonResponse({ error: 'TOO_MANY_ATTEMPTS' }, 429),
+    });
+
+    await expect(client.signIn('admin@example.test', 'secret')).rejects.toBeInstanceOf(AuthRequestError);
+    await expect(client.signIn('admin@example.test', 'secret')).rejects.toMatchObject({ status: 429 });
+  });
+});
 
 describe('R14 Approval Contracts', () => {
   it('calls GET /api/v1/approvals with default status=PENDING', async () => {

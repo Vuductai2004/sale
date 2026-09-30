@@ -3,11 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
+import { can, type AuthSession } from '@agentos/ui-foundation/auth';
+import { AuthRequestError, tenantConsoleClient } from '../../../lib/tenant-console-client';
 import { Customer360Timeline } from '../../../components/customer/Customer360Timeline';
 import { DemoBadge } from '../../../components/ui/Primitives';
-
-type DemoRole = 'tenant_operator' | 'marketing_approver';
-type Session = { readonly role: DemoRole; readonly operator_id?: string };
 type Conversation = {
   readonly conversation_id: string;
   readonly customer_id: string | null;
@@ -27,14 +26,6 @@ type Message = {
 type Lease = { readonly lease_expires_at: string; readonly operator_id: string };
 
 type ApiResult = Record<string, unknown>;
-function normalizeSession(payload: ApiResult): Session | null {
-  const role = payload.role;
-  if (role !== 'tenant_operator' && role !== 'marketing_approver') return null;
-  const operatorId = payload.operator_id;
-  return typeof operatorId === 'string' && operatorId.length > 0
-    ? { role, operator_id: operatorId }
-    : { role };
-}
 
 function csrfToken(): string | undefined {
   const entry = document.cookie.split(';').map((part) => part.trim()).find((part) => part.startsWith('agentos_tenant_csrf='));
@@ -83,7 +74,7 @@ function formatTime(value: string): string {
 
 export default function OperationsPage() {
   const router = useRouter();
-  const [session, setSession] = useState<Session | null>(null);
+  const [session, setSession] = useState<AuthSession | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedId, setSelectedId] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
@@ -105,23 +96,10 @@ export default function OperationsPage() {
     setIsLoading(true);
     setError(null);
     try {
-      const { response, payload } = await demoFetch('/api/demo/session');
-      if (response.status === 401) {
-        router.replace('/sign-in');
-        return;
-      }
-      if (!response.ok) {
-        setError(apiError(payload, 'Unable to read the operator session.'));
-        return;
-      }
-      const currentSession = normalizeSession(payload);
-      if (!currentSession) {
-        setError('The session response was invalid; sign in again.');
-        return;
-      }
+      const currentSession = await tenantConsoleClient.getAuthSession();
       setSession(currentSession);
-      if (currentSession.role !== 'tenant_operator') {
-        setError('permission_denied: tenant operator access is required for Conversations.');
+      if (!can(currentSession, 'conversation:takeover')) {
+        setError('permission_denied: this session cannot manage conversations.');
         return;
       }
 
@@ -142,7 +120,11 @@ export default function OperationsPage() {
       });
       setConversations(normalized);
       setSelectedId((current) => (normalized.some((item) => item.conversation_id === current) ? current : normalized[0]?.conversation_id ?? ''));
-    } catch {
+    } catch (reason: unknown) {
+      if (reason instanceof AuthRequestError && reason.status === 401) {
+        router.replace('/sign-in');
+        return;
+      }
       setError('Unable to reach the API. Confirm the local demo services are running.');
     } finally {
       setIsLoading(false);
@@ -286,19 +268,19 @@ export default function OperationsPage() {
 
   async function handleLogout() {
     try {
-      await demoFetch('/api/demo/logout', { method: 'POST', body: '{}' });
+      await tenantConsoleClient.signOut();
     } finally {
       router.replace('/sign-in');
     }
   }
 
-  if (session?.role && session.role !== 'tenant_operator') {
+  if (session && !can(session, 'conversation:takeover')) {
     return (
       <div className="min-h-full px-4 py-10 text-slate-100 sm:px-6 lg:px-8">
         <section className="mx-auto max-w-xl rounded-xl border border-rose-800/80 bg-rose-950/30 p-6" role="alert">
           <p className="text-xs font-mono uppercase tracking-wider text-rose-300">403 · permission_denied</p>
-          <h1 className="mt-2 text-xl font-semibold">Tenant operator access required</h1>
-          <p className="mt-2 text-sm text-slate-300">Sign in with the tenant operator role to manage conversations and takeover leases.</p>
+          <h1 className="mt-2 text-xl font-semibold">Conversation access required</h1>
+          <p className="mt-2 text-sm text-slate-300">Your session cannot manage conversations and takeover leases.</p>
           <button type="button" onClick={() => void handleLogout()} className="mt-5 rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold hover:bg-slate-700">Sign out</button>
         </section>
       </div>
@@ -310,7 +292,7 @@ export default function OperationsPage() {
       <div className="mx-auto max-w-7xl">
         <header className="flex flex-col gap-4 border-b border-slate-800 pb-5 sm:flex-row sm:items-end sm:justify-between">
           <div>
-            <div className="flex flex-wrap items-center gap-2"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-400">NovaMart operations</p><DemoBadge /></div>
+            <div className="flex flex-wrap items-center gap-2"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-400">Operations workspace</p><DemoBadge /></div>
             <h1 className="mt-1 text-2xl font-semibold tracking-tight">Conversation operations</h1>
             <p className="mt-1 text-sm text-slate-400">Tenant-scoped history, human takeover, and Customer 360 evidence.</p>
           </div>

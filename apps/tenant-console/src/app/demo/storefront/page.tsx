@@ -56,7 +56,8 @@ type ChatEntry =
     };
 
 type SessionResponse = {
-  readonly role?: string;
+  readonly identity?: { readonly user_id?: string; readonly email?: string; readonly display_name?: string };
+  readonly membership?: { readonly tenant_id?: string; readonly scope?: string };
   readonly permissions?: readonly string[];
 };
 
@@ -312,7 +313,7 @@ export default function StorefrontDemoPage() {
 
     let sessionResponse: Response;
     try {
-      sessionResponse = await fetch('/api/demo/session', { credentials: 'same-origin', headers: { Accept: 'application/json' } });
+      sessionResponse = await fetch('/api/auth/session', { credentials: 'same-origin', headers: { Accept: 'application/json' } });
     } catch {
       setSessionState('error');
       setSessionError('The demo session service is unavailable.');
@@ -526,7 +527,7 @@ export default function StorefrontDemoPage() {
       <div className="mx-auto max-w-7xl space-y-6">
         <header className="flex flex-col gap-5 border-b border-slate-800 pb-6 lg:flex-row lg:items-end lg:justify-between">
           <div>
-            <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-brand">NovaMart / Demo Storefront</p>
+            <p className="font-mono text-[11px] uppercase tracking-[0.25em] text-brand">Demo Storefront</p>
             <div className="mt-2 flex flex-wrap items-center gap-3"><h1 id="storefront-title" className="text-2xl font-semibold tracking-tight text-ink sm:text-3xl">Shop with an evidenced assistant</h1><DemoBadge /></div>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-muted">Browse the tenant-scoped catalog, then ask about products, returns, or an order. Replies appear only after the gateway task reaches a recorded state.</p>
           </div>
@@ -536,7 +537,7 @@ export default function StorefrontDemoPage() {
           </div>
         </header>
 
-        {sessionState === 'loading' && <StatePanel title="Checking operator session" detail="The storefront requires a tenant operator session before it can load demo data." loading />}
+        {sessionState === 'loading' && <StatePanel title="Checking authenticated session" detail="The storefront requires an authenticated session before it can load demo data." loading />}
         {sessionState === 'unauthenticated' && (
           <StatePanel title="Sign in to open the demo storefront" detail="Catalog and widget-session minting are operator-gated. The browser will receive only a scoped widget credential after launch." action={<Link className="inline-flex rounded-md bg-sky-500 px-4 py-2 text-sm font-medium text-slate-950 hover:bg-sky-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300" href={SIGN_IN_HREF}>Sign in</Link>} />
         )}
@@ -590,7 +591,7 @@ export default function StorefrontDemoPage() {
             <section aria-labelledby="chat-heading" className="flex min-h-[560px] min-w-0 flex-col rounded-xl border border-slate-800 bg-slate-900/70 p-4 sm:p-6">
               <div className="border-b border-slate-800 pb-4">
                 <div className="flex items-start justify-between gap-4">
-                  <div><h2 id="chat-heading" className="text-lg font-semibold text-slate-100">NovaMart assistant</h2><p className="mt-1 text-xs text-slate-500">One scoped session for product advice and Care questions.</p></div>
+                  <div><h2 id="chat-heading" className="text-lg font-semibold text-slate-100">Storefront assistant</h2><p className="mt-1 text-xs text-slate-500">One scoped session for product advice and Care questions.</p></div>
                   <span className={`rounded-full border px-2 py-1 font-mono text-[10px] ${widgetState === 'ready' ? 'border-emerald-800 bg-emerald-950/40 text-emerald-300' : 'border-slate-700 bg-slate-950 text-slate-500'}`}>{widgetState === 'ready' ? 'WIDGET READY' : 'NOT CONNECTED'}</span>
                 </div>
                 <div className="mt-4 grid grid-cols-1 gap-2 sm:grid-cols-3" role="group" aria-label="Simulated shopper persona">
@@ -609,7 +610,7 @@ export default function StorefrontDemoPage() {
                   </div>
                 ) : (
                   <div key={entry.id} className="mr-4 rounded-lg rounded-bl-sm border border-slate-800 bg-slate-950/80 px-3 py-3">
-                    <p className="mb-2 text-[10px] font-mono uppercase tracking-wider text-slate-500">NovaMart assistant</p>
+                    <p className="mb-2 text-[10px] font-mono uppercase tracking-wider text-slate-500">Storefront assistant</p>
                     {entry.status === 'accepted' && <p className="text-xs text-slate-400" role="status">{statusLabel(entry.status)}. {entry.taskId ? `Task ${entry.taskId} is waiting for execution…` : 'Waiting for a task receipt…'}</p>}
                     {entry.status === 'queued' && <p className="text-xs text-slate-400" role="status">{statusLabel(entry.status)}. Waiting for worker execution…</p>}
                     {entry.status === 'running' && <p className="text-xs text-slate-400" role="status">{statusLabel(entry.status)}. The task is being processed…</p>}
@@ -631,7 +632,7 @@ export default function StorefrontDemoPage() {
 
               <form onSubmit={sendMessage} className="border-t border-slate-800 pt-4">
                 {sendError && <p role="alert" className="mb-3 text-xs leading-5 text-rose-300">{sendError}</p>}
-                <label htmlFor="storefront-message" className="sr-only">Message NovaMart assistant</label>
+                <label htmlFor="storefront-message" className="sr-only">Message storefront assistant</label>
                 <div className="flex items-end gap-2"><textarea ref={inputRef} id="storefront-message" value={message} onChange={(event) => setMessage(event.target.value)} disabled={widgetState !== 'ready' || Boolean(activeTaskId)} rows={2} maxLength={2000} placeholder={widgetState === 'ready' ? 'Ask about products, orders, or support…' : 'Open a scoped chat session first'} className="min-w-0 flex-1 resize-none rounded-md border border-slate-700 bg-slate-950 px-3 py-2 text-sm leading-5 text-slate-100 placeholder:text-slate-600 focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/30 disabled:cursor-not-allowed disabled:opacity-60" /><button type="submit" disabled={widgetState !== 'ready' || !message.trim() || Boolean(activeTaskId)} className="rounded-md bg-sky-500 px-3 py-2 text-sm font-medium text-slate-950 hover:bg-sky-400 disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-300">Send</button></div>
                 <p className="mt-2 text-[10px] text-slate-600">Enter sends. Answers and citations are read from the task status; this UI never creates a fallback reply.</p>
               </form>

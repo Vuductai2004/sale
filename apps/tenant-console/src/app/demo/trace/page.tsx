@@ -3,9 +3,8 @@
 import { Suspense, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-
-type DemoRole = 'tenant_operator' | 'marketing_approver';
-type Session = { readonly role: DemoRole; readonly operator_id?: string };
+import { can, type AuthSession } from '@agentos/ui-foundation/auth';
+import { AuthRequestError, tenantConsoleClient } from '../../../lib/tenant-console-client';
 type RunState = {
   readonly task_id?: string;
   readonly task_version?: number;
@@ -24,14 +23,6 @@ type Trace = {
   readonly observed_counts?: { readonly stage_events?: number; readonly provider_calls?: number };
 };
 type ApiResult = Record<string, unknown>;
-function normalizeSession(payload: ApiResult): Session | null {
-  const role = payload.role;
-  if (role !== 'tenant_operator' && role !== 'marketing_approver') return null;
-  const operatorId = payload.operator_id;
-  return typeof operatorId === 'string' && operatorId.length > 0
-    ? { role, operator_id: operatorId }
-    : { role };
-}
 
 function readCsrf(): string | undefined {
   const entry = document.cookie.split(';').map((part) => part.trim()).find((part) => part.startsWith('agentos_tenant_csrf='));
@@ -119,7 +110,7 @@ function TraceConsole() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [runId, setRunId] = useState(searchParams.get('run_id') || searchParams.get('runId') || '');
-  const [session, setSession] = useState<Session | null>(null);
+  const [session, setSession] = useState<AuthSession | null>(null);
   const [run, setRun] = useState<RunState | null>(null);
   const [trace, setTrace] = useState<Trace | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -128,25 +119,23 @@ function TraceConsole() {
 
   useEffect(() => {
     let cancelled = false;
-    void (async () => {
-      try {
-        const { response, payload } = await apiFetch('/api/demo/session');
-        if (response.status === 401) {
+    void tenantConsoleClient.getAuthSession()
+      .then((current) => {
+        if (cancelled) return;
+        setSession(current);
+        if (!can(current, 'run:read')) setError('permission_denied: this session cannot read run traces.');
+      })
+      .catch((reason: unknown) => {
+        if (cancelled) return;
+        if (reason instanceof AuthRequestError && reason.status === 401) {
           router.replace('/sign-in');
           return;
         }
-        if (!cancelled && response.ok) {
-          const current = normalizeSession(payload);
-          if (current) setSession(current);
-          else setError('The session response was invalid; sign in again.');
-        }
-        if (!cancelled && !response.ok) setError(errorText(payload, 'Unable to read the operator session.'));
-      } catch {
-        if (!cancelled) setError('Unable to reach the demo session service.');
-      } finally {
+        setError('Unable to read the authenticated session.');
+      })
+      .finally(() => {
         if (!cancelled) setIsSessionLoading(false);
-      }
-    })();
+      });
     return () => {
       cancelled = true;
     };
@@ -198,7 +187,7 @@ function TraceConsole() {
 
   async function logout() {
     try {
-      await apiFetch('/api/demo/logout', { method: 'POST', body: '{}' });
+      await tenantConsoleClient.signOut();
     } finally {
       router.replace('/sign-in');
     }
@@ -217,14 +206,14 @@ function TraceConsole() {
     );
   }
 
-  if (!isSessionLoading && session?.role !== 'tenant_operator' && session?.role !== 'marketing_approver') {
-    return <div className="min-h-full px-4 py-10 text-slate-100"><section className="mx-auto max-w-xl rounded-xl border border-rose-800/80 bg-rose-950/30 p-6" role="alert"><p className="font-mono text-xs text-rose-300">403 · permission_denied</p><h1 className="mt-2 text-xl font-semibold">Trace access requires an authenticated operator</h1><button type="button" onClick={() => void logout()} className="mt-5 rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold hover:bg-slate-700">Sign out</button></section></div>;
+  if (!isSessionLoading && session !== null && !can(session, 'run:read')) {
+    return <div className="min-h-full px-4 py-10 text-slate-100"><section className="mx-auto max-w-xl rounded-xl border border-rose-800/80 bg-rose-950/30 p-6" role="alert"><p className="font-mono text-xs text-rose-300">403 · permission_denied</p><h1 className="mt-2 text-xl font-semibold">Trace access requires permission</h1><button type="button" onClick={() => void logout()} className="mt-5 rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold hover:bg-slate-700">Sign out</button></section></div>;
   }
 
   return (
     <div className="min-h-full px-4 py-6 text-slate-100 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-6xl">
-        <header className="flex flex-col gap-4 border-b border-slate-800 pb-5 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-400">NovaMart observability</p><h1 className="mt-1 text-2xl font-semibold tracking-tight">Run trace</h1><p className="mt-1 text-sm text-slate-400">Reads the durable R03 projection and redacted stage records only.</p></div><div className="flex flex-wrap gap-2"><a href="/" className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:border-slate-500 hover:text-white">Executive</a><a href="/demo/operations" className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:border-slate-500 hover:text-white">Operations</a><button type="button" onClick={() => void logout()} className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:border-slate-500 hover:text-white">Sign out</button></div></header>
+        <header className="flex flex-col gap-4 border-b border-slate-800 pb-5 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-xs font-semibold uppercase tracking-[0.18em] text-sky-400">Observability workspace</p><h1 className="mt-1 text-2xl font-semibold tracking-tight">Run trace</h1><p className="mt-1 text-sm text-slate-400">Reads the durable R03 projection and redacted stage records only.</p></div><div className="flex flex-wrap gap-2"><a href="/" className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:border-slate-500 hover:text-white">Executive</a><a href="/demo/operations" className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:border-slate-500 hover:text-white">Operations</a><button type="button" onClick={() => void logout()} className="rounded-lg border border-slate-700 px-3 py-2 text-xs font-semibold text-slate-300 hover:border-slate-500 hover:text-white">Sign out</button></div></header>
 
         <form onSubmit={readRun} className="mt-6 flex flex-col gap-3 rounded-xl border border-slate-800 bg-slate-900/60 p-4 sm:flex-row sm:items-end"><div className="min-w-0 flex-1"><label htmlFor="run-id" className="mb-2 block text-sm font-medium">Run ID</label><input id="run-id" value={runId} onChange={(event) => setRunId(event.target.value)} placeholder="Paste a durable task/run ID" maxLength={128} className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm font-mono outline-none focus:border-sky-500 focus:ring-2 focus:ring-sky-500/30" /></div><button type="submit" disabled={isLoading || isSessionLoading} className="rounded-lg bg-sky-600 px-4 py-2.5 text-sm font-semibold hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-50">{isLoading ? 'Reading…' : 'Read trace'}</button></form>
 

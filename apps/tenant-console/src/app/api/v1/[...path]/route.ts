@@ -1,19 +1,27 @@
+import type { AuthSession } from '@agentos/ui-foundation/auth';
 import {
-  apiV1Url,
   appendClearedCookies,
+  backendErrorPayload,
   configurationResponse,
-  deleteDemoSession,
+  destroySession,
   forbiddenResponse,
-  getDemoSession,
-  hasDemoCookieKey,
-  isDemoEnabled,
+  getSessionFromRequest,
+  hasCookieKey,
+  isAuthEnabled,
   isMutationMethod,
   jsonResponse,
-  maxProxyBodyBytes,
+  MAX_PROXY_BODY_BYTES,
   mutationGuard,
-  unavailableResponse,
   unauthorizedResponse,
-} from '../../../../lib/demo-bff';
+} from '../../../../lib/auth/session';
+import {
+  apiV1Url,
+  demoAuthProvider,
+  ExpiredProviderSessionError,
+  ProviderHttpError,
+} from '../../../../lib/auth/demo-provider';
+export const dynamic = 'force-dynamic';
+
 
 const FORWARDED_REQUEST_HEADERS = [
   'accept',
@@ -38,9 +46,7 @@ type RouteContext = { params: { path?: string[] } | Promise<{ path?: string[] }>
 
 function routePath(segments: string[] | undefined): string | undefined {
   if (!segments || segments.length === 0) return undefined;
-  if (segments.some((segment) => segment.length === 0 || segment === '.' || segment === '..' || segment.includes('/'))) {
-    return undefined;
-  }
+  if (segments.some((segment) => segment.length === 0 || segment === '.' || segment === '..' || segment.includes('/'))) return undefined;
   return segments.join('/');
 }
 
@@ -64,7 +70,10 @@ function requestHeaders(request: Request, token: string, path: string): Headers 
     const value = request.headers.get(name);
     if (value) headers.set(name, value);
   }
-  if (path === 'demo/widget-session') headers.set('origin', request.headers.get('origin')!);
+  if (path === 'demo/widget-session') {
+    const origin = request.headers.get('origin');
+    if (origin) headers.set('origin', origin);
+  }
   return headers;
 }
 
@@ -78,33 +87,54 @@ function responseHeaders(response: Response): Headers {
 }
 
 async function proxy(request: Request, context: RouteContext): Promise<Response> {
-  if (!isDemoEnabled()) return unavailableResponse();
-  if (!hasDemoCookieKey()) return configurationResponse();
+  if (!isAuthEnabled()) return jsonResponse({ error: 'AUTH_UNAVAILABLE' }, 404);
+  if (!hasCookieKey()) return configurationResponse();
 
   const params = await context.params;
   const path = routePath(params.path);
-  if (!path || !isAllowedPath(path, request.method.toUpperCase())) {
-    return jsonResponse({ error: 'NOT_FOUND' }, 404);
-  }
+  if (!path || !isAllowedPath(path, request.method.toUpperCase())) return jsonResponse({ error: 'NOT_FOUND' }, 404);
 
-  const session = getDemoSession(request);
+  const session = getSessionFromRequest(request);
   if (!session) return unauthorizedResponse();
-  if (path === 'demo/widget-session' && session.role !== 'tenant_operator') return forbiddenResponse();
-
   if (isMutationMethod(request.method)) {
     const guard = mutationGuard(request, session);
     if (guard) return guard;
   }
 
+  let verified: AuthSession | null;
+  try {
+    verified = await demoAuthProvider.getSession(request);
+  } catch (error) {
+    if (error instanceof ExpiredProviderSessionError) {
+      destroySession(request);
+      const response = unauthorizedResponse('expired');
+      appendClearedCookies(response, request);
+      return response;
+    }
+    if (error instanceof ProviderHttpError) {
+      if (error.status === 403) return jsonResponse(backendErrorPayload(error.payload, 'FORBIDDEN'), 403);
+      return jsonResponse({ error: 'SESSION_LOOKUP_FAILED' }, 502);
+    }
+    return jsonResponse({ error: 'SESSION_LOOKUP_FAILED' }, 502);
+  }
+  if (!verified) return unauthorizedResponse();
+  session.authSession = verified;
+  if (path === 'demo/widget-session' && !session.authSession.permissions.includes('conversation:takeover')) return forbiddenResponse();
+
   let body: ArrayBuffer | undefined;
   if (isMutationMethod(request.method)) {
     const declaredLength = Number(request.headers.get('content-length') || '0');
-    if (declaredLength > maxProxyBodyBytes()) return jsonResponse({ error: 'REQUEST_TOO_LARGE' }, 413);
+    if (Number.isFinite(declaredLength) && declaredLength > MAX_PROXY_BODY_BYTES) return jsonResponse({ error: 'REQUEST_TOO_LARGE' }, 413);
     body = await request.arrayBuffer();
-    if (body.byteLength > maxProxyBodyBytes()) return jsonResponse({ error: 'REQUEST_TOO_LARGE' }, 413);
+    if (body.byteLength > MAX_PROXY_BODY_BYTES) return jsonResponse({ error: 'REQUEST_TOO_LARGE' }, 413);
   }
 
-  const target = `${apiV1Url(`/${path}`)}${new URL(request.url).search}`;
+  let target: string;
+  try {
+    target = `${apiV1Url(`/${path}`)}${new URL(request.url).search}`;
+  } catch {
+    return jsonResponse({ error: 'AUTH_UNAVAILABLE' }, 503);
+  }
   let upstream: Response;
   try {
     upstream = await fetch(target, {
@@ -112,17 +142,15 @@ async function proxy(request: Request, context: RouteContext): Promise<Response>
       headers: requestHeaders(request, session.apiToken, path),
       ...(body ? { body } : {}),
       redirect: 'manual',
+      cache: 'no-store',
     });
   } catch {
     return jsonResponse({ error: 'API_UNAVAILABLE' }, 502);
   }
 
-  if (upstream.status === 401 || upstream.status === 403) {
-    deleteDemoSession(request);
-    const response = new Response(upstream.body, {
-      status: upstream.status,
-      headers: responseHeaders(upstream),
-    });
+  if (upstream.status === 401) {
+    destroySession(request);
+    const response = unauthorizedResponse('expired');
     appendClearedCookies(response, request);
     return response;
   }

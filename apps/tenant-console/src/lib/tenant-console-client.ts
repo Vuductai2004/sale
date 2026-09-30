@@ -1,4 +1,5 @@
 import { HttpClient, type HttpClientConfig, type RequestOptions } from '@agentos/ui-foundation';
+import type { AuthSession } from '@agentos/ui-foundation/auth';
 import type {
   ApprovalDecisionRequest,
   ApprovalDecisionResponse,
@@ -26,20 +27,19 @@ const CSRF_COOKIE = 'agentos_tenant_csrf';
 const CSRF_HEADER = 'x-csrf-token';
 const DISALLOWED_BROWSER_HEADERS = ['authorization', 'x-tenant-id', 'x-operator-id'];
 
-type DemoRole = 'tenant_operator' | 'marketing_approver';
+export type { AuthSession };
 
-export type DemoLoginResponse = {
-  readonly role: DemoRole;
-  readonly tenant_id: string;
-  readonly expires_at: string;
-};
+export class AuthRequestError extends Error {
+  readonly status: number;
+  readonly payload: Record<string, unknown>;
 
-export type DemoSessionResponse = {
-  readonly role: DemoRole;
-  readonly tenant_id: string;
-  readonly operator_id?: string;
-  readonly permissions?: readonly string[];
-};
+  constructor(status: number, payload: Record<string, unknown>) {
+    super(typeof payload.message === 'string' ? payload.message : `Authentication request failed (${status})`);
+    this.name = 'AuthRequestError';
+    this.status = status;
+    this.payload = payload;
+  }
+}
 
 function browserCsrfToken(): string | undefined {
   if (typeof document === 'undefined') return undefined;
@@ -85,39 +85,52 @@ export class TenantConsoleClient extends HttpClient {
     this.browserFetch = secureFetch;
   }
 
-  private async ensureDemoCsrfCookie(): Promise<void> {
+  private async authRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+    const response = await this.browserFetch(path, init);
+    if (!response.ok) {
+      let payload: Record<string, unknown> = {};
+      try {
+        const value: unknown = await response.json();
+        if (value && typeof value === 'object' && !Array.isArray(value)) payload = value as Record<string, unknown>;
+      } catch {
+        // Preserve the HTTP status when the BFF has no JSON body.
+      }
+      throw new AuthRequestError(response.status, payload);
+    }
+    if (response.status === 204) return undefined as T;
+    return await response.json() as T;
+  }
+
+  private async ensureAuthCsrfCookie(): Promise<void> {
     if (browserCsrfToken()) return;
-    await this.browserFetch('/api/demo/session', {
+    await this.browserFetch('/api/auth/session', {
       method: 'GET',
       headers: { Accept: 'application/json' },
       credentials: 'same-origin',
     });
   }
 
-  async loginDemo(role: DemoRole, password: string): Promise<DemoLoginResponse> {
-    await this.ensureDemoCsrfCookie();
-    const response = await this.browserFetch('/api/demo/session', {
+  async signIn(email: string, password: string): Promise<AuthSession> {
+    await this.ensureAuthCsrfCookie();
+    return this.authRequest<AuthSession>('/api/auth/sign-in', {
       method: 'POST',
       headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ role, password }),
+      body: JSON.stringify({ email, password }),
       credentials: 'same-origin',
     });
-    return response.json() as Promise<DemoLoginResponse>;
   }
 
-  async getDemoSession(): Promise<DemoSessionResponse> {
-    const response = await this.browserFetch('/api/demo/session', {
+  async getAuthSession(): Promise<AuthSession> {
+    return this.authRequest<AuthSession>('/api/auth/session', {
       method: 'GET',
       headers: { Accept: 'application/json' },
       credentials: 'same-origin',
     });
-    if (!response.ok) throw new Error(`Demo session request failed (${response.status})`);
-    return response.json() as Promise<DemoSessionResponse>;
   }
 
-  async logoutDemo(): Promise<void> {
-    await this.ensureDemoCsrfCookie();
-    await this.browserFetch('/api/demo/logout', {
+  async signOut(): Promise<void> {
+    await this.ensureAuthCsrfCookie();
+    await this.authRequest<void>('/api/auth/sign-out', {
       method: 'POST',
       headers: { Accept: 'application/json' },
       credentials: 'same-origin',

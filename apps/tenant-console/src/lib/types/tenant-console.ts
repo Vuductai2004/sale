@@ -9,6 +9,8 @@ import type {
   TaskLifecycleState,
 } from '@agentos/ui-foundation';
 
+export type { AuthSession, Permission, TenantMembership, UserIdentity } from '@agentos/ui-foundation/auth';
+
 // R14: Approval Center
 export type ApprovalDecision = 'APPROVE' | 'REJECT' | 'MODIFY' | 'PAUSE' | 'CANCEL';
 export type ApprovalDecisionStatus = 'QUEUED';

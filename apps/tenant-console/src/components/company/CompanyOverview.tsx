@@ -4,8 +4,9 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ApiError, type SharedUiState, type SourceStatus } from '@agentos/ui-foundation';
+import { can, type AuthSession } from '@agentos/ui-foundation/auth';
 import type { ApprovalQueueItem, KpiMetricItem } from '../../lib/types/tenant-console';
-import { tenantConsoleClient, type DemoSessionResponse } from '../../lib/tenant-console-client';
+import { tenantConsoleClient } from '../../lib/tenant-console-client';
 import { BlockedState, DemoBadge, EmptyState, ErrorState, LoadingPanel, MetricTile, PageHeader, SectionCard, StatusBadge } from '../ui/Primitives';
 
 type MetricValue = KpiMetricItem<unknown>;
@@ -25,9 +26,7 @@ const METRIC_CARDS = [
   { label: 'Items needing attention', aliases: ['approval_pending'], detail: 'Only the authorized pending subset is counted below.' },
 ] as const;
 
-function isSession(value: DemoSessionResponse): boolean {
-  return (value.role === 'tenant_operator' || value.role === 'marketing_approver') && typeof value.tenant_id === 'string' && value.tenant_id.length > 0;
-}
+
 
 function sourceTone(status: SourceStatus): 'live' | 'stale' | 'no-data' | 'not-instrumented' | 'dependency-unavailable' | 'fail-closed' {
   switch (status) {
@@ -112,7 +111,7 @@ export function CompanyOverview() {
   const searchParams = useSearchParams();
   const windowParam = searchParams.get('window') || '24h';
   const [overviewState, setOverviewState] = useState<OverviewState>('loading');
-  const [session, setSession] = useState<DemoSessionResponse | null>(null);
+  const [session, setSession] = useState<AuthSession | null>(null);
   const [metrics, setMetrics] = useState<MetricValue[]>([]);
   const [approvals, setApprovals] = useState<readonly ApprovalQueueItem[]>([]);
   const [approvalTotal, setApprovalTotal] = useState<number | null>(null);
@@ -132,8 +131,8 @@ export function CompanyOverview() {
     setApprovalTotal(null);
     setObservedAt(null);
     try {
-      const sessionResponse = await tenantConsoleClient.getDemoSession();
-      if (!isSession(sessionResponse)) {
+      const sessionResponse = await tenantConsoleClient.getAuthSession();
+      if (!sessionResponse.membership.tenant_id) {
         setSession(null);
         setOverviewState('signed_out');
         setUiState('permission_denied');
@@ -145,7 +144,7 @@ export function CompanyOverview() {
       }
 
       setSession(sessionResponse);
-      const canReadApprovals = sessionResponse.permissions?.includes('approval:read') === true;
+      const canReadApprovals = can(sessionResponse, 'approval:read');
       setApprovalState(canReadApprovals ? 'loading' : 'permission_denied');
       const [kpiOutcome, approvalOutcome] = await Promise.allSettled([
         tenantConsoleClient.getKpiSnapshot({ window: windowParam }),
@@ -203,9 +202,9 @@ export function CompanyOverview() {
   useEffect(() => { void loadOverview(); }, [loadOverview]);
 
   const metricByCard = useMemo(() => METRIC_CARDS.map((definition) => ({ definition, metric: metricFor(definition, metrics) })), [metrics]);
-  const canReadApprovals = session?.permissions?.includes('approval:read') === true;
+  const canReadApprovals = can(session, 'approval:read');
   const attentionValue = !canReadApprovals ? 'Scoped only' : approvalState === 'ready' && approvalTotal !== null ? String(approvalTotal) : approvalState === 'permission_denied' ? 'Scoped only' : approvalState === 'error' ? 'Unavailable' : 'Loading';
-  const attentionDetail = !canReadApprovals ? 'This role cannot read the approval queue.' : approvalState === 'ready' ? 'Authoritative pending total returned for this role.' : approvalState === 'permission_denied' ? 'The approval queue denied this role.' : approvalState === 'error' ? (approvalError ?? 'The approval queue is unavailable.') : 'Loading the authorized approval queue.';
+  const attentionDetail = !canReadApprovals ? 'This session cannot read the approval queue.' : approvalState === 'ready' ? 'Authoritative pending total returned for this session.' : approvalState === 'permission_denied' ? 'The approval queue denied this session.' : approvalState === 'error' ? (approvalError ?? 'The approval queue is unavailable.') : 'Loading the authorized approval queue.';
 
   if (overviewState === 'loading') return <LoadingPanel label="Loading company observations" />;
 
@@ -213,7 +212,7 @@ export function CompanyOverview() {
     <div className="space-y-6" aria-label="Company overview">
       <PageHeader
         eyebrow="Company workspace"
-        title={session ? `Good to see you, ${session.role === 'marketing_approver' ? 'marketing approver' : 'tenant operator'}` : 'Company overview'}
+        title={session ? `Good to see you, ${session.identity.display_name}` : 'Company overview'}
         description="A tenant-scoped view of observed work. Missing telemetry is shown as unavailable, never as a guessed number."
         actions={<div className="flex flex-wrap items-center gap-2"><select aria-label="Observation window" className="ui-input min-w-28" value={windowParam} onChange={(event) => router.replace(`/?window=${encodeURIComponent(event.target.value)}`)}><option value="24h">Last 24 hours</option><option value="7d">Last 7 days</option><option value="30d">Last 30 days</option></select><button type="button" className="ui-button ui-button--secondary" onClick={() => void loadOverview()}>Refresh</button></div>}
       />
@@ -235,24 +234,24 @@ export function CompanyOverview() {
       <SectionCard title="AI team domains" description="These cards describe product areas, not an active-agent count or fleet roster.">
         <div className="grid gap-4 md:grid-cols-3">
           <div className="rounded-lg border border-line bg-surface-low p-4">
-            <div className="flex items-center justify-between gap-3"><h3 className="font-semibold text-ink">Customer care</h3>{capabilityLabel(session?.permissions?.includes('conversation:read') ? 'integrated' : 'blocked')}</div>
+            <div className="flex items-center justify-between gap-3"><h3 className="font-semibold text-ink">Customer care</h3>{capabilityLabel(can(session, 'conversation:takeover') ? 'integrated' : 'blocked')}</div>
             <p className="mt-2 text-sm leading-6 text-muted">Conversation takeover and customer timelines are available only through server-scoped records.</p>
-            {capabilityLink('/takeover', 'View care activity', session?.permissions?.includes('conversation:read') === true)}
+            {capabilityLink('/takeover', 'View care activity', can(session, 'conversation:takeover'))}
           </div>
           <div className="rounded-lg border border-line bg-surface-low p-4">
-            <div className="flex items-center justify-between gap-3"><h3 className="font-semibold text-ink">Marketing</h3>{capabilityLabel(session?.role === 'marketing_approver' ? 'demo-only' : 'blocked')}</div>
+            <div className="flex items-center justify-between gap-3"><h3 className="font-semibold text-ink">Marketing</h3>{capabilityLabel(can(session, 'campaign:draft') || can(session, 'approval:read') ? 'demo-only' : 'blocked')}</div>
             <p className="mt-2 text-sm leading-6 text-muted">Campaign drafts stop at a human approval boundary in the demo route.</p>
-            {capabilityLink('/demo/campaigns', 'Open demo journey', session?.role === 'marketing_approver')}
+            {capabilityLink('/demo/campaigns', 'Open demo journey', can(session, 'campaign:draft') || can(session, 'approval:read'))}
           </div>
           <div className="rounded-lg border border-line bg-surface-low p-4">
-            <div className="flex items-center justify-between gap-3"><h3 className="font-semibold text-ink">Sales</h3>{capabilityLabel(session?.role === 'tenant_operator' ? 'demo-only' : 'blocked')}</div>
+            <div className="flex items-center justify-between gap-3"><h3 className="font-semibold text-ink">Sales</h3>{capabilityLabel(can(session, 'customer:read') ? 'demo-only' : 'blocked')}</div>
             <p className="mt-2 text-sm leading-6 text-muted">The storefront is a session-bound demo projection, not a production revenue dashboard.</p>
-            {capabilityLink('/demo/storefront', 'Open demo storefront', session?.role === 'tenant_operator')}
+            {capabilityLink('/demo/storefront', 'Open demo storefront', can(session, 'customer:read'))}
           </div>
         </div>
       </SectionCard>
 
-      <SectionCard title="Workspace boundaries" description="These are intentional non-interactive states, not missing buttons."><div className="grid gap-3 text-sm sm:grid-cols-3"><div className="rounded-lg border border-line p-3"><p className="font-semibold text-ink">Tenant identity</p><p className="mt-1 text-muted">{session?.tenant_id ?? 'Unavailable until sign-in'}</p></div><div className="rounded-lg border border-line p-3"><p className="font-semibold text-ink">Search and alerts</p><p className="mt-1 text-muted">Scoped loaded-row filtering only; no global endpoint.</p></div><div className="rounded-lg border border-line p-3"><p className="font-semibold text-ink">Summary action</p><p className="mt-1 text-muted">Not integrated because no summary-generation route exists.</p></div></div></SectionCard>
+      <SectionCard title="Workspace boundaries" description="These are intentional non-interactive states, not missing buttons."><div className="grid gap-3 text-sm sm:grid-cols-3"><div className="rounded-lg border border-line p-3"><p className="font-semibold text-ink">Tenant identity</p><p className="mt-1 text-muted">{session?.membership.tenant_id ?? 'Unavailable until sign-in'}</p></div><div className="rounded-lg border border-line p-3"><p className="font-semibold text-ink">Search and alerts</p><p className="mt-1 text-muted">Scoped loaded-row filtering only; no global endpoint.</p></div><div className="rounded-lg border border-line p-3"><p className="font-semibold text-ink">Summary action</p><p className="mt-1 text-muted">Not integrated because no summary-generation route is authorized.</p></div></div></SectionCard>
     </div>
   );
 }

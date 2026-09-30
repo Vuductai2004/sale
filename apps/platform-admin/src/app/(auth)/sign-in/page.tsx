@@ -1,18 +1,19 @@
 'use client';
 
+import { can, type AuthSession } from '@agentos/ui-foundation/auth';
 import { useEffect, useState, type FormEvent } from 'react';
-
-const ROLE = 'platform_admin';
 
 type ViewState = 'loading' | 'ready' | 'disabled' | 'signed_in' | 'error' | 'permission';
 
 function responseError(status: number, payload: unknown): string {
-  let code = '';
-  if (payload !== null && typeof payload === 'object' && 'error' in payload && typeof payload.error === 'string') code = payload.error;
-  if (status === 404 || code === 'NOT_FOUND') return 'Demo mode is not available in this environment.';
-  if (status === 403 || code === 'ROLE_FORBIDDEN' || code === 'PERMISSION_DENIED') return 'This account is not permitted to sign in as a platform administrator.';
-  if (status === 401 || code === 'AUTHENTICATION_FAILED') return 'The password was not accepted.';
-  if (status >= 500) return 'The demo authentication service is unavailable.';
+  const code = payload !== null && typeof payload === 'object' && 'error' in payload && typeof payload.error === 'string'
+    ? payload.error
+    : '';
+  if (status === 404 || code === 'NOT_FOUND') return 'Sign-in is not available in this environment.';
+  if (status === 403 || code === 'PERMISSION_DENIED') return 'This account is not permitted to sign in to platform operations.';
+  if (status === 401 || code === 'AUTHENTICATION_FAILED') return 'The email or password was not accepted.';
+  if (status === 429 || code === 'TOO_MANY_ATTEMPTS') return 'Too many attempts. Please wait and try again.';
+  if (status >= 500) return 'The authentication service is unavailable.';
   return 'Sign-in could not be completed.';
 }
 
@@ -24,7 +25,14 @@ async function jsonPayload(response: Response): Promise<unknown> {
   }
 }
 
+function isPlatformSession(value: unknown): value is AuthSession {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const candidate = value as Partial<AuthSession>;
+  return Boolean(candidate.identity && candidate.membership && Array.isArray(candidate.permissions) && typeof candidate.expires_at === 'string' && can(candidate as AuthSession, 'platform:admin'));
+}
+
 export default function AuthPage() {
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [viewState, setViewState] = useState<ViewState>('loading');
   const [message, setMessage] = useState<string | null>(null);
@@ -32,18 +40,18 @@ export default function AuthPage() {
 
   useEffect(() => {
     let active = true;
-    void fetch('/api/demo/session', { credentials: 'same-origin', cache: 'no-store' })
+    void fetch('/api/auth/session', { credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json' } })
       .then(async (response) => ({ response, payload: await jsonPayload(response) }))
       .then(({ response, payload }) => {
         if (!active) return;
-        if (response.ok && payload !== null && typeof payload === 'object' && 'role' in payload && payload.role === ROLE) {
+        if (response.ok && isPlatformSession(payload)) {
           setViewState('signed_in');
-          window.location.assign('/demo/readiness');
+          window.location.assign('/');
           return;
         }
         if (response.status === 404) {
           setViewState('disabled');
-          setMessage('Demo mode is not available in this environment.');
+          setMessage(responseError(response.status, payload));
           return;
         }
         if (response.status === 403) {
@@ -61,7 +69,7 @@ export default function AuthPage() {
       .catch(() => {
         if (!active) return;
         setViewState('error');
-        setMessage('The demo authentication service is unavailable.');
+        setMessage('The authentication service is unavailable.');
       });
     return () => {
       active = false;
@@ -70,15 +78,15 @@ export default function AuthPage() {
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (password.length === 0 || submitting || viewState === 'disabled') return;
+    if (!email.trim() || !password || submitting || viewState === 'disabled') return;
     setSubmitting(true);
     setMessage(null);
     try {
-      const response = await fetch('/api/demo/session', {
+      const response = await fetch('/api/auth/sign-in', {
         method: 'POST',
         credentials: 'same-origin',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ role: ROLE, password }),
+        headers: { Accept: 'application/json', 'content-type': 'application/json', 'x-csrf-token': readCsrfToken() },
+        body: JSON.stringify({ email, password }),
       });
       const payload = await jsonPayload(response);
       if (!response.ok) {
@@ -86,11 +94,12 @@ export default function AuthPage() {
         setMessage(responseError(response.status, payload));
         return;
       }
+      setPassword('');
       setViewState('signed_in');
-      window.location.assign('/demo/readiness');
+      window.location.assign('/');
     } catch {
       setViewState('error');
-      setMessage('The demo authentication service is unavailable.');
+      setMessage('The authentication service is unavailable.');
     } finally {
       setSubmitting(false);
     }
@@ -106,24 +115,38 @@ export default function AuthPage() {
           AgentOS Platform Admin
           <span className="ui-status ui-status--demo-only">Demo only</span>
         </div>
-        <h1 id="sign-in-title" className="mt-6 text-2xl font-semibold tracking-tight text-ink">Sign in to demo operations</h1>
-        <p className="mt-2 text-sm leading-6 text-muted">Use the server-managed platform administrator credential to inspect redacted NovaMart readiness and run traces.</p>
+        <h1 id="sign-in-title" className="mt-6 text-2xl font-semibold tracking-tight text-ink">Sign in to platform operations</h1>
+        <p className="mt-2 text-sm leading-6 text-muted">Use your account credentials to access platform operations.</p>
 
-        {loading ? <p role="status" className="ui-state ui-state--loading mt-6">Checking demo availability…</p> : null}
+        {loading ? <p role="status" className="ui-state ui-state--loading mt-6">Checking session…</p> : null}
         {message ? <p role="alert" className={`ui-state mt-6 ${unavailable ? 'ui-state--blocked' : 'ui-state--error'}`}>{message}</p> : null}
 
         {!unavailable ? (
           <form onSubmit={submit} className="mt-6 space-y-5">
             <div>
-              <label htmlFor="platform-password" className="text-sm font-medium text-ink">Platform admin password</label>
-              <input id="platform-password" name="password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" disabled={loading || submitting} className="ui-input mt-2" />
+              <label htmlFor="platform-email" className="text-sm font-medium text-ink">Email</label>
+              <input id="platform-email" name="email" type="email" value={email} onChange={(event) => setEmail(event.target.value)} autoComplete="username" required disabled={loading || submitting} className="ui-input mt-2" />
             </div>
-            <button type="submit" disabled={loading || submitting || password.length === 0} className="ui-button ui-button--primary w-full">{submitting ? 'Signing in…' : 'Sign in'}</button>
+            <div>
+              <label htmlFor="platform-password" className="text-sm font-medium text-ink">Mật khẩu</label>
+              <input id="platform-password" name="password" type="password" value={password} onChange={(event) => setPassword(event.target.value)} autoComplete="current-password" required disabled={loading || submitting} className="ui-input mt-2" />
+            </div>
+            <button type="submit" disabled={loading || submitting || !email.trim() || !password} className="ui-button ui-button--primary w-full">{submitting ? 'Signing in…' : 'Đăng nhập'}</button>
           </form>
         ) : null}
 
-        <p className="mt-6 border-t border-line pt-4 text-xs leading-5 text-muted">Demo credentials stay server-side. This view never stores or exposes API bearer tokens.</p>
+        <p className="mt-6 border-t border-line pt-4 text-xs leading-5 text-muted">Credentials stay server-side. This view never stores or exposes API bearer tokens.</p>
       </section>
     </main>
   );
+}
+
+function readCsrfToken(): string {
+  const entry = document.cookie.split(';').map((part) => part.trim()).find((part) => part.startsWith('agentos_platform_csrf='));
+  if (!entry) return '';
+  try {
+    return decodeURIComponent(entry.slice('agentos_platform_csrf='.length));
+  } catch {
+    return '';
+  }
 }

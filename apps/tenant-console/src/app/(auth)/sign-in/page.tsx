@@ -3,47 +3,17 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
-
-type DemoRole = 'tenant_operator' | 'marketing_approver';
-
-
-function csrfToken(): string | undefined {
-  const entry = document.cookie
-    .split(';')
-    .map((part) => part.trim())
-    .find((part) => part.startsWith('agentos_tenant_csrf='));
-  if (!entry) return undefined;
-  const raw = entry.slice('agentos_tenant_csrf='.length);
-  try {
-    return decodeURIComponent(raw);
-  } catch {
-    return raw;
-  }
-}
+import { AuthRequestError, tenantConsoleClient } from '../../../lib/tenant-console-client';
 
 function messageForError(value: unknown): string {
-  if (!value || typeof value !== 'object') return 'Sign-in failed. Check the role and password, then try again.';
-  const record = value as Record<string, unknown>;
-  const code = typeof record.error === 'string' ? record.error : '';
-  if (code === 'DEMO_AUTH_UNAVAILABLE') return 'Demo sign-in is not available in this environment.';
-  if (code === 'DEMO_AUTH_MISCONFIGURED') return 'Demo sign-in is not configured.';
-  if (code === 'INVALID_CREDENTIALS' || code === 'LOGIN_FAILED') return 'The selected role or password was not accepted.';
-  if (code === 'API_UNAVAILABLE') return 'The API is unavailable. Try again when it is running.';
-  return typeof record.message === 'string' ? record.message : 'Sign-in failed. Please try again.';
+  if (value instanceof AuthRequestError && value.status === 429) return 'Quá nhiều lần thử. Vui lòng thử lại sau.';
+  return 'Email hoặc mật khẩu không đúng.';
 }
 
-async function readResponse(response: Response): Promise<Record<string, unknown>> {
-  try {
-    const value: unknown = await response.json();
-    return value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
-  } catch {
-    return {};
-  }
-}
 
 export default function AuthPage() {
   const router = useRouter();
-  const [role, setRole] = useState<DemoRole>('tenant_operator');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -51,25 +21,16 @@ export default function AuthPage() {
 
   useEffect(() => {
     let cancelled = false;
-    void (async () => {
-      try {
-        // The bootstrap response sets the readable CSRF cookie before any mutation.
-        const response = await fetch('/api/demo/session', {
-          method: 'GET',
-          headers: { Accept: 'application/json' },
-          credentials: 'same-origin',
-        });
-        const payload = await readResponse(response);
-        if (!cancelled && response.ok && (payload.role === 'tenant_operator' || payload.role === 'marketing_approver')) {
-          router.replace(payload.role === 'marketing_approver' ? '/demo/campaigns' : '/demo/operations');
-          return;
-        }
-      } catch {
-        if (!cancelled) setError('Unable to reach the demo session service.');
-      } finally {
+    void tenantConsoleClient.getAuthSession()
+      .then(() => {
+        if (!cancelled) router.replace('/');
+      })
+      .catch(() => {
+        // A 401 is the expected signed-out bootstrap response.
+      })
+      .finally(() => {
         if (!cancelled) setIsLoading(false);
-      }
-    })();
+      });
     return () => {
       cancelled = true;
     };
@@ -80,40 +41,11 @@ export default function AuthPage() {
     setError(null);
     setIsSubmitting(true);
     try {
-      // Keep the password only in this component state; it is never persisted or sent anywhere else.
-      const bootstrap = await fetch('/api/demo/session', {
-        method: 'GET',
-        headers: { Accept: 'application/json' },
-        credentials: 'same-origin',
-      });
-      if (bootstrap.ok) {
-        const existing = await readResponse(bootstrap);
-        if (existing.role === 'tenant_operator' || existing.role === 'marketing_approver') {
-          router.replace(existing.role === 'marketing_approver' ? '/demo/campaigns' : '/demo/operations');
-          return;
-        }
-      }
-
-      const token = csrfToken();
-      const response = await fetch('/api/demo/session', {
-        method: 'POST',
-        headers: {
-          Accept: 'application/json',
-          'Content-Type': 'application/json',
-          ...(token ? { 'x-csrf-token': token } : {}),
-        },
-        credentials: 'same-origin',
-        body: JSON.stringify({ role, password }),
-      });
-      const payload = await readResponse(response);
-      if (!response.ok) {
-        setError(messageForError(payload));
-        return;
-      }
+      await tenantConsoleClient.signIn(email.trim(), password);
       setPassword('');
-      router.replace(role === 'marketing_approver' ? '/demo/campaigns' : '/demo/operations');
-    } catch {
-      setError('Unable to reach the demo session service.');
+      router.replace('/');
+    } catch (reason: unknown) {
+      setError(messageForError(reason));
     } finally {
       setIsSubmitting(false);
     }
@@ -124,11 +56,8 @@ export default function AuthPage() {
       <div className="mx-auto flex min-h-[70vh] max-w-md items-center">
         <section className="ui-section-card w-full p-6 shadow-lg sm:p-8">
           <div className="mb-8">
-            <div className="flex flex-wrap items-center gap-3"><p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand">NovaMart demo</p><span className="ui-status ui-status--demo-only">Demo only</span></div>
-            <h1 className="mt-2 text-2xl font-semibold tracking-tight text-ink">Sign in to the operator console</h1>
-            <p className="mt-2 text-sm leading-6 text-muted">
-              Choose the role supplied by your local demo environment. Credentials stay server-side.
-            </p>
+            <h1 className="text-2xl font-semibold tracking-tight text-ink">Đăng nhập</h1>
+            <p className="mt-2 text-sm leading-6 text-muted">Sử dụng email và mật khẩu tài khoản của bạn.</p>
           </div>
 
           {error && (
@@ -139,38 +68,23 @@ export default function AuthPage() {
 
           <form onSubmit={handleSubmit} className="space-y-5">
             <fieldset disabled={isLoading || isSubmitting} className="space-y-4">
-              <legend className="text-sm font-medium text-ink">Role</legend>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <label className={`cursor-pointer rounded-lg border p-3 transition ${role === 'tenant_operator' ? 'border-brand bg-brand-soft' : 'border-line bg-surface hover:border-brand'}`}>
-                  <input
-                    className="sr-only"
-                    type="radio"
-                    name="role"
-                    value="tenant_operator"
-                    checked={role === 'tenant_operator'}
-                    onChange={() => setRole('tenant_operator')}
-                  />
-                  <span className="block text-sm font-semibold text-ink">Tenant operator</span>
-                  <span className="mt-1 block text-xs text-muted">Conversations, takeover, Customer 360</span>
-                </label>
-                <label className={`cursor-pointer rounded-lg border p-3 transition ${role === 'marketing_approver' ? 'border-brand bg-brand-soft' : 'border-line bg-surface hover:border-brand'}`}>
-                  <input
-                    className="sr-only"
-                    type="radio"
-                    name="role"
-                    value="marketing_approver"
-                    checked={role === 'marketing_approver'}
-                    onChange={() => setRole('marketing_approver')}
-                  />
-                  <span className="block text-sm font-semibold text-ink">Marketing approver</span>
-                  <span className="mt-1 block text-xs text-muted">Review pending AUTH-4 campaign drafts</span>
-                </label>
-              </div>
-
               <div>
-                <label htmlFor="demo-password" className="mb-2 block text-sm font-medium text-ink">Password</label>
+                <label htmlFor="email" className="mb-2 block text-sm font-medium text-ink">Email</label>
                 <input
-                  id="demo-password"
+                  id="email"
+                  type="email"
+                  autoComplete="username"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  required
+                  maxLength={320}
+                  className="ui-input"
+                />
+              </div>
+              <div>
+                <label htmlFor="password" className="mb-2 block text-sm font-medium text-ink">Mật khẩu</label>
+                <input
+                  id="password"
                   type="password"
                   autoComplete="current-password"
                   value={password}
@@ -184,10 +98,10 @@ export default function AuthPage() {
 
             <button
               type="submit"
-              disabled={isLoading || isSubmitting || password.length === 0}
+              disabled={isLoading || isSubmitting || email.trim().length === 0 || password.length === 0}
               className="ui-button ui-button--primary w-full"
             >
-              {isLoading ? 'Checking session…' : isSubmitting ? 'Signing in…' : 'Sign in'}
+              {isLoading ? 'Đang kiểm tra…' : isSubmitting ? 'Đang đăng nhập…' : 'Đăng nhập'}
             </button>
           </form>
         </section>
