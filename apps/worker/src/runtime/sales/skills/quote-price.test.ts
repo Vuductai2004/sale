@@ -406,6 +406,45 @@ describe('SalesSkillServices - quote, price floor and payment-policy skills', ()
       },
     })).rejects.toMatchObject({ code: 'P_FLOOR_UNAVAILABLE' });
   });
+  it('check_price: forwards proposed_price to the authoritative pricing engine', async () => {
+    const read = vi.fn(async () => ({
+      ok: true as const,
+      owner_approved: true as const,
+      list_price: 100,
+      currency: 'TWD',
+      p_floor: 80,
+      floor_source: 'engine:approved:pricing-v1',
+      quote_ttl_seconds: 3600,
+    }));
+    const services = createServices({
+      price_floor: { read },
+    });
+
+    await services.tool_port.invoke({
+      skill_id: 'skill.sales.check_price',
+      tool_binding: 'API-001.PricingEngine',
+      input: {
+        tenant_id: TENANT_ID,
+        sku_id: 'SKU-1',
+        customer_id: CUSTOMER_ID,
+        proposed_price: 90,
+      },
+      context: {
+        run_id: 'run-price-proposed',
+        tenant_id: TENANT_ID,
+        caller_agent: 'SAL-02' as const,
+        correlation_id: CORRELATION_ID,
+        granted_authority: 'AUTH-3' as const,
+        effect_key: 'effect-price-proposed',
+      },
+    });
+
+    expect(read).toHaveBeenCalledWith({
+      tenant_id: TENANT_ID,
+      sku_id: 'SKU-1',
+      proposed_price: 90,
+    });
+  });
 
   it('check_price: HMAC-SHA256 signs quote token with server secret binding tenant, sku, customer, price, floor, currency, and expiry', async () => {
     const services = createFullyBoundServices();

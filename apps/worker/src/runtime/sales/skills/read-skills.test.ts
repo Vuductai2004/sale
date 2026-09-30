@@ -379,6 +379,97 @@ describe('SalesSkillServices - read, recommendation and customer skills', () => 
       checked_at: SNAPSHOT_AT,
     });
   });
+  it('searches with bounded deduplicated inventory reads and keeps failed stock unknown', async () => {
+    const inventoryKeys: string[] = [];
+    const erp_read: ErpReadPort = {
+      read: vi.fn(async ({ resource, tenant_id, key }) => {
+        if (resource === 'products') {
+          return {
+            resource,
+            tenant_id,
+            observed_at: SNAPSHOT_AT,
+            value: {
+              tenant_id,
+              snapshot_at: SNAPSHOT_AT,
+              items: [
+                {
+                  tenant_id,
+                  product_id: 'product-unknown',
+                  sku: 'SKU-UNKNOWN',
+                  name: 'Union Select accessory',
+                  currency: 'TWD',
+                  original_list_price: 100,
+                  is_active: true,
+                },
+                {
+                  tenant_id,
+                  product_id: 'product-known',
+                  sku: 'SKU-KNOWN',
+                  name: 'Union Select known accessory',
+                  currency: 'TWD',
+                  original_list_price: 120,
+                  is_active: true,
+                },
+              ],
+            },
+          };
+        }
+        inventoryKeys.push(key ?? '');
+        if (key === 'SKU-UNKNOWN') throw new Error('inventory unavailable');
+        return {
+          resource,
+          tenant_id,
+          observed_at: SNAPSHOT_AT,
+          value: {
+            tenant_id,
+            snapshot_at: SNAPSHOT_AT,
+            items: [{ tenant_id, sku_id: key, total_available_to_promise: 2 }],
+          },
+        };
+      }),
+    };
+    const services = createServices({ erp_read });
+    const search = await services.tool_port.invoke({
+      skill_id: 'skill.sales.search_product',
+      tool_binding: 'API-001.CatalogConnector',
+      input: { tenant_id: TENANT_ID, query: 'union select', limit: 20 },
+      context: {
+        run_id: 'run-search-batch',
+        tenant_id: TENANT_ID,
+        caller_agent: 'SAL-02' as const,
+        correlation_id: CORRELATION_ID,
+        granted_authority: 'AUTH-1' as const,
+        effect_key: 'effect-search-batch',
+      },
+    });
+
+    expect(search).toMatchObject({
+      products: [
+        { sku: 'SKU-KNOWN', in_stock: true },
+        { sku: 'SKU-UNKNOWN', in_stock: null },
+      ],
+      total_found: 2,
+    });
+    expect(inventoryKeys.sort()).toEqual(['SKU-KNOWN', 'SKU-UNKNOWN']);
+  });
+  it('accepts ordinary catalog text that resembles non-instructional marker syntax', async () => {
+    const services = createServices();
+    await expect(services.tool_port.invoke({
+      skill_id: 'skill.sales.search_product',
+      tool_binding: 'API-001.CatalogConnector',
+      input: { tenant_id: TENANT_ID, query: 'system: accessory' },
+      context: {
+        run_id: 'run-search-marker-false-positive',
+        tenant_id: TENANT_ID,
+        caller_agent: 'SAL-02' as const,
+        correlation_id: CORRELATION_ID,
+        granted_authority: 'AUTH-1' as const,
+        effect_key: 'effect-search-marker-false-positive',
+      },
+    })).resolves.toMatchObject({
+      total_found: 0,
+    });
+  });
 
   it('dispatches canonical search and stock outputs through strict runtime validation', async () => {
     const services = createServices();
@@ -439,7 +530,43 @@ describe('SalesSkillServices - read, recommendation and customer skills', () => 
     });
   });
 
-  it('dispatches recommendation through the Sales engine and validates the canonical seven-field output', async () => {
+  it('binds ERP provider reconciliation for Sales mutations and preserves UNKNOWN without proof', async () => {
+    const providerReceipt = {
+      execution_id: 'API-001:action-sales-reconciled',
+      adapter_status: 'SUCCESS' as const,
+      provider_reference: 'MOCK-ERP:tenant-sales:action-sales-reconciled',
+      response_payload: { reconciled: true },
+      latency_ms: 0,
+      token_usage: { prompt: 0, completion: 0, total_cost_usd: 0 },
+    };
+    let providerProofAvailable = true;
+    const reconcile = vi.fn(async () => providerProofAvailable
+      ? { outcome: 'SUCCEEDED' as const, receipt: providerReceipt }
+      : { outcome: 'INDETERMINATE' as const });
+    const services = createServices({
+      erp_read: { ...createErpRead(), reconcile },
+    });
+    const input = {
+      tenant_id: TENANT_ID,
+      effect_key: 'effect-sales-cart-unknown',
+      action_id: 'action-sales-reconciled',
+      adapter_target: 'API-002.CommerceCartAPI',
+      skill_id: 'skill.sales.create_cart',
+    };
+
+    await expect(services.dispatcher.reconcile?.(input)).resolves.toEqual({
+      outcome: 'SUCCEEDED',
+      receipt: providerReceipt,
+    });
+    expect(reconcile).toHaveBeenCalledWith(input);
+
+    providerProofAvailable = false;
+    await expect(services.dispatcher.reconcile?.(input)).resolves.toEqual({
+      outcome: 'INDETERMINATE',
+    });
+  });
+
+  it('dispatches recommendation through the Sales engine and validates the canonical recommendation output', async () => {
     const revenue_evidence: SalesRecommendationRevenueEvidencePort = {
       read: vi.fn(async () => ({
         conversion_probability: 0.7,
@@ -449,7 +576,7 @@ describe('SalesSkillServices - read, recommendation and customer skills', () => 
         provenance_reference: 'finance:approved-model:1',
       })),
     };
-    const services = createServices({ revenue_evidence });
+    const services = createServices({ revenue_evidence, price_floor: createPriceFloorPort() });
     const request_id = 'request-recommendation-1';
     const skill_id = 'skill.sales.recommend_product';
     const action: ActionDraft = {
@@ -498,6 +625,7 @@ describe('SalesSkillServices - read, recommendation and customer skills', () => 
         suppression_cleared: true,
       },
       confidence: 0.8,
+      ranking_method: 'authoritative_catalog_order',
       expected_outcome: {
         conversion_probability: 0.7,
         expected_revenue: 70,
@@ -632,7 +760,7 @@ describe('SalesSkillServices - read, recommendation and customer skills', () => 
         provenance_reference: 'finance:approved-model:1',
       })),
     };
-    const services = createServices({ revenue_evidence });
+    const services = createServices({ revenue_evidence, price_floor: createPriceFloorPort() });
     const output = await services.tool_port.invoke({
       skill_id: 'skill.sales.recommend_product',
       tool_binding: 'Core.RecommendationEngine',

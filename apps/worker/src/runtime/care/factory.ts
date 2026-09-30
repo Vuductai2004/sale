@@ -363,11 +363,12 @@ export function createCareOrchestratorFactory(
     registry ??= skillServices.registry;
   }
 
-  // 5. Deterministic non-LLM agent runtime wired to aggregator.verificationReferenceFor
+  // 5. Deterministic non-LLM agent runtime wired to the tenant-keyed verification cache.
   const agentRuntime: IAgentRuntime = options.agentRuntime ?? new CareAgentRuntime({
     ...(options.now ? { now: options.now } : {}),
     ...(registry ? { registry } : {}),
-    verificationReference: (correlation_id: string) => aggregator.verificationReferenceFor(correlation_id),
+    verificationReference: (correlation_id: string, tenant_id?: string) =>
+      tenant_id === undefined ? null : aggregator.verificationReferenceFor(tenant_id, correlation_id),
   });
 
   // 6. Policy engine adapter over PolicyEnforcementPoint bound to the durable audit boundary

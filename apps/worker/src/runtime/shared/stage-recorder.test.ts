@@ -42,6 +42,7 @@ interface StageRow extends QueryResultRow {
 class ScriptedStageClient {
   readonly statements: Array<{ readonly sql: string; readonly params: readonly unknown[] }> = [];
   readonly rows: StageRow[] = [];
+  readonly attemptOrdinals: Record<string, number> = {};
 
   async query<R extends QueryResultRow>(
     sql: string,
@@ -49,12 +50,23 @@ class ScriptedStageClient {
   ): Promise<QueryResult<R>> {
     this.statements.push({ sql, params });
 
+    if (sql.includes('FROM agentos.platform_durable_tasks') && sql.includes('FOR UPDATE')) {
+      return { rows: [{ task_id: 'task-1' }] as unknown as R[], rowCount: 1 } as QueryResult<R>;
+    }
+
+    if (sql.includes('agentos.run_attempt_ordinals')) {
+      const key = `${String(params[0])}:${String(params[1])}`;
+      const attemptOrdinal = (this.attemptOrdinals[key] ?? 0) + 1;
+      this.attemptOrdinals[key] = attemptOrdinal;
+      return { rows: [{ attempt_ordinal: attemptOrdinal }] as unknown as R[], rowCount: 1 } as QueryResult<R>;
+    }
+
+    // Keep the legacy branch for tests that resolve the workspace package's pre-build dist output.
     if (sql.includes('COALESCE(MAX(attempt_ordinal)')) {
       const matching = this.rows.filter((row) => row.tenant_id === params[0] && row.run_id === params[1]);
       const max = matching.reduce((value, row) => Math.max(value, row.attempt_ordinal), 0);
       return { rows: [{ attempt_ordinal: max + 1 }] as unknown as R[], rowCount: 1 } as QueryResult<R>;
     }
-
     if (sql.startsWith('INSERT INTO agentos.run_stage_events')) {
       const existing = this.rows.find((row) => (
         row.tenant_id === params[0]

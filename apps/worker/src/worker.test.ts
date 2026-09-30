@@ -129,6 +129,55 @@ describe('startWorker', () => {
     expect(orchestratorFactory).not.toHaveBeenCalled();
     expect(releaseTaskLease).not.toHaveBeenCalled();
   });
+  it('does not execute a parked task until a resume event is present', async () => {
+    const tenant_id = '00000000-0000-4000-8000-000000000001';
+    const processQueuedSignal = vi.fn();
+    const taskRecord = {
+      tenant_id,
+      run_id: 'run-parked',
+      correlation_id: 'corr-parked',
+      task_version: 3,
+      state: 'waiting',
+      lease_owner: 'worker-1',
+      state_payload: {
+        signal: {
+          signal_id: 'sig-parked',
+          tenant_id,
+          correlation_id: 'corr-parked',
+          source_channel: 'WEB_CHAT',
+          event_type: 'message.received',
+          timestamp: '2026-09-30T00:00:00.000Z',
+          subject: { session_id: 'session-parked', channel_type: 'web' },
+          payload: { module: 'support', message: 'resume only after event' },
+        },
+      },
+    } as DurableTaskRecord;
+    const orchestratorFactory = vi.fn().mockResolvedValue({ processQueuedSignal });
+    const getTask = vi.fn().mockResolvedValue(taskRecord);
+    const releaseTaskLease = vi.fn();
+
+    await processClaimedTask({
+      taskRecord,
+      tenant_id,
+      worker_id: 'worker-1',
+      workflowRepository: {
+        getTask,
+        releaseTaskLease,
+      } as unknown as DurableWorkflowRepository,
+      orchestratorFactory,
+    });
+
+    expect(orchestratorFactory).not.toHaveBeenCalled();
+    expect(processQueuedSignal).not.toHaveBeenCalled();
+    expect(releaseTaskLease).toHaveBeenCalledWith({
+      tenant_id,
+      run_id: 'run-parked',
+      lease_owner: 'worker-1',
+      task_version: 3,
+      target_state: 'waiting',
+    });
+  });
+
 
   it('resumes task when payload carries a valid resume event and complete checkpoint', async () => {
     const tenant_id = '00000000-0000-4000-8000-000000000001';
@@ -318,6 +367,42 @@ describe('startWorker', () => {
 
     expect(worker.blockers).toBeDefined();
     expect(worker.blockers?.some((b) => b.includes('CARE_CAPABILITY_UNBOUND'))).toBe(true);
+    await worker.close();
+  });
+  it('keeps startWorker polling disabled and reports a readiness blocker until admitted', async () => {
+    const worker = startWorker({}, {
+      hmac: () => '',
+      tenantIds: ['00000000-0000-4000-8000-000000000001'],
+      domainRegistry: {
+        modules: () => ['support'],
+        resolve: () => null,
+        accepts: () => null,
+      } as never,
+      workflowRepository: { claimNextQueuedTask: vi.fn() } as never,
+    });
+
+    expect(worker.poller?.isRunning).toBe(false);
+    expect(worker.blockers?.some((blocker) => blocker.startsWith('WORKER_READINESS_REQUIRED:'))).toBe(true);
+    await worker.close();
+  });
+  it('starts startWorker polling after readiness is explicitly admitted', async () => {
+    const scheduleTimer = vi.fn(() => ({}) as NodeJS.Timeout);
+    const worker = startWorker({}, {
+      hmac: () => '',
+      tenantIds: ['00000000-0000-4000-8000-000000000001'],
+      readiness: true,
+      domainRegistry: {
+        modules: () => ['support'],
+        resolve: () => null,
+        accepts: () => null,
+      } as never,
+      workflowRepository: { claimNextQueuedTask: vi.fn() } as never,
+      setTimeout: scheduleTimer,
+      clearTimeout: vi.fn(),
+    });
+
+    expect(worker.poller?.isRunning).toBe(true);
+    expect(scheduleTimer).toHaveBeenCalledOnce();
     await worker.close();
   });
 
@@ -1065,6 +1150,48 @@ describe('startWorker', () => {
       .rejects.toMatchObject({ code: 'TASK_LEASE_EXPIRED' });
   });
 
+  it('starts polling only when the explicit readiness gate is true', async () => {
+    const claimNextQueuedTask = vi.fn();
+    const scheduleTimer = vi.fn(() => ({}) as NodeJS.Timeout);
+    const poller = createWorkerPoller({
+      tenantIds: ['00000000-0000-4000-8000-000000000001'],
+      registry: { modules: () => ['support'] } as never,
+      workflowRepository: { claimNextQueuedTask } as never,
+      workerId: 'worker-ready',
+      leaseDurationMs: 300,
+      pollIntervalMs: 1000,
+      autoStartPolling: true,
+      readiness: true,
+      setTimeout: scheduleTimer,
+      clearTimeout: vi.fn(),
+      processTask: async () => undefined,
+    });
+
+    expect(poller.isRunning).toBe(true);
+    expect(scheduleTimer).toHaveBeenCalledOnce();
+    await poller.stop();
+  });
+
+  it('does not claim work or start when readiness is absent', async () => {
+    const claimNextQueuedTask = vi.fn();
+    const poller = createWorkerPoller({
+      tenantIds: ['00000000-0000-4000-8000-000000000001'],
+      registry: { modules: () => ['support'] } as never,
+      workflowRepository: { claimNextQueuedTask } as never,
+      workerId: 'worker-unready',
+      leaseDurationMs: 300,
+      pollIntervalMs: 1000,
+      autoStartPolling: true,
+      setTimeout: vi.fn(() => ({}) as NodeJS.Timeout),
+      clearTimeout: vi.fn(),
+      processTask: async () => undefined,
+    });
+
+    expect(poller.isRunning).toBe(false);
+    expect(await poller.pollOnce()).toBe(0);
+    expect(claimNextQueuedTask).not.toHaveBeenCalled();
+    await poller.stop();
+  });
   it('renews the execution lease at TTL/3 and aborts the run when renewal fails', async () => {
     vi.useFakeTimers();
     try {
@@ -1094,12 +1221,12 @@ describe('startWorker', () => {
         workflowRepository: {
           getTask,
           renewTaskLease,
-          claimNextQueuedTask: vi.fn().mockResolvedValue({
+          claimNextQueuedTask: vi.fn().mockResolvedValueOnce({
             task,
             task_version: 1,
             lease_owner: 'worker-1',
             lease_expires_at: task.lease_expires_at,
-          }),
+          }).mockResolvedValue(null),
           releaseTaskLease: vi.fn(),
           recordFailure: vi.fn(),
           transitionTask: vi.fn(),
@@ -1108,12 +1235,16 @@ describe('startWorker', () => {
         leaseDurationMs: 300,
         pollIntervalMs: 1000,
         autoStartPolling: false,
+        readiness: true,
         now: () => now,
         processTask,
         onError,
       });
 
       const pollPromise = poller.pollOnce();
+      await vi.waitFor(() => {
+        expect(processTask).toHaveBeenCalledOnce();
+      });
       await vi.advanceTimersByTimeAsync(100);
       expect(renewTaskLease).toHaveBeenCalledWith(expect.objectContaining({
         task_version: 1,

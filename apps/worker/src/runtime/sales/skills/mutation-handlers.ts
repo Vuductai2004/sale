@@ -24,6 +24,27 @@ type CreateCartInput = SalesCartInput;
 type CreateOrderInput = SalesOrderInput;
 type SendMessageInput = SalesCommunicationInput;
 
+function resolveServerEffectKey(
+  input: unknown,
+  serverEffectKey: string | undefined,
+  operation: string,
+): string {
+  if (typeof serverEffectKey !== 'string' || serverEffectKey.trim().length === 0) {
+    throw new SalesSkillToolError(
+      'EFFECT_KEY_REQUIRED',
+      `Cryptographic effect key is required for ${operation}`,
+    );
+  }
+  const inputRecord = input && typeof input === 'object' ? input as Record<string, unknown> : {};
+  if (Object.hasOwn(inputRecord, 'effect_key') && inputRecord.effect_key !== serverEffectKey) {
+    throw new SalesSkillToolError(
+      'EFFECT_KEY_MISMATCH',
+      `Caller-supplied effect key does not match the server-derived effect key for ${operation}`,
+    );
+  }
+  return serverEffectKey;
+}
+
 export async function handleCreateCart(
   options: SalesSkillToolPortOptions,
   invocation: SkillToolInvocation<CreateCartInput>,
@@ -31,14 +52,7 @@ export async function handleCreateCart(
   const { tenant_id } = invocation.context;
   const input = invocation.input;
 
-  const inputRecord = input as unknown as Record<string, unknown>;
-  const effect_key = invocation.context?.effect_key ?? (typeof inputRecord['effect_key'] === 'string' ? inputRecord['effect_key'] : undefined);
-  if (!effect_key || typeof effect_key !== 'string' || effect_key.trim().length === 0) {
-    throw new SalesSkillToolError(
-      'EFFECT_KEY_REQUIRED',
-      'Cryptographic effect key is required for cart creation',
-    );
-  }
+  resolveServerEffectKey(input, invocation.context.effect_key, 'cart creation');
 
   if (input.tenant_id !== tenant_id) {
     throw new SalesSkillToolError(
@@ -168,13 +182,7 @@ export async function handleCreateOrder(
   const { tenant_id } = invocation.context;
   const input = invocation.input;
 
-  const effect_key = input.effect_key ?? invocation.context?.effect_key;
-  if (!effect_key || typeof effect_key !== 'string' || effect_key.trim().length === 0) {
-    throw new SalesSkillToolError(
-      'EFFECT_KEY_REQUIRED',
-      'Cryptographic effect key is required for order creation',
-    );
-  }
+  const effect_key = resolveServerEffectKey(input, invocation.context.effect_key, 'order creation');
 
   if (input.tenant_id !== tenant_id) {
     throw new SalesSkillToolError(
@@ -310,10 +318,11 @@ export async function handleCreateOrder(
     );
   }
 
-  // 2. Dispatch to ERP order connector
+  // 2. Dispatch using only the server-derived effect identity.
+  const authoritativeInput: SalesOrderInput = { ...input, effect_key };
   let result: unknown;
   try {
-    result = await createOrderFn.call(orderPort, input);
+    result = await createOrderFn.call(orderPort, authoritativeInput);
   } catch (err) {
     if (err instanceof SalesSkillToolError) throw err;
     throw new SalesSkillToolError(
@@ -370,13 +379,7 @@ export async function handleSendMessage(
   const { tenant_id, correlation_id } = invocation.context;
   const input = invocation.input;
 
-  const effect_key = input.effect_key ?? invocation.context?.effect_key;
-  if (!effect_key || typeof effect_key !== 'string' || effect_key.trim().length === 0) {
-    throw new SalesSkillToolError(
-      'EFFECT_KEY_REQUIRED',
-      'Cryptographic effect key is required for sending outbound messages',
-    );
-  }
+  const effect_key = resolveServerEffectKey(input, invocation.context.effect_key, 'sending outbound messages');
 
   if (input.tenant_id !== tenant_id) {
     throw new SalesSkillToolError(
@@ -526,9 +529,10 @@ export async function handleSendMessage(
     );
   }
 
+  const authoritativeInput: SalesCommunicationInput = { ...input, effect_key };
   let result: unknown;
   try {
-    result = await sendMessageFn.call(commPort, input);
+    result = await sendMessageFn.call(commPort, authoritativeInput);
   } catch (err) {
     if (err instanceof SalesSkillToolError) throw err;
     throw new SalesSkillToolError(

@@ -53,6 +53,7 @@ export interface InputMktSegmentAudience {
   rfm_criteria: 'CHAMPIONS' | 'LOYAL' | 'POTENTIAL_LOYALIST' | 'AT_RISK' | 'HIBERNATING';
   min_days_inactive: number;
   max_segment_size?: number;
+  channel?: 'LINE' | 'WHATSAPP' | 'EMAIL' | 'SMS' | 'ZALO' | 'TIKTOK' | 'MESSENGER' | 'INSTAGRAM';
 }
 
 export interface OutputMktSegmentAudience {
@@ -67,7 +68,8 @@ export interface OutputMktSegmentAudience {
  */
 export interface InputMktCheckConsent {
   tenant_id: string;
-  customer_id: string;
+  customer_id?: string;
+  segment_id?: string;
   channel: 'LINE' | 'WHATSAPP' | 'SMS' | 'EMAIL' | 'ZALO' | 'TIKTOK' | 'MESSENGER' | 'INSTAGRAM';
 }
 
@@ -109,6 +111,8 @@ export interface OutputMktGenerateContent {
   headline: string;
   body_content: string;
   cta_text: string;
+  preheader?: string;
+  brand_audit_text?: string;
   channel_payload: ChannelSpecificPayload;
 }
 
@@ -119,8 +123,12 @@ export interface InputMktAuditBrand {
   tenant_id: string;
   draft_text: string;
   channel: string;
+  subject?: string;
+  title?: string;
+  headline?: string;
+  cta_text?: string;
+  preheader?: string;
 }
-
 export interface OutputMktAuditBrand {
   compliant: boolean;
   violations: Array<{
@@ -131,6 +139,7 @@ export interface OutputMktAuditBrand {
   }>;
   confidence_score: number;
 }
+
 
 /**
  * §4.1 Skill 6: skill.mkt.dispatch_campaign

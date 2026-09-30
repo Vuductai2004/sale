@@ -41,8 +41,8 @@ export interface SalesCustomer360Fact extends Customer360Fact {
 export interface SalesPriceFloorQuery {
   readonly tenant_id: string;
   readonly sku_id: string;
+  readonly proposed_price?: number | undefined;
 }
-
 /** Owner-approved floor decision with full provenance and quote TTL. */
 export interface SalesPriceFloorApproved {
   readonly ok?: true;
@@ -99,6 +99,7 @@ export interface SalesPriceFloorPort {
 export interface SalesCartItem {
   readonly sku_id: string;
   readonly quantity: number;
+  readonly proposed_price?: number | undefined;
 }
 
 /** Inbound payload for API-002.CommerceCartAPI. */
@@ -111,6 +112,7 @@ export interface SalesCartInput {
   readonly offer_id?: string | undefined;
   readonly discount_amount?: number | undefined;
   readonly discount_percent?: number | undefined;
+  readonly proposed_price?: number | undefined;
 }
 
 /** Canonical output schema of API-002.CommerceCartAPI. */

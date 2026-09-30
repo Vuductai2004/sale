@@ -369,13 +369,41 @@ describe('TC-E2E-001 worker claim seam', () => {
     expect(tasks.get(salesAdmission!.run_id)?.state, JSON.stringify((workflowEngine.transitionTask as ReturnType<typeof vi.fn>).mock.calls.filter((call) => call[1] === salesAdmission!.run_id).map((call) => call[3]))).toBe('completed');
     expect(dispatched).toContain('skill.sales.recommend_product');
 
+    expect(
+      [...admitted.values()].some((row) => row.signal.event_type === CROSS_DOMAIN_HANDOFF_EVENT_TYPES.sales_to_care),
+    ).toBe(false);
+
+    // A caller cannot make Sales emit a leg while the owner itinerary is unbound. Injecting a
+    // brokered Care leg is still covered separately: Care must retain its fail-closed refusal.
+    const injectedCare = await broker.admit({
+      tenant_id: TENANT_ID,
+      customer_id: CUSTOMER_ID,
+      correlation_id: CORRELATION_ID,
+      source_domain: 'sales',
+      source_agent: 'SAL-02',
+      source_run_id: salesAdmission!.run_id,
+      source_authority: 'AUTH-1',
+      target_domain: 'care',
+      target_agent: 'CS-01',
+      reason: 'Injected stray Sales→Care leg for refusal coverage',
+      evidence: [{
+        classification: 'SIGNAL',
+        claim: 'injected stray care leg',
+        source_uri: 'e2e://tc-e2e-001',
+        source_version: 'v1',
+        verified_by: 'server',
+      }],
+      occurred_at: NOW.toISOString(),
+    });
+    expect(injectedCare.admitted).toBe(true);
+    const careRun = injectedCare.target_run_id;
     const careAdmission = [...admitted.values()].find((row) => row.signal.event_type === CROSS_DOMAIN_HANDOFF_EVENT_TYPES.sales_to_care);
-    expect(careAdmission, 'sales leg must admit the care target').toBeDefined();
+
+    expect(careAdmission, 'an injected Care leg must reach the Care refusal seam').toBeDefined();
+    expect(careAdmission?.run_id).toBe(careRun);
     expect(careAdmission?.signal.payload['module']).toBe('support');
     expect(careAdmission?.signal.correlation_id).toBe(CORRELATION_ID);
     expect(careAdmission?.handoff_id).not.toBe(salesAdmission?.handoff_id);
-
-    const careRun = careAdmission!.run_id;
     let careError: unknown;
     try {
       await processClaimedTask({

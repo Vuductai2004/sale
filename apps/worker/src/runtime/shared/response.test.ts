@@ -11,9 +11,11 @@ import {
   RunResponseStoreAdapter,
   VerifiedResponseFinalizer,
 } from './response.js';
+import { computeQuoteToken } from '../sales/skills/quote-payment-guards.js';
 
 const TENANT = '99999999-9999-4999-8999-999999999999';
 const RUN = 'run-response-test';
+const QUOTE_SECRET = 'response-test-quote-signing-secret';
 const PAYLOAD_SHA = 'a'.repeat(64);
 const NOW = new Date('2026-09-28T00:00:00.000Z');
 
@@ -148,27 +150,107 @@ describe('VerifiedResponseFinalizer', () => {
   });
 
   it('formats a non-expired signed sales quote and rejects expired or incomplete quotes', async () => {
+    const quoteExpiresAt = '2026-09-28T00:15:00.000Z';
     const quote = verified({
       sku_id: 'NM-L01-BLK',
       list_price: 18_900_000,
       final_price: 18_900_000,
       p_floor: 18_900_000,
       currency: 'VND',
-      quote_token: 'signed-quote',
-      quote_expires_at: '2026-09-28T00:15:00.000Z',
-      customer_id: 'customer-1',
+      quote_token: computeQuoteToken(QUOTE_SECRET, {
+        tenant_id: TENANT,
+        sku_id: 'NM-L01-BLK',
+        customer_id: 'customer-1',
+        final_price: 18_900_000,
+        p_floor: 18_900_000,
+        currency: 'VND',
+        quote_expires_at: quoteExpiresAt,
+      }),
+      quote_expires_at: quoteExpiresAt,
     });
-    const result = await new VerifiedResponseFinalizer(() => NOW).finalize(input('sales', [quote]));
+    const result = await new VerifiedResponseFinalizer(() => NOW, QUOTE_SECRET).finalize(input('sales', [quote]));
     expect(result.answer).toContain('NM-L01-BLK');
     expect(result.answer).toContain('VND 18900000');
     expect(result.sources[0]?.source_file).toBe('API-001.PricingEngine');
 
     await expect(
-      new VerifiedResponseFinalizer(() => NOW).finalize(input('sales', [verified({
+      new VerifiedResponseFinalizer(() => NOW, QUOTE_SECRET).finalize(input('sales', [verified({
         ...quote.receipt.response_payload,
         quote_expires_at: '2026-09-27T23:59:00.000Z',
       })])),
     ).rejects.toMatchObject({ code: 'RESPONSE_UNGROUNDED' });
+  });
+
+  it('refuses a quote whose HMAC is invalid before exposing its amount', async () => {
+    const quote = verified({
+      sku_id: 'NM-L01-BLK',
+      list_price: 100,
+      final_price: 100,
+      p_floor: 80,
+      currency: 'VND',
+      quote_token: '0'.repeat(64),
+      quote_expires_at: '2026-09-28T00:15:00.000Z',
+      customer_id: 'customer-1',
+    });
+
+    await expect(
+      new VerifiedResponseFinalizer(() => NOW, QUOTE_SECRET).finalize(input('sales', [quote])),
+    ).rejects.toMatchObject({ code: 'RESPONSE_UNGROUNDED' });
+  });
+
+  it('refuses a quote whose total differs from the verified cart subtotal', async () => {
+    const quoteExpiresAt = '2026-09-28T00:15:00.000Z';
+    const quote = verified({
+      sku_id: 'NM-L01-BLK',
+      list_price: 100,
+      final_price: 100,
+      p_floor: 80,
+      currency: 'VND',
+      quote_token: computeQuoteToken(QUOTE_SECRET, {
+        tenant_id: TENANT,
+        sku_id: 'NM-L01-BLK',
+        customer_id: 'customer-1',
+        final_price: 100,
+        p_floor: 80,
+        currency: 'VND',
+        quote_expires_at: quoteExpiresAt,
+      }),
+      quote_expires_at: quoteExpiresAt,
+      customer_id: 'customer-1',
+    });
+    const cart = verified({ cart_id: 'cart-1', subtotal: 125, currency: 'VND' }, 2);
+
+    await expect(
+      new VerifiedResponseFinalizer(() => NOW, QUOTE_SECRET).finalize(input('sales', [quote, cart])),
+    ).rejects.toMatchObject({ code: 'RESPONSE_UNGROUNDED' });
+  });
+
+  it('escapes untrusted quote fields in the rendered answer', async () => {
+    const quoteExpiresAt = '2026-09-28T00:15:00.000Z';
+    const sku = '<img src=x onerror=alert(1)>';
+    const quote = verified({
+      sku_id: sku,
+      list_price: 100,
+      final_price: 100,
+      p_floor: 80,
+      currency: 'VND&',
+      quote_token: computeQuoteToken(QUOTE_SECRET, {
+        tenant_id: TENANT,
+        sku_id: sku,
+        customer_id: 'customer-1',
+        final_price: 100,
+        p_floor: 80,
+        currency: 'VND&',
+        quote_expires_at: quoteExpiresAt,
+      }),
+      quote_expires_at: quoteExpiresAt,
+      customer_id: 'customer-1',
+    });
+
+    const result = await new VerifiedResponseFinalizer(() => NOW, QUOTE_SECRET).finalize(input('sales', [quote]));
+    expect(result.answer).toContain('&lt;img src=x onerror=alert(1)&gt;');
+    expect(result.answer).toContain('VND&amp; 100');
+    expect(result.answer).not.toContain('<img');
   });
 
   it('returns a stored marketing draft without claiming delivery', async () => {

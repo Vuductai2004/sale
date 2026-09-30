@@ -43,9 +43,9 @@ import {
 } from './runtime/marketing/factory.js';
 import { createDatabaseAutonomy } from './worker-database-autonomy.js';
 import { createWorkerDomainBindings } from './worker-bindings.js';
-import { createWorkerPoller, type WorkerPollerHandle } from './worker-polling.js';
+import { createWorkerPoller, type WorkerDrainResult, type WorkerPollerHandle } from './worker-polling.js';
 
-export type { WorkerPollerHandle } from './worker-polling.js';
+export type { WorkerDrainResult, WorkerPollerHandle } from './worker-polling.js';
 
 export const VALID_AGENT_MODULES: readonly string[] = Object.freeze(['support', 'sales', 'marketing']);
 
@@ -145,7 +145,7 @@ export interface WorkerHandle {
    * @returns The provider receipt.
    */
   dispatchAction(draft: ActionDraft): Promise<ExecutionReceipt>;
-  close(): Promise<void>;
+  close(): Promise<WorkerDrainResult>;
 }
 
 export interface WorkerEnv extends WorkerConnectorEnv {
@@ -157,6 +157,8 @@ export interface WorkerEnv extends WorkerConnectorEnv {
   readonly AUDIT_HMAC_SECRET?: string;
   readonly DEMO_MODE?: string;
   readonly DATABASE_URL?: string;
+  readonly WORKER_TENANT_CONCURRENCY?: string;
+  readonly WORKER_DRAIN_TIMEOUT_MS?: string;
   /**
    * Enables the brokered cross-domain journey (`marketing → sales → care → retention`). Absent or
    * not `true`, no broker is bound and a plan that declares a handoff refuses
@@ -181,10 +183,14 @@ export interface WorkerExecutionOptions extends WorkerConnectorOptions {
   readonly domainRegistry?: DomainRuntimeRegistry;
   readonly pollIntervalMs?: number;
   readonly leaseDurationMs?: number;
+  readonly tenantConcurrency?: number;
+  readonly drainTimeoutMs?: number;
   readonly now?: () => Date;
   readonly setTimeout?: (handler: () => void, timeout: number) => NodeJS.Timeout;
   readonly clearTimeout?: (handle: NodeJS.Timeout) => void;
   readonly autoStartPolling?: boolean;
+  /** Explicit admission from the process readiness gate; absent means polling stays disabled. */
+  readonly readiness?: boolean;
   readonly onError?: (tenant_id: string, error: unknown) => void;
   readonly careFactoryOptions?: CareOrchestratorFactoryOptions;
   readonly salesFactoryOptions?: SalesOrchestratorFactoryOptions;
@@ -192,6 +198,18 @@ export interface WorkerExecutionOptions extends WorkerConnectorOptions {
   readonly crossDomainHandoff?: ICrossDomainHandoffBroker;
   /** Persistence the broker reads the durable journey from; defaults to the real repository. */
   readonly handoffRepository?: { readCrossDomainLifecycle: typeof readCrossDomainLifecycle };
+}
+
+function parsePositiveWorkerInteger(raw: string | undefined, name: string, defaultValue: number): number {
+  if (raw === undefined) return defaultValue;
+  if (!/^[1-9]\d*$/.test(raw)) {
+    throw new Error(`${name}_INVALID: ${name} must be a positive integer`);
+  }
+  const parsed = Number(raw);
+  if (!Number.isSafeInteger(parsed) || parsed < 1) {
+    throw new Error(`${name}_INVALID: ${name} must be a positive integer`);
+  }
+  return parsed;
 }
 /**
  * Releases a task only while this worker still owns the lease. Event-bearing parked tasks retain
@@ -249,6 +267,8 @@ export async function processClaimedTask(params: {
 }): Promise<void> {
   const { taskRecord, tenant_id, worker_id, workflowRepository, orchestratorFactory, signal: abortSignal } = params;
   const hadResumeEvent = hasResumeEvent(taskRecord.state_payload);
+  const parkedWithoutResumeEvent =
+    (taskRecord.state === 'waiting' || taskRecord.state === 'awaiting_human') && !hadResumeEvent;
 
   const registry = params.registry ?? (
     orchestratorFactory
@@ -260,6 +280,12 @@ export async function processClaimedTask(params: {
   );
 
   try {
+    // Repository claims should already exclude parked rows without a resume event. Keep the worker
+    // fail-closed if a stale/misbehaving claim crosses that boundary: parked progress is resumed only
+    // by its durable handoff event, never by replaying the original signal.
+    if (parkedWithoutResumeEvent) {
+      return;
+    }
     abortSignal?.throwIfAborted();
     const payload = taskRecord.state_payload;
     const record = asRecord(payload);
@@ -353,6 +379,7 @@ export async function processClaimedTask(params: {
 
       abortSignal?.throwIfAborted();
       await orchestrator.resumeTask(taskRecord.run_id, resumeEvent as never);
+      abortSignal?.throwIfAborted();
       return;
     }
 
@@ -418,6 +445,7 @@ export async function processClaimedTask(params: {
 
       abortSignal?.throwIfAborted();
       await orchestrator.processQueuedSignal(taskRecord.run_id, signal as SignalEnvelope, { worker_id });
+      abortSignal?.throwIfAborted();
       return;
     }
 
@@ -431,16 +459,26 @@ export async function processClaimedTask(params: {
       lease_owner: worker_id,
     });
   } finally {
-    const current = await workflowRepository.getTask(tenant_id, taskRecord.run_id);
-    const currentPayload = asRecord(current?.state_payload);
-    const currentPending = currentPayload?.['pending_action'];
-    if (
-      hadResumeEvent
-      || hasResumeEvent(current?.state_payload)
-      || !(currentPending && typeof currentPending === 'object' && !Array.isArray(currentPending)
-        && 'mutating' in currentPending && currentPending.mutating === true)
-    ) {
-      await releaseLeaseIfHeld(workflowRepository, tenant_id, taskRecord.run_id, worker_id, hadResumeEvent);
+    if (!abortSignal?.aborted) {
+      const current = await workflowRepository.getTask(tenant_id, taskRecord.run_id);
+      if (!abortSignal?.aborted) {
+        const currentPayload = asRecord(current?.state_payload);
+        const currentPending = currentPayload?.['pending_action'];
+        if (
+          hadResumeEvent
+          || hasResumeEvent(current?.state_payload)
+          || !(currentPending && typeof currentPending === 'object' && !Array.isArray(currentPending)
+            && 'mutating' in currentPending && currentPending.mutating === true)
+        ) {
+          await releaseLeaseIfHeld(
+            workflowRepository,
+            tenant_id,
+            taskRecord.run_id,
+            worker_id,
+            hadResumeEvent || parkedWithoutResumeEvent,
+          );
+        }
+      }
     }
   }
 }
@@ -453,6 +491,18 @@ export function startWorker(
   env: WorkerEnv = process.env,
   options: WorkerExecutionOptions = { hmac: nodeHmacSha256Hex },
 ): WorkerHandle {
+  const configuredTenantConcurrency = parsePositiveWorkerInteger(
+    env.WORKER_TENANT_CONCURRENCY,
+    'WORKER_TENANT_CONCURRENCY',
+    2,
+  );
+  const configuredDrainTimeoutMs = parsePositiveWorkerInteger(
+    env.WORKER_DRAIN_TIMEOUT_MS,
+    'WORKER_DRAIN_TIMEOUT_MS',
+    25_000,
+  );
+  const tenantConcurrency = options.tenantConcurrency ?? configuredTenantConcurrency;
+  const drainTimeoutMs = options.drainTimeoutMs ?? configuredDrainTimeoutMs;
   const connectors = createWorkerConnectors(env, options);
   const workerId = options.workerId ?? `worker_${randomUUID().slice(0, 8)}`;
   const blockers: string[] = [];
@@ -545,6 +595,11 @@ export function startWorker(
   if (tenantIds.length === 0) {
     blockers.push('WORKER_TENANT_IDS_EMPTY: No tenants configured; background polling disabled (fail closed).');
   }
+  const autoStartPolling = options.autoStartPolling ?? true;
+  const readiness = options.readiness === true;
+  if (autoStartPolling && !readiness) {
+    blockers.push('WORKER_READINESS_REQUIRED: readiness gate has not admitted background polling.');
+  }
   const poller = createWorkerPoller({
     tenantIds,
     registry,
@@ -552,10 +607,13 @@ export function startWorker(
     workerId,
     leaseDurationMs,
     pollIntervalMs,
+    tenantConcurrency,
+    drainTimeoutMs,
+    readiness,
     ...(options.now === undefined ? {} : { now: options.now }),
     ...(options.setTimeout === undefined ? {} : { setTimeout: options.setTimeout }),
     ...(options.clearTimeout === undefined ? {} : { clearTimeout: options.clearTimeout }),
-    autoStartPolling: options.autoStartPolling ?? true,
+    autoStartPolling,
     onError: options.onError,
     processTask: ({ taskRecord, tenant_id, signal }) => processClaimedTask({
       taskRecord,
@@ -575,8 +633,8 @@ export function startWorker(
     blockers: Object.freeze(blockers),
     registry,
     dispatchAction: (draft) => connectors.dispatcher.dispatch(draft),
-    async close(): Promise<void> {
-      await poller.stop();
-    },
+    close: () => poller.stop(),
   };
+
+
 }

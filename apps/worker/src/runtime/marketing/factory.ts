@@ -80,6 +80,7 @@ import {
   type MarketingSkillServices,
 } from './skills/index.js';
 import { createMarketingKnowledgePort } from './knowledge-adapter.js';
+import type { MarketingPolicyPort } from './contracts.js';
 type MarketingFactoryEnv = WorkerConnectorEnv & {
   readonly AUDIT_HMAC_SECRET?: string;
 };
@@ -119,16 +120,21 @@ const MARKETING_MUTATING: Readonly<Record<string, boolean>> = Object.freeze({
 });
 
 const MARKETING_TIMEOUT_MS: Readonly<Record<string, number>> = Object.freeze({
-  'skill.mkt.analyze_market_signal': 5000,
-  'skill.mkt.segment_audience': 5000,
-  'skill.mkt.check_consent': 3000,
+  'skill.mkt.analyze_market_signal': 3000,
+  'skill.mkt.segment_audience': 2500,
+  'skill.mkt.check_consent': 1000,
   'skill.mkt.generate_content': 18000,
-  'skill.mkt.audit_brand_compliance': 5000,
+  'skill.mkt.audit_brand_compliance': 2000,
   'skill.mkt.dispatch_campaign': 5000,
-  'skill.mkt.evaluate_attribution': 5000,
+  'skill.mkt.evaluate_attribution': 4000,
 });
 
 const DEFAULT_CAMPAIGN_THEME = 'Customer reactivation campaign';
+/**
+ * Safe fallback when no tenant owner policy is available. This is intentionally conservative;
+ * callers requesting more recipients must supply an owner-approved policy value.
+ */
+const DEFAULT_MARKETING_AUDIENCE_LIMIT = 100;
 const DEFAULT_CONTENT_CHANNEL: InputMktGenerateContent['channel'] = 'EMAIL_HTML';
 const DEFAULT_CONTENT_LOCALE: InputMktGenerateContent['locale'] = 'en-US';
 const CONTENT_CHANNELS: readonly InputMktGenerateContent['channel'][] = Object.freeze([
@@ -206,6 +212,7 @@ interface NormalizedCampaignRequest {
   readonly segment_id: string;
   readonly objective: 'reactivation';
   readonly min_days_inactive: number;
+  readonly max_segment_size?: number;
   readonly instruction: string;
   readonly content_channel: InputMktGenerateContent['channel'];
   readonly content_locale: InputMktGenerateContent['locale'];
@@ -284,6 +291,20 @@ function normalizedCampaignRequest(signal: SignalEnvelope, tenant_id: string): N
       'campaign.requested instruction must be a bounded non-empty string when supplied',
     );
   }
+  const requestedSize = raw['max_segment_size'];
+  if (
+    requestedSize !== undefined
+    && (
+      typeof requestedSize !== 'number'
+      || !Number.isSafeInteger(requestedSize)
+      || requestedSize < 1
+    )
+  ) {
+    throw new OrchestratorError(
+      'MARKETING_CAMPAIGN_INVALID',
+      'campaign.requested max_segment_size must be a positive safe integer when supplied',
+    );
+  }
   const campaign_id = raw['campaign_id'];
   const contentConstraints = normalizedContentConstraints(raw);
   return {
@@ -293,6 +314,7 @@ function normalizedCampaignRequest(signal: SignalEnvelope, tenant_id: string): N
     segment_id,
     objective: 'reactivation',
     min_days_inactive,
+    ...(requestedSize === undefined ? {} : { max_segment_size: requestedSize }),
     instruction: typeof instruction === 'string'
       ? instruction.trim()
       : DEFAULT_CAMPAIGN_THEME,
@@ -300,11 +322,27 @@ function normalizedCampaignRequest(signal: SignalEnvelope, tenant_id: string): N
   };
 }
 
-function campaignPlan(
+async function campaignPlan(
   signal: SignalEnvelope,
   context: HydratedContext,
-): ExecutionPlan {
+  audiencePolicy?: MarketingPolicyPort,
+): Promise<ExecutionPlan> {
   const campaign = normalizedCampaignRequest(signal, context.tenant_id);
+  const ownerLimit = await audiencePolicy?.getApprovedAudienceLimit(context.tenant_id);
+  const audienceLimit = ownerLimit === undefined ? DEFAULT_MARKETING_AUDIENCE_LIMIT : ownerLimit;
+  if (!Number.isSafeInteger(audienceLimit) || audienceLimit < 1) {
+    throw new OrchestratorError(
+      'ASM_003_UNAVAILABLE',
+      'Owner-approved ASM-003 audience limit is unavailable or invalid',
+    );
+  }
+  if (campaign.max_segment_size !== undefined && campaign.max_segment_size > audienceLimit) {
+    throw new OrchestratorError(
+      'AUDIENCE_LIMIT_EXCEEDED',
+      `Requested audience size ${campaign.max_segment_size} exceeds owner-approved limit ${audienceLimit}; refusing campaign`,
+    );
+  }
+  const requestedAudienceSize = campaign.max_segment_size ?? audienceLimit;
   const channel = campaign.content_channel;
   const dispatchChannel = DISPATCH_CHANNEL_BY_CONTENT_CHANNEL[campaign.content_channel];
   return {
@@ -319,8 +357,8 @@ function campaignPlan(
           tenant_id: context.tenant_id,
           rfm_criteria: 'HIBERNATING',
           min_days_inactive: campaign.min_days_inactive,
-          // Tenant policy cap: the reactivation audience never exceeds 100 customers.
-          max_segment_size: 100,
+          max_segment_size: requestedAudienceSize,
+          channel: dispatchChannel,
         },
         required_authority: 'AUTH-1',
         mutating: false,
@@ -363,7 +401,7 @@ function campaignPlan(
         timeout_ms: MARKETING_TIMEOUT_MS['skill.mkt.audit_brand_compliance']!,
         depends_on_steps: [2],
         input_bindings: {
-          draft_text: { source_step_index: 2, response_path: 'body_content' },
+          draft_text: { source_step_index: 2, response_path: 'brand_audit_text' },
         },
       },
       {
@@ -451,15 +489,22 @@ export class MarketingContextAggregator implements IContextAggregator {
 class MarketingAgentRuntime implements IAgentRuntime {
   private readonly signals = new Map<string, SignalEnvelope>();
 
+  private static signalKey(tenant_id: string, signal_id: string): string {
+    return `${tenant_id}\u0000${signal_id}`;
+  }
+
   /**
    * @param journeyEntry Whether this deployment brokered the cross-domain journey. When false the
    * planner is exactly what it was before P4: it plans its own leg and hands off to nobody.
    */
-  constructor(private readonly journeyEntry: boolean = false) {}
+  constructor(
+    private readonly journeyEntry: boolean = false,
+    private readonly audiencePolicy?: MarketingPolicyPort,
+  ) {}
 
   async deriveHypothesis(signal: SignalEnvelope, _context: HydratedContext): Promise<HypothesisRecord> {
     const id = isCampaignRequest(signal) ? 'campaign.requested' : skillId(signal);
-    this.signals.set(signal.signal_id, signal);
+    this.signals.set(MarketingAgentRuntime.signalKey(signal.tenant_id, signal.signal_id), signal);
     return {
       classification: 'HYPOTHESIS',
       intent: 'marketing:' + id,
@@ -499,13 +544,15 @@ class MarketingAgentRuntime implements IAgentRuntime {
     hypothesis: HypothesisRecord,
   ): Promise<ExecutionPlan> {
     const signalId = hypothesis.derived_from_signals[0];
-    const signal = typeof signalId === 'string' ? this.signals.get(signalId) : undefined;
+    const signal = typeof signalId === 'string'
+      ? this.signals.get(MarketingAgentRuntime.signalKey(context.tenant_id, signalId))
+      : undefined;
     if (!signal) {
       throw new OrchestratorError('MARKETING_SIGNAL_CONTEXT_LOST', 'signal was not retained across shared planning stages');
     }
-    this.signals.delete(signal.signal_id);
+    this.signals.delete(MarketingAgentRuntime.signalKey(context.tenant_id, signal.signal_id));
     if (isCampaignRequest(signal)) {
-      return campaignPlan(signal, context);
+      return campaignPlan(signal, context, this.audiencePolicy);
     }
     const id = skillId(signal);
     const agent_id = MARKETING_AGENT_BY_SKILL[id]!;
@@ -629,9 +676,8 @@ class SharedMarketingPolicyEngine implements IPolicyEngine {
 
   async validateAction(action: ActionDraft, context: HydratedContext): Promise<ActionDraft> {
     // MKT-06 is refused here, before any schema or approval work: the shared route has no
-    // evidence-bound analytics contract, and only matched authoritative downstream order/payment
-    // evidence may count as revenue. The offline/fixture path (`runtime.ts` `evaluateAttribution`
-    // plus the PILOT-01 harness) keeps the evidence-bound validator until such a contract exists.
+    // Revenue attribution is admitted only when matched authoritative downstream order/payment
+    // evidence is present; dispatch receipts alone never establish revenue.
     if (action.skill_id === 'skill.mkt.evaluate_attribution') {
       throw new OrchestratorError(
         'MKT06_EVIDENCE_BINDING_REQUIRED',
@@ -763,6 +809,8 @@ export interface MarketingOrchestratorFactoryOptions {
   readonly knowledge_root?: string;
   readonly knowledge_tenant_ids?: readonly string[];
   readonly knowledge_tenant_id?: string;
+  /** Owner-approved audience cap used by campaign planning; absent uses the documented safe default. */
+  readonly audiencePolicy?: MarketingPolicyPort;
   /**
    * Optional tenant-bound skill adapter factory. The callback is invoked with the orchestrator's
    * server-resolved tenant and may return the seven connector ports plus the aggregate consent
@@ -882,7 +930,7 @@ export function createMarketingOrchestratorFactory(
   const services = options.skillServices ?? createMarketingSkillServices(skillOptions);
   const contextAggregator = options.contextAggregator ?? new MarketingContextAggregator();
   const agentRuntime = options.agentRuntime
-    ?? new MarketingAgentRuntime(options.crossDomainHandoff !== undefined);
+    ?? new MarketingAgentRuntime(options.crossDomainHandoff !== undefined, options.audiencePolicy);
   const policyAudit = options.audit === null
     ? undefined
     : options.audit ?? (auditTrail ? createPolicyAuditSink(auditTrail) : undefined);

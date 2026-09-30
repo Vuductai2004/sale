@@ -1,7 +1,7 @@
 import type { SkillToolInvocation, SkillToolPort } from '@agentos/skills';
 
 import { MARKETING_APPROVED_DOCUMENT_ALLOWLIST } from '../knowledge-adapter.js';
-import { auditMarketingBrand } from '../content.js';
+import { auditMarketingBrand } from '../brand-guard.js';
 
 import type {
   InputMktAnalyzeSignal,
@@ -106,11 +106,29 @@ export function createMarketingSkillToolPort(
         tool_binding === 'API-002.ConsentStore'
       ) {
         const typedConsentInput = input as unknown as InputMktCheckConsent;
-        const segmentId = typedConsentInput.customer_id;
-        if (
-          typeof segmentId === 'string'
-          && /^inactive[_-][1-9][0-9]*d$/.test(segmentId)
-        ) {
+        if (typedConsentInput.tenant_id !== context.tenant_id) {
+          throw new MarketingSkillToolError(
+            'TENANT_CONTEXT_MISMATCH',
+            'Consent input tenant must match the server-resolved execution tenant',
+          );
+        }
+        if (typeof typedConsentInput.channel !== 'string' || typedConsentInput.channel.trim().length === 0) {
+          throw new MarketingSkillToolError(
+            'INVALID_CHANNEL',
+            'Consent checking requires an explicit contactable channel',
+          );
+        }
+        const segmentId = typedConsentInput.segment_id;
+        const customerId = typedConsentInput.customer_id;
+        const hasSegmentId = typeof segmentId === 'string' && segmentId.trim().length > 0;
+        const hasCustomerId = typeof customerId === 'string' && customerId.trim().length > 0;
+        if (hasSegmentId && hasCustomerId) {
+          throw new MarketingSkillToolError(
+            'CONSENT_IDENTITY_AMBIGUOUS',
+            'Consent checking requires exactly one of customer_id or segment_id',
+          );
+        }
+        if (hasSegmentId) {
           if (!options.audience_consent) {
             throw new MarketingSkillToolError(
               'CONSENT_AGGREGATE_PORT_UNAVAILABLE',
@@ -125,6 +143,12 @@ export function createMarketingSkillToolPort(
             },
             context,
           )) as TOutput;
+        }
+        if (!hasCustomerId) {
+          throw new MarketingSkillToolError(
+            'CUSTOMER_IDENTITY_REQUIRED',
+            'A customer_id or explicitly typed segment_id is required for consent checking',
+          );
         }
         const consentPort =
           options.consent ?? options.consent_port ?? options.consentPort;
@@ -152,10 +176,44 @@ export function createMarketingSkillToolPort(
           );
         }
         try {
-          return (await options.content_engine.generateContent(
+          const generated = await options.content_engine.generateContent(
             input as unknown as InputMktGenerateContent,
             context,
-          )) as TOutput;
+          );
+          const content = generated as unknown as {
+            readonly headline: string;
+            readonly body_content: string;
+            readonly cta_text: string;
+            readonly subject?: string;
+            readonly title?: string;
+            readonly preheader?: string;
+            readonly brand_audit_text?: string;
+          };
+          const copyFields = [
+            ['subject', content.subject],
+            ['title', content.title],
+            ['headline', content.headline],
+            ['body_content', content.body_content],
+            ['cta_text', content.cta_text],
+            ['preheader', content.preheader],
+          ] as const;
+          for (const [fieldName, value] of copyFields) {
+            if (value !== undefined && (typeof value !== 'string' || value.trim().length === 0)) {
+              throw new MarketingSkillToolError(
+                'PROVIDER_ERROR',
+                `Core.LLMContentEngine returned an invalid ${fieldName} copy field`,
+              );
+            }
+          }
+          const auditFields = copyFields
+            .map(([, value]) => value)
+            .filter((value): value is string => typeof value === 'string');
+          return {
+            ...(generated as object),
+            // Recompose on the server so every rendered copy surface is audited. A provider-supplied
+            // summary may omit subject/title/preheader and is never treated as complete evidence.
+            brand_audit_text: auditFields.join('\n'),
+          } as TOutput;
         } catch (error) {
           if (error instanceof MarketingSkillToolError) throw error;
           const providerCode = error !== null && typeof error === 'object' && 'code' in error

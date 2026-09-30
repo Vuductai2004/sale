@@ -238,14 +238,16 @@ export function createMarketingConsentPort(options: MarketingConsentPortOptions)
         };
       }
 
-      if (!row.is_granted || row.opt_out_timestamp !== null) {
+      if (!row.is_granted || row.opt_in_timestamp === null || row.opt_out_timestamp !== null) {
         return {
           tenant_id: serverBoundTenantId,
           customer_id: customerId,
           channel: input.channel,
           allowed: false,
           consent_timestamp: row.opt_in_timestamp ? new Date(row.opt_in_timestamp).toISOString() : null,
-          suppression_reason: 'CONSENT_OPTED_OUT',
+          suppression_reason: row.opt_in_timestamp === null
+            ? 'CONSENT_TIMESTAMP_MISSING'
+            : 'CONSENT_OPTED_OUT',
           source_uri: `urn:agentos:consent:${row.id}`,
           source_version: row.updated_at ? new Date(row.updated_at).toISOString() : 'none',
         };

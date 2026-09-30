@@ -57,6 +57,7 @@ export interface ErpReadPort {
     readonly tenant_id: string;
     readonly resource: string;
     readonly key?: string;
+    readonly customer_id?: string;
   }): Promise<ConnectorReadResult>;
   reconcile?(input: {
     readonly tenant_id: string;
@@ -165,7 +166,7 @@ export function createWorkerConnectors(
         provider: 'mock-erp (local/ci only)',
         read_resources: [],
       },
-      dispatch: (draft) => connector.dispatch(draft),
+      dispatch: (draft, options) => connector.dispatch(draft, options),
       read: (input) => connector.read(input),
       reconcile: (input) => connector.reconcile(input),
     });

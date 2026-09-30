@@ -75,7 +75,10 @@ interface OrchestratorInternals {
   };
 }
 
-const makeFactory = (crossDomainHandoff = false) => createMarketingOrchestratorFactory({
+const makeFactory = (
+  crossDomainHandoff = false,
+  audiencePolicy?: { getApprovedAudienceLimit: (tenant_id: string) => Promise<number | undefined> },
+) => createMarketingOrchestratorFactory({
   auditSecret: AUDIT_SECRET,
   audit: null,
   workflowRepository: {} as DurableWorkflowRepository,
@@ -89,6 +92,7 @@ const makeFactory = (crossDomainHandoff = false) => createMarketingOrchestratorF
   adapterDispatcher: {} as IAdapterDispatcher,
   effectGuard: {} as IEffectGuard,
   policyEngine: {} as IPolicyEngine,
+  ...(audiencePolicy === undefined ? {} : { audiencePolicy }),
   ...(crossDomainHandoff
     ? { crossDomainHandoff: { admit: vi.fn() } }
     : {}),
@@ -321,6 +325,10 @@ describe('default Marketing context aggregation', () => {
       locale: 'vi-VN',
     });
     expect(content.timeout_ms).toBe(18000);
+    const audit = plan.steps[2]!;
+    expect(audit.input_bindings).toEqual({
+      draft_text: { source_step_index: 2, response_path: 'brand_audit_text' },
+    });
     const dispatch = plan.steps[3]!;
     expect(dispatch.skill_id).toBe('skill.mkt.dispatch_campaign');
     expect(dispatch.required_authority).toBe('AUTH-4');
@@ -338,5 +346,94 @@ describe('default Marketing context aggregation', () => {
       expect(Object.keys(step.input_bindings ?? {})).not.toContain('customer_id');
       expect(Object.keys(step.input_parameters)).not.toContain('customer_id');
     }
+  });
+  it('refuses an operator audience request above the owner-approved policy cap', async () => {
+    const policy = {
+      getApprovedAudienceLimit: vi.fn(async () => 25),
+    };
+    const orchestrator = await makeFactory(false, policy)(TENANT);
+    const { contextAggregator, agentRuntime } = internals(orchestrator).dependencies;
+    const campaignSubject = {
+      session_id: 'demo-tenant-operator-cap',
+      channel_type: 'MARKETING_CAMPAIGN',
+      channel_identifier: 'demo-tenant-operator-cap',
+    };
+    const context = await contextAggregator.hydrateContext(TENANT, campaignSubject, 'correlation-campaign-cap');
+    const campaign: SignalEnvelope = {
+      signal_id: 'signal-campaign-cap',
+      tenant_id: TENANT,
+      correlation_id: 'correlation-campaign-cap',
+      source_channel: 'MARKETING_CAMPAIGN',
+      event_type: 'campaign.requested',
+      subject: campaignSubject,
+      timestamp: '2026-01-01T00:00:00.000Z',
+      payload: {
+        module: 'marketing',
+        input: {
+          objective: 'reactivation',
+          segment_id: 'inactive_90d',
+          max_segment_size: 26,
+          content_constraints: { channel: 'EMAIL_HTML', locale: 'en-US' },
+        },
+      },
+    };
+    const hypothesis = await agentRuntime.deriveHypothesis(campaign, context);
+    const routing = await agentRuntime.resolveRouting(campaign, context, hypothesis);
+
+    await expect(agentRuntime.formulatePlan(routing, context, hypothesis)).rejects.toMatchObject({
+      code: 'AUDIENCE_LIMIT_EXCEEDED',
+    });
+    expect(policy.getApprovedAudienceLimit).toHaveBeenCalledWith(TENANT);
+  });
+  it('keeps retained signals tenant-scoped when signal ids collide', async () => {
+    const factory = makeFactory();
+    const first = await factory(TENANT);
+    const second = await factory(OTHER_TENANT);
+    expect(first).not.toBeNull();
+    expect(second).not.toBeNull();
+
+    const firstInternals = internals(first);
+    const secondInternals = internals(second);
+    const firstContext = await firstInternals.dependencies.contextAggregator.hydrateContext(
+      TENANT,
+      subject,
+      'correlation-signal-tenant-a',
+    );
+    const secondContext = await secondInternals.dependencies.contextAggregator.hydrateContext(
+      OTHER_TENANT,
+      {
+        session_id: subject.session_id,
+        channel_type: subject.channel_type,
+      },
+      'correlation-signal-tenant-b',
+    );
+    const firstSignal = { ...signal(), signal_id: 'same-signal-id', tenant_id: TENANT };
+    const secondSignal = {
+      ...signal(),
+      signal_id: 'same-signal-id',
+      tenant_id: OTHER_TENANT,
+      correlation_id: 'correlation-signal-tenant-b',
+    };
+
+    const firstHypothesis = await firstInternals.dependencies.agentRuntime.deriveHypothesis(firstSignal, firstContext);
+    const secondHypothesis = await secondInternals.dependencies.agentRuntime.deriveHypothesis(secondSignal, secondContext);
+    const routing = {
+      target_agent: 'MKT-01' as const,
+      requires_clarification: false,
+      rationalization: 'test',
+    };
+    const firstPlan = await firstInternals.dependencies.agentRuntime.formulatePlan(
+      routing,
+      firstContext,
+      firstHypothesis,
+    );
+    const secondPlan = await secondInternals.dependencies.agentRuntime.formulatePlan(
+      routing,
+      secondContext,
+      secondHypothesis,
+    );
+
+    expect(firstPlan.steps[0]!.input_parameters.tenant_id).toBe(TENANT);
+    expect(secondPlan.steps[0]!.input_parameters.tenant_id).toBe(OTHER_TENANT);
   });
 });

@@ -121,30 +121,31 @@ function lookupRegistryRow(
  *
  * Resolves the id of the verified `customer_identities` row the context aggregator bound during
  * `hydrateContext`. Canonical HydratedContext has no slot for verification_reference, so the
- * aggregator hands it over by correlation id (e.g. CareContextAggregator.verificationReferenceFor(correlation_id)).
+ * aggregator hands it over by tenant and correlation id (e.g. CareContextAggregator.verificationReferenceFor(tenant_id, correlation_id)).
  */
 export interface VerificationReferenceResolver {
-  verificationReference?(correlation_id: string): string | null | undefined;
-  verificationReferenceFor?(correlation_id: string): string | null | undefined;
+  verificationReference?(correlation_id: string, tenant_id?: string): string | null | undefined;
+  verificationReferenceFor?(tenant_id: string, correlation_id: string): string | null | undefined;
 }
 
 export type VerificationReferencePort =
   | VerificationReferenceResolver
-  | ((correlation_id: string) => string | null | undefined);
+  | ((correlation_id: string, tenant_id?: string) => string | null | undefined);
 
 function resolveVerificationReference(
   resolver: VerificationReferencePort | undefined,
   correlation_id: string,
+  tenant_id: string,
 ): string | null {
   if (!resolver) return null;
   if (typeof resolver === 'function') {
-    return resolver(correlation_id) ?? null;
+    return resolver(correlation_id, tenant_id) ?? null;
   }
   if (typeof resolver.verificationReference === 'function') {
-    return resolver.verificationReference(correlation_id) ?? null;
+    return resolver.verificationReference(correlation_id, tenant_id) ?? null;
   }
   if (typeof resolver.verificationReferenceFor === 'function') {
-    return resolver.verificationReferenceFor(correlation_id) ?? null;
+    return resolver.verificationReferenceFor(tenant_id, correlation_id) ?? null;
   }
   return null;
 }
@@ -748,9 +749,13 @@ export class CareAgentRuntime implements IAgentRuntime {
       (intent === 'order_status' || intent === 'order_lookup')
       && hypothesis.intent === 'order_lookup'
     ) {
-      const orderRef = this.extractOrderRef(hypothesis);
       const customer_id = context.customer?.customer_id;
-      const verification_reference = resolveVerificationReference(this.verificationResolver, context.correlation_id);
+      const orderRef = this.extractOrderRef(hypothesis);
+      const verification_reference = resolveVerificationReference(
+        this.verificationResolver,
+        context.correlation_id,
+        context.tenant_id,
+      );
       if (!orderRef || !customer_id || !verification_reference) {
         return { plan_id, steps: [], fallback_strategy: 'FAIL_CLOSED' };
       }

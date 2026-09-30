@@ -459,6 +459,35 @@ describe('SalesSkillServices - cart and order skills', () => {
       created_at: '2026-09-24T10:00:00.000Z',
     });
   });
+ 
+  it('create_order: refuses a caller effect key that differs from the server-derived key', async () => {
+    const orderPortMock = createOrderPort();
+    const createOrderSpy = vi.spyOn(orderPortMock, 'createOrder');
+    const services = createServices({ order: orderPortMock, cart: createCartPort() });
+
+    await expect(services.tool_port.invoke({
+      skill_id: 'skill.sales.create_order',
+      tool_binding: 'API-001.OrderConnector',
+      input: {
+        tenant_id: TENANT_ID,
+        cart_id: 'cart-1',
+        customer_id: CUSTOMER_ID,
+        shipping_address: { street: 'Test' },
+        payment_method: 'CREDIT_CARD',
+        effect_key: 'caller-effect-key',
+      },
+      context: {
+        run_id: 'run-effect-key-mismatch',
+        tenant_id: TENANT_ID,
+        caller_agent: 'SAL-02' as const,
+        correlation_id: CORRELATION_ID,
+        granted_authority: 'AUTH-3' as const,
+        effect_key: 'server-effect-key',
+      },
+    })).rejects.toMatchObject({ code: 'EFFECT_KEY_MISMATCH' });
+
+    expect(createOrderSpy).not.toHaveBeenCalled();
+  });
 
   it('create_order: post-dispatch reconciliation refuses when order port returned total differs from authoritative quote', async () => {
     const orderPortMock = createOrderPort({ total_amount: 150 });

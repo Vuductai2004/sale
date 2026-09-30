@@ -424,6 +424,39 @@ describe('SalesSkillServices - message, consent and registry exports', () => {
       delivered_at: '2026-09-24T10:00:00.000Z',
     });
   });
+ 
+  it('send_message: refuses a caller effect key that differs from the server-derived key', async () => {
+    const communication = createCommunicationPort();
+    const sendMessageSpy = vi.spyOn(communication, 'sendMessage');
+    const services = createServices({
+      communication,
+      consent: createConsentPort(),
+      frequency_cap: createFrequencyCapPort(),
+      takeover_active: false,
+    });
+
+    await expect(services.tool_port.invoke({
+      skill_id: 'skill.sales.send_message',
+      tool_binding: 'API-003.CommunicationConnector',
+      input: {
+        tenant_id: TENANT_ID,
+        recipient_id: CUSTOMER_ID,
+        channel: 'LINE',
+        message_content: { text: 'Reminder' },
+        effect_key: 'caller-effect-key',
+      },
+      context: {
+        run_id: 'run-effect-key-mismatch',
+        tenant_id: TENANT_ID,
+        caller_agent: 'SAL-02' as const,
+        correlation_id: CORRELATION_ID,
+        granted_authority: 'AUTH-3' as const,
+        effect_key: 'server-effect-key',
+      },
+    })).rejects.toMatchObject({ code: 'EFFECT_KEY_MISMATCH' });
+
+    expect(sendMessageSpy).not.toHaveBeenCalled();
+  });
 
   it('exports GATE_SALES_SKILLS, ENABLED_SALES_SKILLS, and resolveEnabledSalesSkills', () => {
     expect(GATE_SALES_SKILLS.size).toBe(8);

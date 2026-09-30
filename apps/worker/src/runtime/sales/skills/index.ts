@@ -184,6 +184,9 @@ export function createSalesSkillServices(options: SalesSkillOptions): SalesSkill
     engine,
     resolve_correlation_id: options.resolve_correlation_id,
     resolve_grant: options.resolve_grant,
+    ...(options.erp_read && typeof options.erp_read.reconcile === 'function'
+      ? { provider_reconcile: (input) => options.erp_read!.reconcile!(input) }
+      : {}),
   });
 
   const unbound: string[] = [];

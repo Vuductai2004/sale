@@ -18,6 +18,7 @@ import {
   productSku,
   readCatalogFromSor,
   readInventoryFromSor,
+  readInventoryFromSorBatch,
   type InventoryRead,
 } from './sor-readers.js';
 
@@ -50,9 +51,11 @@ interface CheckPriceInput {
   readonly sku_id: string;
   readonly customer_id: string;
   readonly requested_discount_percent?: number;
+  readonly proposed_price?: number;
 }
 
-const INJECTION_MARKERS = /(?:--|\/\*|\*\/|;|<script\b|ignore\s+previous|system\s*:|assistant\s*:|developer\s*:)/i;
+const INJECTION_MARKERS =
+  /(?:<script\b[^>]*>|<\/script>|\bignore\s+(?:all\s+)?previous\s+instructions\b|\b(?:reveal|disclose|show|print)\s+(?:the\s+)?(?:system|developer)\s+(?:prompt|instructions)\b|(?:^|\n)\s*(?:system|assistant|developer)\s*:\s*(?:you\s+are|ignore|follow|do\s+not|reveal|disclose|show|print)\b)/i;
 const RECOMMENDATION_TYPES = ['CROSS_SELL', 'UPSELL', 'SUBSTITUTE', 'BUNDLE', 'REPLENISHMENT'] as const;
 const RECOMMENDATION_THRESHOLD = 0.65;
 function normalizedProductText(product: {
@@ -170,7 +173,13 @@ export async function handleSearchProduct(
       return (productSku(left) ?? '').localeCompare(productSku(right) ?? '');
     });
 
-  const products: Array<Record<string, unknown>> = [];
+  const prepared: Array<{
+    readonly product_id: string;
+    readonly sku: string;
+    readonly name: string;
+    readonly list_price: number;
+    readonly currency: string;
+  }> = [];
   for (const product of matched.slice(0, limit)) {
     const product_id = product.product_id ?? product.id;
     const sku = productSku(product);
@@ -200,24 +209,33 @@ export async function handleSearchProduct(
     ) {
       continue;
     }
-
-    const inventory = await readInventoryFromSor(options, tenant_id, sku);
-    const available = inventory.item.total_available_to_promise ?? 0;
-    if (advisorRequirements !== undefined && available <= 0) {
-      continue;
-    }
-    if (advisorRequirements !== undefined && products.length === 0) {
-      // The advisor chain's first ranked candidate is the SKU whose stock and quote the later steps
-      // verify; recording it here keeps the recommendation bound to this run's own evidence.
-      options.advisor_state?.recordCandidateSku(tenant_id, invocation.context.correlation_id, sku);
-    }
-    products.push({
+    prepared.push({
       product_id,
       sku,
       name,
       list_price,
       currency: product.currency,
-      in_stock: available > 0,
+    });
+  }
+
+  const inventory = await readInventoryFromSorBatch(
+    options,
+    tenant_id,
+    prepared.map((product) => product.sku),
+  );
+  const products: Array<Record<string, unknown>> = [];
+  for (const product of prepared) {
+    const inventoryRead = inventory.found.get(product.sku);
+    const available = inventoryRead?.item.total_available_to_promise;
+    if (advisorRequirements !== undefined && (available === undefined || available <= 0)) {
+      continue;
+    }
+    if (advisorRequirements !== undefined && products.length === 0) {
+      options.advisor_state?.recordCandidateSku(tenant_id, invocation.context.correlation_id, product.sku);
+    }
+    products.push({
+      ...product,
+      in_stock: available === undefined ? null : available > 0,
     });
   }
 
@@ -390,7 +408,8 @@ export async function handleRecommendProduct(
   for (const product of candidates) {
     const sku = productSku(product);
     const name = productName(product);
-    const list_price = productListPrice(product);
+    const catalogListPrice = productListPrice(product);
+    let list_price = catalogListPrice;
     const currency = typeof product.currency === 'string' ? product.currency.trim() : undefined;
     if (
       sku === undefined
@@ -403,6 +422,7 @@ export async function handleRecommendProduct(
     ) {
       continue;
     }
+
     const advisorBudget = advisorRequirements?.budget;
     if (
       advisorBudget !== undefined
@@ -420,7 +440,31 @@ export async function handleRecommendProduct(
     } catch {
       continue;
     }
-    if (inventory.item.total_available_to_promise! <= 0) continue;
+    const available = inventory.item.total_available_to_promise!;
+    if (available <= 0) continue;
+    options.advisor_state?.recordStock(tenant_id, correlation_id, sku, available);
+    // SAL-03 must ground the customer-visible price in the same authoritative check_price path
+    // used by direct price inquiries before exposing a recommendation.
+    if (invocation.context.caller_agent === 'SAL-03' || (options.price_floor !== undefined && options.price_floor !== null)) {
+      let priceCheck: Record<string, unknown>;
+      try {
+        priceCheck = await handleCheckPrice(options, {
+          ...invocation,
+          input: {
+            tenant_id,
+            sku_id: sku,
+            customer_id: customer.customer_id,
+          },
+        });
+      } catch {
+        continue;
+      }
+      const checkedListPrice = priceCheck.list_price;
+      if (typeof checkedListPrice !== 'number' || !Number.isFinite(checkedListPrice) || checkedListPrice < 0) {
+        continue;
+      }
+      list_price = checkedListPrice;
+    }
 
     const productTerms = [
       sku,
@@ -480,6 +524,7 @@ export async function handleRecommendProduct(
         suppression_cleared: true,
       },
       confidence,
+      ranking_method: 'authoritative_catalog_order',
       expected_outcome: {
         conversion_probability: revenue.conversion_probability,
         expected_revenue: revenue.expected_revenue,
@@ -549,6 +594,7 @@ export async function handleCheckPrice(
     decision = await priceFloorPort.read({
       tenant_id: input.tenant_id,
       sku_id: input.sku_id,
+      ...(input.proposed_price === undefined ? {} : { proposed_price: input.proposed_price }),
     });
   } catch {
     throw new SalesSkillToolError(

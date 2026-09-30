@@ -36,19 +36,27 @@ function readerReturning(rows: ReadonlyArray<{ readonly customer_id: string }>) 
 }
 
 describe('createMarketingAudienceReader', () => {
-  it('scopes the audience query to the server-bound tenant, opt-out exclusions and the requested cap', async () => {
+  it('scopes the audience query to the tenant, RFM cohort, channel consent, suppression and requested cap', async () => {
     const { readAudience, calls } = readerReturning([{ customer_id: 'customer-1' }]);
 
     const audience = await readAudience(
-      { tenant_id: TENANT, rfm_criteria: 'HIBERNATING', min_days_inactive: 90, max_segment_size: 100 },
+      {
+        tenant_id: TENANT,
+        rfm_criteria: 'HIBERNATING',
+        min_days_inactive: 90,
+        max_segment_size: 100,
+        channel: 'EMAIL',
+      },
       context(),
     );
 
     expect(calls[0]).toEqual({ sql: 'BOUND_TENANT', params: [TENANT] });
     const query = calls[1]!;
-    expect(query.params).toEqual([TENANT, 90, 'marketing_messaging', 'email', 100]);
-    expect(query.sql).toContain('NOT EXISTS');
-    expect(query.sql).toContain('is_granted = FALSE');
+    expect(query.params).toEqual([TENANT, 'HIBERNATING', 90, 'email', 'marketing_messaging', 101]);
+    expect(query.sql).toContain('rfm_segment_hypothesis');
+    expect(query.sql).toContain('suppression_active = FALSE');
+    expect(query.sql).toContain('opt_out_timestamp IS NULL');
+    expect(query.sql).toContain('opt_in_timestamp IS NOT NULL');
     expect(audience).toEqual({
       segment_id: 'inactive_90d',
       matched_customer_count: 1,
@@ -57,12 +65,26 @@ describe('createMarketingAudienceReader', () => {
     });
   });
 
-  it('defaults the segment size to the demo cap when the caller supplies no size', async () => {
+  it('refuses to truncate an audience over the requested size', async () => {
+    const { readAudience } = readerReturning([{ customer_id: 'customer-1' }, { customer_id: 'customer-2' }]);
+
+    await expect(
+      readAudience(
+        { tenant_id: TENANT, rfm_criteria: 'HIBERNATING', min_days_inactive: 90, max_segment_size: 1, channel: 'EMAIL' },
+        context(),
+      ),
+    ).rejects.toThrow('AUDIENCE_LIMIT_EXCEEDED');
+  });
+
+  it('defaults the segment size to the safe cap when the caller supplies no size', async () => {
     const { readAudience, calls } = readerReturning([]);
 
-    await readAudience({ tenant_id: TENANT, rfm_criteria: 'HIBERNATING', min_days_inactive: 30 }, context());
+    await readAudience(
+      { tenant_id: TENANT, rfm_criteria: 'HIBERNATING', min_days_inactive: 30, channel: 'EMAIL' },
+      context(),
+    );
 
-    expect(calls[1]!.params[4]).toBe(100);
+    expect(calls[1]!.params[5]).toBe(101);
   });
 
   it('refuses a caller-asserted tenant or malformed criteria without touching the database', async () => {
@@ -74,6 +96,17 @@ describe('createMarketingAudienceReader', () => {
     await expect(
       readAudience({ tenant_id: TENANT, rfm_criteria: 'HIBERNATING', min_days_inactive: -1 }, context()),
     ).rejects.toThrow('INVALID_SEGMENT_CRITERIA');
+    expect(calls).toEqual([]);
+  });
+  it('requires the campaign channel instead of defaulting to email', async () => {
+    const { readAudience, calls } = readerReturning([]);
+
+    await expect(
+      readAudience(
+        { tenant_id: TENANT, rfm_criteria: 'HIBERNATING', min_days_inactive: 30 },
+        context(),
+      ),
+    ).rejects.toThrow('campaign channel is required');
     expect(calls).toEqual([]);
   });
 });

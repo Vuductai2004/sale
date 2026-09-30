@@ -9,6 +9,7 @@ import {
   type RunResponseSource,
   type VerifiedStepReceipt,
 } from '@agentos/core-engine/contracts';
+import { computeQuoteToken, timingSafeCompare } from '../sales/skills/quote-payment-guards.js';
 
 /** A domain that is allowed to expose a terminal response to a caller. */
 export type ResponseDomain = 'support' | 'sales' | 'marketing';
@@ -35,6 +36,68 @@ function nonEmpty(value: unknown): string | undefined {
 
 function finiteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value);
+}
+
+function escapeRenderedText(value: string): string {
+  return value.replace(/[&<>"']/g, (character) => {
+    switch (character) {
+      case '&': return '&amp;';
+      case '<': return '&lt;';
+      case '>': return '&gt;';
+      case '"': return '&quot;';
+      case "'": return '&#39;';
+      default: return character;
+    }
+  });
+}
+
+/**
+ * Reads the cart total only from a verified cart receipt. A cart row must carry its cart identity
+ * and a finite subtotal/total_amount; malformed or ambiguous cart evidence is not usable.
+ */
+function readCartTotal(
+  receipts: readonly VerifiedStepReceipt[],
+  cartId: string | undefined,
+): number | null | undefined {
+  const cartRows = receipts
+    .map((item) => item.receipt.response_payload)
+    .filter((payload) => nonEmpty(payload['cart_id']) !== undefined)
+    .filter((payload) => cartId === undefined || nonEmpty(payload['cart_id']) === cartId);
+  if (cartRows.length === 0) return undefined;
+  if (cartRows.length !== 1) return null;
+  const total = cartRows[0]!['total_amount'] ?? cartRows[0]!['subtotal'];
+  return finiteNumber(total) && total >= 0 ? total : null;
+}
+
+function hasValidQuoteSignature(
+  input: ResponseFinalizationInput,
+  payload: Record<string, unknown>,
+  token: string,
+  finalPrice: number,
+  floor: number,
+  currency: string,
+  expiry: string,
+  quoteSigningSecret: string | undefined,
+): boolean {
+  const payloadCustomerId = nonEmpty(payload['customer_id']);
+  const customerId = payloadCustomerId ?? input.context.customer?.customer_id;
+  if (
+    quoteSigningSecret === undefined
+    || quoteSigningSecret.trim().length === 0
+    || customerId === undefined
+    || (payloadCustomerId !== undefined && payloadCustomerId !== input.context.customer?.customer_id)
+    || !/^[a-f0-9]{64}$/i.test(token)
+  ) return false;
+  const expected = computeQuoteToken(quoteSigningSecret, {
+    tenant_id: input.tenant_id,
+    sku_id: nonEmpty(payload['sku_id']) ?? '',
+    customer_id: customerId,
+    final_price: finalPrice,
+    p_floor: floor,
+    currency,
+    quote_expires_at: expiry,
+  });
+  return timingSafeCompare(token, expected);
 }
 
 function refusal(code: string, message: string): never {
@@ -204,6 +267,8 @@ function quoteResponse(
   evidence: VerifiedStepReceipt,
   input: ResponseFinalizationInput,
   now: () => Date,
+  quoteSigningSecret: string | undefined,
+  receipts: readonly VerifiedStepReceipt[],
 ): FinalResponse | undefined {
   const sku = nonEmpty(payload['sku_id']);
   const currency = nonEmpty(payload['currency']);
@@ -227,11 +292,21 @@ function quoteResponse(
     || finalPrice > listPrice
     || Number.isNaN(Date.parse(expiry))
     || new Date(expiry).getTime() <= now().getTime()
+    || !hasValidQuoteSignature(input, payload, token, finalPrice, floor, currency, expiry, quoteSigningSecret)
   ) return undefined;
-  const customerId = nonEmpty(payload['customer_id']);
-  if (customerId !== undefined && customerId !== input.context.customer?.customer_id) return undefined;
+
+  const cartId = nonEmpty(payload['cart_id']);
+  const cartTotal = readCartTotal(receipts, cartId);
+  if (
+    (cartId !== undefined && cartTotal === undefined)
+    || (cartTotal !== undefined && (cartTotal === null || cartTotal !== finalPrice))
+  ) return undefined;
+
   const sourcePayload = sourceFile(payload) === undefined ? { ...payload, source_file: QUOTE_SOURCE_FILE } : payload;
-  return finalResponse(`Quote for ${sku}: ${currency} ${String(finalPrice)} (valid until ${expiry}).`, [citation(sourcePayload, evidence.evidence, QUOTE_SOURCE_FILE)]);
+  return finalResponse(
+    `Quote for ${escapeRenderedText(sku)}: ${escapeRenderedText(currency)} ${String(finalPrice)} (valid until ${escapeRenderedText(expiry)}).`,
+    [citation(sourcePayload, evidence.evidence, QUOTE_SOURCE_FILE)],
+  );
 }
 
 /**
@@ -374,7 +449,10 @@ function structuredResponse(
  * apology, clarification, or model fallback: a receipt without a grounded response is refused.
  */
 export class VerifiedResponseFinalizer implements IResponseFinalizer {
-  constructor(private readonly now: () => Date = () => new Date()) {}
+  constructor(
+    private readonly now: () => Date = () => new Date(),
+    private readonly quoteSigningSecret?: string,
+  ) {}
 
   async finalize(input: ResponseFinalizationInput): Promise<FinalResponse> {
     const receipts = assertTrustedInput(input);
@@ -391,7 +469,7 @@ export class VerifiedResponseFinalizer implements IResponseFinalizer {
         // owner-approved quote, then the evidenced recommendation, then availability, then the
         // catalog list. Only text copied from one of those receipts is ever exposed.
         const quote = firstProjection(receipts, (verified) =>
-          quoteResponse(verified.receipt.response_payload, verified, input, this.now));
+          quoteResponse(verified.receipt.response_payload, verified, input, this.now, this.quoteSigningSecret, receipts));
         if (quote !== undefined) return quote;
 
         const recommendation = firstProjection(receipts, (verified) =>
@@ -467,8 +545,11 @@ export class RunResponseStoreAdapter implements IRunResponseStore {
 
 export const DurableRunResponseStore = RunResponseStoreAdapter;
 
-export function createResponseFinalizer(now?: () => Date): IResponseFinalizer {
-  return new VerifiedResponseFinalizer(now);
+export function createResponseFinalizer(
+  now?: () => Date,
+  quoteSigningSecret?: string,
+): IResponseFinalizer {
+  return new VerifiedResponseFinalizer(now, quoteSigningSecret);
 }
 
 export function createRunResponseStore(repository: RunResponseRepository): IRunResponseStore {

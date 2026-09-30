@@ -158,6 +158,43 @@ export async function readCatalogFromSor(options: SalesSkillToolPortOptions, ten
   };
 }
 
+export interface InventoryBatchRead {
+  readonly found: ReadonlyMap<string, InventoryRead>;
+  readonly missing: ReadonlySet<string>;
+}
+
+/**
+ * Reads inventory for a bounded set of SKUs concurrently. Missing rows and per-SKU source
+ * failures are scoped to that SKU; callers represent either case as unknown stock.
+ */
+export async function readInventoryFromSorBatch(
+  options: SalesSkillToolPortOptions,
+  tenant_id: string,
+  sku_ids: readonly string[],
+): Promise<InventoryBatchRead> {
+  const uniqueSkus = [...new Set(sku_ids)];
+  const found = new Map<string, InventoryRead>();
+  const missing = new Set<string>();
+  const pending = [...uniqueSkus];
+  const worker = async (): Promise<void> => {
+    while (pending.length > 0) {
+      const sku_id = pending.shift();
+      if (sku_id === undefined) return;
+      try {
+        found.set(sku_id, await readInventoryFromSor(options, tenant_id, sku_id));
+      } catch {
+        // A failed or missing authoritative row is unknown stock for this SKU only. Never infer
+        // availability from the catalog or from another SKU's result.
+        missing.add(sku_id);
+      }
+    }
+  };
+  const workerCount = Math.min(8, Math.max(1, uniqueSkus.length));
+  await Promise.allSettled(Array.from({ length: workerCount }, () => worker()));
+  return { found, missing };
+}
+
+
 export async function readInventoryFromSor(
   options: SalesSkillToolPortOptions,
   tenant_id: string,

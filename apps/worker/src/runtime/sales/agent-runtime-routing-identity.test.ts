@@ -10,7 +10,6 @@ import { type Customer360Fact, type HydratedContext, type SignalEnvelope } from 
 import { SalesAgentRuntime, type SkillRegistryPort, type SkillRegistryRowMetadata } from './agent-runtime.js';
 import { SalesAdvisorExecutionState } from './advisor-adapters.js';
 
-
 describe('SalesAgentRuntime', () => {
   const tenant_id = '00000000-0000-4000-8000-000000000001';
 
@@ -168,7 +167,16 @@ describe('SalesAgentRuntime', () => {
       expect(plan.steps).toHaveLength(1);
       expect(plan.steps[0]?.agent_id).toBe('SAL-02');
       expect(plan.steps[0]?.skill_id).toBe('skill.sales.recommend_product');
-      expect(plan.handoff_intent).toEqual({
+      expect(plan.handoff_intent).toBeUndefined();
+
+      const boundRuntime = new SalesAgentRuntime({
+        registry: createRegistryPort(),
+        careOnboardingItinerary: { steps: ['owner-configured-welcome'] },
+      });
+      const boundHypothesis = await boundRuntime.deriveHypothesis(signal, verifiedContext);
+      const boundRouting = await boundRuntime.resolveRouting(signal, verifiedContext, boundHypothesis);
+      const boundPlan = await boundRuntime.formulatePlan(boundRouting, verifiedContext, boundHypothesis);
+      expect(boundPlan.handoff_intent).toEqual({
         source_domain: 'sales',
         target_domain: 'care',
         target_agent: 'CS-01',

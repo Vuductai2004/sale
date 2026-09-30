@@ -189,12 +189,27 @@ describe('createWorkerConnectors', () => {
         tenant_id: '11111111-1111-1111-1111-111111111111',
         resource: 'orders',
         key: 'ORD-A-1',
+        customer_id: 'aaaaaaaa-0000-4000-8000-00000000000a',
       });
 
       expect(result.resource).toBe('orders');
       expect(result.observed_at).toBeDefined();
       expect(result.value.order_id).toBe('ORD-A-1');
       expect(result.value.customer_id).toBe('aaaaaaaa-0000-4000-8000-00000000000a');
+      const shipment = await connectors.erp_read!.read({
+        tenant_id: '11111111-1111-1111-1111-111111111111',
+        resource: 'shipments',
+        key: 'ORD-A-1',
+        customer_id: 'aaaaaaaa-0000-4000-8000-00000000000a',
+      });
+      expect(shipment.resource).toBe('shipments');
+      expect(shipment.value.tracking_number).toBe('TRK-123456');
+      await expect(connectors.erp_read!.read({
+        tenant_id: '11111111-1111-1111-1111-111111111111',
+        resource: 'returns',
+        key: 'ORD-A-1',
+        customer_id: 'aaaaaaaa-0000-4000-8000-00000000000a',
+      })).rejects.toMatchObject({ refusal_code: 'PROVIDER_REJECTED' });
       expect(result.value.logical_customer_ref).toBe('cust-a');
     } finally {
       server.close();

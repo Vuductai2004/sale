@@ -7,6 +7,7 @@ import {
   createPlatformSkills,
   createSkillRegistry,
   createSkillRuntimeEngine,
+  SkillError,
   type PlatformSkillEnablement,
 } from '@agentos/skills';
 
@@ -112,10 +113,28 @@ export function createMarketingSkillServices(
     resolve_correlation_id: options.resolve_correlation_id,
     resolve_grant: options.resolve_grant,
     ...(options.reconcile !== undefined ? { provider_reconcile: options.reconcile } : {}),
-    special_receipt: ({ output }) => {
-      const dispatch_id = output.dispatch_id;
-      if (typeof dispatch_id !== 'string' || dispatch_id.length === 0) {
+    special_receipt: ({ action, output }) => {
+      if (action.skill_id !== 'skill.mkt.dispatch_campaign') {
         return null;
+      }
+      const dispatch_id = output.dispatch_id;
+      if (typeof dispatch_id !== 'string' || dispatch_id.trim().length === 0) {
+        throw new SkillError(
+          'EFFECT_UNKNOWN',
+          'API-003 returned no provider dispatch identity; receipt cannot be confirmed',
+          'skill.mkt.dispatch_campaign',
+        );
+      }
+      const status = output.status;
+      if (status === 'FAILED') {
+        return {
+          execution_id: dispatch_id,
+          adapter_status: 'ERROR',
+          provider_reference: dispatch_id,
+          response_payload: output,
+          latency_ms: 0,
+          token_usage: { prompt: 0, completion: 0, total_cost_usd: 0 },
+        };
       }
       return {
         execution_id: dispatch_id,

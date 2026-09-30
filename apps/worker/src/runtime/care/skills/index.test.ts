@@ -380,6 +380,38 @@ describe('CareSkillServices', () => {
         context: DUMMY_CONTEXT,
       })).rejects.toMatchObject({ code: 'KNOWLEDGE_ROOT_TENANT_MISMATCH' });
     });
+    it('uses the customer question when classification is only FAQ', async () => {
+      const services = createCareSkillServices(createMockOptions({
+        env: {
+          KNOWLEDGE_ROOT: NOVAMART_KNOWLEDGE_ROOT,
+          KNOWLEDGE_TENANT_IDS: NOVAMART_TENANT_ID,
+        },
+      }));
+
+      const result = await services.tool_port.invoke<{
+        tenant_id: string;
+        query_text: string;
+        classification: string;
+        customer_message: string;
+      }, {
+        answers: Array<{ faq_id: string }>;
+        match_confidence: number;
+      }>({
+        skill_id: 'skill.care.search_faq',
+        tool_binding: 'SecondBrain.FAQEngine',
+        input: {
+          tenant_id: NOVAMART_TENANT_ID,
+          query_text: 'FAQ',
+          classification: 'FAQ',
+          customer_message: 'What is your return policy?',
+        },
+        context: { ...DUMMY_CONTEXT, tenant_id: NOVAMART_TENANT_ID },
+      });
+
+      expect(result.answers.some((answer) => answer.faq_id === 'FAQ-1')).toBe(true);
+      expect(result.match_confidence).toBeGreaterThan(0);
+    });
+
     it('refuses a configured Care root without a tenant allowlist', async () => {
       const services = createCareSkillServices(createMockOptions({
         env: { KNOWLEDGE_ROOT: NOVAMART_KNOWLEDGE_ROOT },
@@ -758,6 +790,57 @@ describe('CareSkillServices', () => {
       expect(resolveSla).not.toHaveBeenCalled();
       expect(manage).not.toHaveBeenCalled();
       expect(reconcile).not.toHaveBeenCalled();
+    });
+    it('accepts a matching caller effect key but refuses a mismatched one', async () => {
+      const output: ManagedServiceCase = {
+        case_id: 'eeeeeeee-0000-4000-8000-00000000000e',
+        customer_id: CUSTOMER_ID,
+        intent: 'billing',
+        priority: 'P2',
+        status: 'NEW',
+        conversation_id: HANDOFF_CONVERSATION_ID,
+        related_order_id: null,
+        evidence_refs: [],
+        assigned_owner: 'CS-01',
+        sla_target_hours: 4,
+        updated_at: '2026-04-15T12:00:00.000Z',
+        case_version: 1,
+      };
+      const manage = vi.fn(async () => output);
+      const reconcile = vi.fn(async () => ({
+        state: 'NOT_COMMITTED' as const,
+        case_id: null,
+        current_case_version: null,
+        current_status: null,
+      }));
+      const services = createCareSkillServices(createMockOptions({
+        case_repository: { manage, reconcile },
+        case_sla_target_hours: vi.fn(async () => 4),
+        skill_enablement: { enabled_skill_ids: ['skill.care.manage_case'] },
+      }));
+      const input = {
+        tenant_id: TENANT_ID,
+        customer_id: CUSTOMER_ID,
+        intent: 'billing',
+        priority: 'P2' as const,
+        conversation_id: HANDOFF_CONVERSATION_ID,
+        action_type: 'CREATE' as const,
+      };
+
+      await expect(services.tool_port.invoke({
+        skill_id: 'skill.care.manage_case',
+        tool_binding: 'PostgreSQL.CaseManagementStore',
+        input: { ...input, effect_key: DUMMY_CONTEXT.effect_key },
+        context: { ...DUMMY_CONTEXT, granted_authority: 'AUTH-3' },
+      })).resolves.toEqual(output);
+
+      await expect(services.tool_port.invoke({
+        skill_id: 'skill.care.manage_case',
+        tool_binding: 'PostgreSQL.CaseManagementStore',
+        input: { ...input, effect_key: HANDOFF_EFFECT_KEY },
+        context: { ...DUMMY_CONTEXT, granted_authority: 'AUTH-3' },
+      })).rejects.toMatchObject({ code: 'EFFECT_KEY_MISMATCH' });
+      expect(manage).toHaveBeenCalledOnce();
     });
 
     it('refuses case creation when no tenant SLA target is configured', async () => {

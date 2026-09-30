@@ -3,22 +3,38 @@
  *
  * The reactivation audience is a server-side query, never an audience asserted by a caller or a
  * model: a customer is included only when their recorded last paid purchase is older than the
- * requested inactivity window, and excluded when they have an explicit marketing opt-out for the
- * demo's email channel. The size is capped by the caller-supplied (demo-policy) segment size.
+ * requested inactivity window, their derived RFM hypothesis matches, and they have channel-specific
+ * consent without global suppression. The size is owner-policy bounded and overflow is refused.
  */
 
 import type { ExecutionContext } from '@agentos/skills';
 import { assertTenantContext, withTenantContext, type TenantTransactionRunner } from '@agentos/database';
 import type { InputMktSegmentAudience, OutputMktSegmentAudience } from './skills/types.js';
 
-const DEMO_AUDIENCE_CHANNEL = 'email';
 const MARKETING_CONSENT_TYPE = 'marketing_messaging';
+export const DEFAULT_MARKETING_AUDIENCE_LIMIT = 100;
+const MARKETING_CHANNELS: Readonly<Record<NonNullable<InputMktSegmentAudience['channel']>, string>> = {
+  LINE: 'line',
+  WHATSAPP: 'whatsapp',
+  EMAIL: 'email',
+  SMS: 'sms',
+  ZALO: 'zalo',
+  TIKTOK: 'tiktok',
+  MESSENGER: 'messenger',
+  INSTAGRAM: 'instagram',
+};
+
+export interface MarketingAudiencePolicy {
+  readonly getApprovedAudienceLimit: (tenant_id: string) => Promise<number | undefined>;
+}
 
 export interface MarketingAudienceReaderOptions {
   /** Injected tenant transaction runner; defaults to the canonical RLS-scoped runner. */
   readonly runInTenantTransaction?: TenantTransactionRunner;
   /** Injected clock for the deterministic `generated_at` stamp. */
   readonly now?: () => Date;
+  /** Owner-approved per-tenant audience cap. */
+  readonly audiencePolicy?: MarketingAudiencePolicy;
 }
 
 interface AudienceRow {
@@ -49,35 +65,68 @@ export function createMarketingAudienceReader(options: MarketingAudienceReaderOp
     if (!Number.isSafeInteger(minDaysInactive) || minDaysInactive < 0) {
       throw new Error('INVALID_SEGMENT_CRITERIA: min_days_inactive must be a non-negative integer');
     }
-    const requestedSize = input.max_segment_size ?? 100;
+    const channel = input.channel === undefined ? undefined : MARKETING_CHANNELS[input.channel];
+    if (channel === undefined) {
+      throw new Error('INVALID_SEGMENT_CRITERIA: campaign channel is required and must be contactable');
+    }
+    const ownerLimit = await options.audiencePolicy?.getApprovedAudienceLimit(tenant_id);
+    const audienceLimit = ownerLimit === undefined ? DEFAULT_MARKETING_AUDIENCE_LIMIT : ownerLimit;
+    if (!Number.isSafeInteger(audienceLimit) || audienceLimit < 1) {
+      throw new Error('ASM_003_UNAVAILABLE: owner-approved audience limit is unavailable or invalid');
+    }
+    const requestedSize = input.max_segment_size ?? audienceLimit;
     if (!Number.isSafeInteger(requestedSize) || requestedSize < 1) {
       throw new Error('INVALID_SEGMENT_CRITERIA: max_segment_size must be a positive integer');
+    }
+    if (requestedSize > audienceLimit) {
+      throw new Error(
+        `AUDIENCE_LIMIT_EXCEEDED: requested audience size ${requestedSize} exceeds owner-approved limit ${audienceLimit}`,
+      );
     }
 
     const rows = await runInTenantTransaction(tenant_id, async (client) => {
       const result = await client.query<AudienceRow>(
         `SELECT c.id::text AS customer_id
-           FROM agentos.customers c
-          WHERE c.tenant_id = $1
+           FROM agentos.customer_360_profiles p
+           JOIN agentos.customers c
+             ON c.tenant_id = p.tenant_id AND c.id = p.customer_id
+          WHERE p.tenant_id = $1
+            AND p.rfm_segment_hypothesis = $2
+            AND p.suppression_active = FALSE
             AND c.metadata->>'last_paid_purchase_at' ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}'
             AND (c.metadata->>'last_paid_purchase_at')::timestamptz
-                <= CURRENT_TIMESTAMP - make_interval(days => $2::int)
-            AND NOT EXISTS (
+                <= CURRENT_TIMESTAMP - make_interval(days => $3::int)
+            AND EXISTS (
+                  SELECT 1
+                    FROM agentos.customer_identities ci
+                   WHERE ci.tenant_id = p.tenant_id
+                     AND ci.customer_id = p.customer_id
+                     AND ci.channel_type = $4
+                     AND ci.verified_at IS NOT NULL
+                )
+            AND EXISTS (
                   SELECT 1
                     FROM agentos.consents k
-                   WHERE k.tenant_id = c.tenant_id
-                     AND k.customer_id = c.id
-                     AND k.consent_type = $3
+                   WHERE k.tenant_id = p.tenant_id
+                     AND k.customer_id = p.customer_id
+                     AND k.consent_type = $5
                      AND k.channel = $4
-                     AND k.is_granted = FALSE
+                     AND k.is_granted = TRUE
+                     AND k.opt_in_timestamp IS NOT NULL
+                     AND k.opt_out_timestamp IS NULL
                 )
           ORDER BY (c.metadata->>'last_paid_purchase_at')::timestamptz ASC, c.id ASC
-          LIMIT $5::int`,
-        [tenant_id, minDaysInactive, MARKETING_CONSENT_TYPE, DEMO_AUDIENCE_CHANNEL, requestedSize],
+          LIMIT $6::int`,
+        [tenant_id, input.rfm_criteria, minDaysInactive, channel, MARKETING_CONSENT_TYPE, requestedSize + 1],
       );
       return result.rows;
     });
 
+    if (rows.length > requestedSize) {
+      throw new Error(
+        `AUDIENCE_LIMIT_EXCEEDED: matching audience exceeds requested size ${requestedSize}; refusing to truncate`,
+      );
+    }
     const customer_ids = rows.map((row) => row.customer_id);
     return {
       segment_id: `inactive_${String(minDaysInactive)}d`,

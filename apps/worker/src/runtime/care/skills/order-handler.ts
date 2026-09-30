@@ -57,6 +57,7 @@ export async function handleOrderConnector<TOutput>(
       tenant_id: input.tenant_id,
       resource: 'orders',
       key: input.order_identifier,
+      customer_id: input.customer_id,
     });
   } catch (error) {
     if (error instanceof ErpRefusalError && error.refusal_code === 'PROVIDER_REJECTED') {

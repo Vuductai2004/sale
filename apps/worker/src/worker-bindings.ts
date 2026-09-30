@@ -185,7 +185,7 @@ function createMarketingContentEngine(env: WorkerBindingEnv): MarketingContentEn
   try {
     adapter = new OpenAICompatibleLLMAdapter({
       apiKey,
-      baseUrl: env.OPENAI_BASE_URL ?? 'https://api.openai.com/v1',
+      baseUrl: env.OPENAI_BASE_URL?.trim() || 'https://api.openai.com/v1',
       timeoutMs: positiveInteger(env.LLM_REQUEST_TIMEOUT_MS, 30_000, 86_400_000),
       maxOutputTokens: positiveInteger(env.MAX_TOKENS_PER_RUN, 4_096, 4_096),
       structuredOutputMode: env.OPENAI_STRUCTURED_OUTPUT_MODE === 'json_schema' ? 'json_schema' : 'json_object',
@@ -511,7 +511,7 @@ export function createWorkerDomainBindings(options: WorkerBindingOptions): Domai
                         }
                         const decision = await consent.check({
                           tenant_id: input.tenant_id,
-                          customer_id: input.customer_id,
+                          customer_id: input.customer_id ?? '',
                           channel: input.channel,
                         });
                         return {

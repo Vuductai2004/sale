@@ -60,6 +60,7 @@ import {
 } from '@agentos/skills';
 import {
   SalesAgentRuntime,
+  type SalesLexiconPort,
   type SalesPurchaseEvidencePort,
 } from './agent-runtime.js';
 import {
@@ -157,6 +158,14 @@ export interface SalesOrchestratorFactoryOptions {
   readonly frequency_cap?: SalesFrequencyCapPort | null | undefined;
   readonly replenishment_policy?: SalesReplenishmentPolicyPort | null | undefined;
   readonly purchase_evidence?: SalesPurchaseEvidencePort | null | undefined;
+  readonly lexicon?: SalesLexiconPort | undefined;
+  /**
+   * Explicit owner-configured Care onboarding itinerary. Its absence keeps Sales from declaring a
+   * sales→care handoff; no default itinerary is fabricated.
+   */
+  readonly careOnboardingItinerary?: unknown | undefined;
+  /** Resolves the explicit itinerary value for the tenant being composed. */
+  readonly resolveCareOnboardingItinerary?: ((tenant_id: string) => unknown | Promise<unknown>) | undefined;
   readonly now?: (() => Date) | undefined;
   readonly resolve_grant?: ((tenant_id: string, agent_id: string) => Promise<AssignableAuthority | null>) | undefined;
   readonly resolve_correlation_id?: ((tenant_id: string, run_id: string) => Promise<string>) | undefined;
@@ -290,7 +299,9 @@ export function createSalesOrchestratorFactory(
   // unit/E2E passes undefined or an isolated fake and receives no live-DB writer.
   const ownsDurableWorkflow = options.workflowRepository instanceof DurableWorkflowRepository;
   const runResponseRepository = ownsDurableWorkflow ? options.runResponseRepository ?? new RunResponseRepository() : options.runResponseRepository;
-  const responseFinalizer = options.responseFinalizer ?? (ownsDurableWorkflow ? createResponseFinalizer(now) : undefined);
+  const responseFinalizer = options.responseFinalizer ?? (ownsDurableWorkflow
+    ? createResponseFinalizer(now, options.quote_signing_secret)
+    : undefined);
   const responseStore = options.responseStore ?? (runResponseRepository === undefined ? undefined : createRunResponseStore(runResponseRepository));
   const runStageRecorder = options.runStageRecorder;
 
@@ -399,7 +410,7 @@ export function createSalesOrchestratorFactory(
     registry ??= skillServices.registry;
   }
 
-  let adapterDispatcher = options.adapterDispatcher;
+  let adapterDispatcher = options.adapterDispatcher ?? skillServices?.dispatcher;
   if (!adapterDispatcher) {
     const runtimeEngine = skillServices?.engine ?? (registry ? createSkillRuntimeEngine({
       registry,
@@ -414,6 +425,9 @@ export function createSalesOrchestratorFactory(
         engine: runtimeEngine,
         resolve_correlation_id: resolveCorrelationId,
         resolve_grant: resolveGrant,
+        ...(options.erp_read && typeof options.erp_read.reconcile === 'function'
+          ? { provider_reconcile: (input) => options.erp_read!.reconcile!(input) }
+          : {}),
       });
     }
   }
@@ -439,9 +453,16 @@ export function createSalesOrchestratorFactory(
     ...(registry ? { registry } : {}),
     ...(replenishmentPort ? { replenishment_policy: replenishmentPort } : {}),
     ...(purchaseEvidencePort ? { purchase_evidence: purchaseEvidencePort } : {}),
+    ...(options.lexicon ? { lexicon: options.lexicon } : {}),
     advisor_state: advisorState,
     advisor_price_floor_bound: priceFloorPort !== null,
     advisor_quote_signing_bound: typeof options.quote_signing_secret === 'string' && options.quote_signing_secret.trim().length > 0,
+    ...(options.careOnboardingItinerary === undefined
+      ? {}
+      : { careOnboardingItinerary: options.careOnboardingItinerary }),
+    ...(options.resolveCareOnboardingItinerary === undefined
+      ? {}
+      : { resolveCareOnboardingItinerary: options.resolveCareOnboardingItinerary }),
   });
 
   // 6. Policy engine adapter
