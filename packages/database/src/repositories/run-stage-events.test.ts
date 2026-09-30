@@ -50,12 +50,25 @@ class ScriptedClient {
   readonly statements: IssuedStatement[] = [];
   stage: StageRow | null = null;
   provider: ProviderRow | null = null;
+  attemptOrdinal = 0;
 
   async query<R extends QueryResultRow>(
     sql: string,
     params: readonly unknown[] = [],
   ): Promise<QueryResult<R>> {
     this.statements.push({ sql, params });
+
+    if (sql.includes('FROM agentos.platform_durable_tasks') && sql.includes('FOR UPDATE')) {
+      return { rows: [{ task_id: 'task-1' }] as unknown as R[], rowCount: 1 } as unknown as QueryResult<R>;
+    }
+
+    if (sql.includes('agentos.run_attempt_ordinals')) {
+      this.attemptOrdinal += 1;
+      return {
+        rows: [{ attempt_ordinal: this.attemptOrdinal }] as unknown as R[],
+        rowCount: 1,
+      } as unknown as QueryResult<R>;
+    }
 
     if (sql.startsWith('INSERT INTO agentos.run_stage_events')) {
       if (this.stage !== null) return { rows: [], rowCount: 0 } as unknown as QueryResult<R>;
@@ -87,7 +100,7 @@ class ScriptedClient {
         prompt_tokens: params[9] === null ? null : Number(params[9]),
         completion_tokens: params[10] === null ? null : Number(params[10]),
         cached_tokens: params[11] === null ? null : Number(params[11]),
-        estimated_cost_amount: params[12] === null ? null : String(params[12]),
+        estimated_cost_amount: params[12] === null ? null : Number(params[12]).toFixed(8),
         currency: params[13] === null ? null : String(params[13]),
         cost_status: params[14] === null ? null : String(params[14]),
         recorded_at: RECORDED_AT,
@@ -130,6 +143,7 @@ function harness(): {
     boundTenants,
   };
 }
+
 
 function stageInput(overrides: Partial<AppendRunStageEventInput> = {}): AppendRunStageEventInput {
   return {
@@ -195,6 +209,32 @@ describe('RunStageEventsRepository', () => {
       providerRepository.appendProviderCall(providerInput({ observed_status: 'SUCCESS' })),
     ).rejects.toThrow('PROVIDER_CALL_CONFLICT');
     expect(client.statements.filter(({ sql }) => sql.startsWith('INSERT INTO agentos.provider_call_ledger'))).toHaveLength(3);
+  });
+
+  it('treats numerically equivalent NUMERIC lexical forms as an identical replay', async () => {
+    const { providerRepository } = harness();
+
+    const first = await providerRepository.appendProviderCall(
+      providerInput({ estimated_cost_amount: '10.0', currency: 'USD', cost_status: 'OBSERVED' }),
+    );
+    expect(first.estimated_cost_amount).toBe('10.00000000');
+    await expect(
+      providerRepository.appendProviderCall(
+        providerInput({ estimated_cost_amount: 10, currency: 'USD', cost_status: 'OBSERVED' }),
+      ),
+    ).resolves.toEqual(first);
+  });
+
+  it('allocates unique ordinals for concurrent starts through the durable cursor', async () => {
+    const { repository, client } = harness();
+
+    const ordinals = await Promise.all([
+      repository.nextAttemptOrdinal(TENANT, RUN_ID),
+      repository.nextAttemptOrdinal(TENANT, RUN_ID),
+    ]);
+
+    expect(ordinals.sort((left, right) => left - right)).toEqual([1, 2]);
+    expect(client.statements.some(({ sql }) => sql.includes('agentos.run_attempt_ordinals'))).toBe(true);
   });
 
   it('binds reads to the requested tenant and does not expose another tenant rows', async () => {

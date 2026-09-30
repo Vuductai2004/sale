@@ -510,6 +510,30 @@ describe('ConversationRepository.setState', () => {
     expect(client.statements).toEqual([]);
   });
 });
+describe('ConversationRepository.clearTakeoverIfOwned', () => {
+  it('compare-and-clears only the paused marker owned by the expired operator', async () => {
+    const { repository, client, boundTenants } = harnessFor({ state: { rows: [{ id: CONVERSATION_ID }] } });
+
+    await expect(
+      repository.clearTakeoverIfOwned(TENANT, CONVERSATION_ID, OPERATOR_ID),
+    ).resolves.toBe(true);
+
+    expect(boundTenants).toEqual([TENANT]);
+    expect(client.statements.map((statement) => statement.kind)).toEqual(['state']);
+    expect(bindingsOf(client, 'state')).toEqual([TENANT, CONVERSATION_ID, OPERATOR_ID]);
+    expect(client.statements[0]?.sql).toContain("state = 'paused_takeover'");
+    expect(client.statements[0]?.sql).toContain('takeover_operator_id = $3');
+  });
+  it('does not clear a takeover marker when a different operator attempts expiry cleanup', async () => {
+    const { repository, client } = harnessFor({ state: { rowCount: 0 } });
+
+    await expect(
+      repository.clearTakeoverIfOwned(TENANT, CONVERSATION_ID, 'operator-b'),
+    ).resolves.toBe(false);
+
+    expect(client.statements[0]?.params).toEqual([TENANT, CONVERSATION_ID, 'operator-b']);
+  });
+});
 
 describe('ConversationRepository.appendMessage', () => {
   it('appends the turn and advances the conversation in one transaction', async () => {

@@ -226,6 +226,19 @@ const UPDATE_CONVERSATION_STATE = `UPDATE ${CONVERSATIONS}
       takeover_operator_id = $4
   WHERE tenant_id = $1 AND id = $2
   RETURNING id`;
+/**
+ * Clears only the stale marker owned by the operator whose lease was observed as absent. The
+ * owner predicate makes expiry cleanup safe against a different operator acquiring the lease and
+ * updating the durable marker before this transaction runs.
+ */
+const CLEAR_TAKEOVER_IF_OWNED = `UPDATE ${CONVERSATIONS}
+  SET state = 'open',
+      takeover_operator_id = NULL
+  WHERE tenant_id = $1
+    AND id = $2
+    AND state = 'paused_takeover'
+    AND takeover_operator_id = $3
+  RETURNING id`;
 
 /**
  * The turn's half of R02: the conversation of the appended message advances `last_message_at` in the
@@ -628,6 +641,26 @@ export class ConversationRepository {
       return result.rowCount === 1;
     });
   }
+  /**
+   * Clears an expired takeover marker only when the durable row still names the former operator.
+   * This compare-and-clear is the boundary that prevents a newer operator's takeover from being
+   * cleared by a request that observed the old Redis lease after it lapsed.
+   */
+  async clearTakeoverIfOwned(
+    tenant_id: string,
+    conversation_id: string,
+    operator_id: string,
+  ): Promise<boolean> {
+    assertIdentifier(tenant_id, 'tenant_id', 36, 'CONVERSATION_TENANT_ID_REQUIRED');
+    const id = readConversationId(conversation_id, 'CONVERSATION_ID_REQUIRED');
+    assertIdentifier(operator_id, 'operator_id', 128, 'CONVERSATION_OPERATOR_INVALID');
+
+    return this.runInTenantTransaction(tenant_id, async (client) => {
+      const result = await client.query(CLEAR_TAKEOVER_IF_OWNED, [tenant_id, id, operator_id]);
+      return result.rowCount === 1;
+    });
+  }
+
 
   /** Lists the tenant's most recent conversations without exposing another tenant's rows. */
   async list(tenant_id: string, limit = 50): Promise<readonly ConversationRecord[]> {

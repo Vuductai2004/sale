@@ -65,12 +65,16 @@ class ScriptedClient {
   ): Promise<QueryResult<R>> {
     this.statements.push({ sql, params });
 
+    if (sql.startsWith('SELECT run_id')) {
+      return { rows: [{ run_id: RUN_ID }], rowCount: 1 } as unknown as QueryResult<R>;
+    }
+
     if (sql.startsWith('INSERT INTO agentos.run_responses')) {
       if (this.response !== null) {
         return { rows: [], rowCount: 0 } as unknown as QueryResult<R>;
       }
 
-      const [tenant_id, run_id, answer, rawSources, conversation_id] = params;
+      const [tenant_id, run_id, answer, rawSources, conversation_id, message_id] = params;
       const sources = JSON.parse(String(rawSources));
       this.response = responseRow({
         tenant_id: String(tenant_id),
@@ -78,6 +82,7 @@ class ScriptedClient {
         answer: String(answer),
         sources,
         conversation_id: conversation_id === null ? null : String(conversation_id),
+        message_id: message_id === null ? null : String(message_id),
       });
       return { rows: [this.response] as unknown as R[], rowCount: 1 } as unknown as QueryResult<R>;
     }
@@ -101,11 +106,6 @@ class ScriptedClient {
       } as unknown as QueryResult<R>;
     }
 
-    if (sql.startsWith('UPDATE agentos.run_responses')) {
-      if (this.response === null) return { rows: [], rowCount: 0 } as unknown as QueryResult<R>;
-      this.response = responseRow({ ...this.response, message_id: MESSAGE_ID });
-      return { rows: [this.response] as unknown as R[], rowCount: 1 } as unknown as QueryResult<R>;
-    }
 
     throw new Error(`SCRIPTED_STATEMENT_UNKNOWN: ${sql}`);
   }
@@ -141,8 +141,10 @@ describe('RunResponseRepository', () => {
     expect(second).toEqual(first);
     expect(client.statements.filter(({ sql }) => sql.startsWith('INSERT INTO agentos.conversation_messages'))).toHaveLength(0);
     expect(client.statements.map(({ sql }) => sql.split('\n', 1)[0])).toEqual([
+      'SELECT run_id',
+      'SELECT',
       'INSERT INTO agentos.run_responses (',
-      'INSERT INTO agentos.run_responses (',
+      'SELECT run_id',
       'SELECT',
     ]);
     expect(boundTenants).toEqual([TENANT, TENANT]);
@@ -157,11 +159,12 @@ describe('RunResponseRepository', () => {
     expect(first.message_id).toBe(MESSAGE_ID);
     expect(second).toEqual(first);
     expect(client.statements.map(({ sql }) => sql.split('\n', 1)[0])).toEqual([
-      'INSERT INTO agentos.run_responses (',
+      'SELECT run_id',
+      'SELECT',
       'UPDATE agentos.conversations',
       'INSERT INTO agentos.conversation_messages (',
-      'UPDATE agentos.run_responses',
       'INSERT INTO agentos.run_responses (',
+      'SELECT run_id',
       'SELECT',
     ]);
     const messageWrites = client.statements.filter(({ sql }) => sql.startsWith('INSERT INTO agentos.conversation_messages'));

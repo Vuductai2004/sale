@@ -5,6 +5,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { getPool } from './client.js';
 import { AuditRepository } from './repositories/audit-evidence.js';
+import { ApprovalRepository } from './repositories/approvals.js';
 import { insertFact } from './repositories/customer-360.js';
 import { withTenantContext } from './rls.js';
 
@@ -32,6 +33,11 @@ const PRODUCT_B = '01920000-0000-7000-8000-0000000000b2';
 const CONVERSATION_A = '01920000-0000-7000-8000-0000000000a3';
 const CONVERSATION_B = '01920000-0000-7000-8000-0000000000b3';
 const IDENTITY_B = '01920000-0000-7000-8000-0000000000b4';
+
+const SWEEP_ACTION_A = '01920000-0000-7000-8000-0000000000c1';
+const SWEEP_ACTION_B = '01920000-0000-7000-8000-0000000000c2';
+const SWEEP_APPROVAL_A = '01920000-0000-7000-8000-0000000000d1';
+const SWEEP_APPROVAL_B = '01920000-0000-7000-8000-0000000000d2';
 
 const FIXTURE_TENANTS: readonly string[] = [TENANT_A, TENANT_B];
 
@@ -96,6 +102,8 @@ const FIXTURE_INSERTS: readonly { readonly text: string; readonly values: readon
 
 /** Children before parents so composite ON DELETE RESTRICT edges never block cleanup. */
 const FIXTURE_DELETES: readonly string[] = [
+  'DELETE FROM agentos.approvals WHERE tenant_id = ANY($1::uuid[])',
+  'DELETE FROM agentos.actions WHERE tenant_id = ANY($1::uuid[])',
   'DELETE FROM agentos.tenant_governance_settings WHERE tenant_id = ANY($1::uuid[])',
   'DELETE FROM agentos.evidences WHERE tenant_id = ANY($1::uuid[])',
   'DELETE FROM agentos.service_cases WHERE tenant_id = ANY($1::uuid[])',
@@ -131,6 +139,11 @@ type CountRow = { total: number };
 type PidRow = { pid: number };
 type SettingRow = { tenant: string | null };
 type UserRow = { db_user: string };
+
+type SweepStateRow = {
+  readonly decision: string;
+  readonly action_status: string;
+};
 
 function sqlStateOf(error: unknown): string | undefined {
   if (typeof error !== 'object' || error === null) {
@@ -460,6 +473,37 @@ describe.skipIf(!hasDatabaseUrl)('agentos_app RLS rehearsal (real PostgreSQL)', 
       expectSqlState(outcome.rejectedInsert, '42501');
     });
   });
+  describe('customer 360 consent aggregation', () => {
+    it('lets any opt-out suppress marketing consent instead of allowing an opt-in to win', async () => {
+      const client = await fixturePool.connect();
+
+      try {
+        await beginAppRole(client, TENANT_A);
+        await client.query(
+          `INSERT INTO agentos.consents (
+             tenant_id, customer_id, consent_type, channel, is_granted, opt_in_method, opt_in_timestamp
+           ) VALUES ($1, $2, 'marketing_messaging', 'line', TRUE, 'web_form', CURRENT_TIMESTAMP),
+                    ($1, $2, 'marketing_messaging', 'email', FALSE, 'web_form', CURRENT_TIMESTAMP)`,
+          [TENANT_A, CUSTOMER_A],
+        );
+
+        const result = await client.query<{
+          consent_marketing: boolean;
+          suppression_active: boolean;
+        }>(
+          `SELECT consent_marketing, suppression_active
+             FROM agentos.customer_360_profiles
+            WHERE tenant_id = $1 AND customer_id = $2`,
+          [TENANT_A, CUSTOMER_A],
+        );
+
+        expect(result.rows).toEqual([{ consent_marketing: false, suppression_active: true }]);
+      } finally {
+        await client.query('ROLLBACK').catch(() => undefined);
+        client.release();
+      }
+    });
+  });
 
   describe('tenant governance settings', () => {
     it('allows SELECT only and isolates settings rows by tenant', async () => {
@@ -659,6 +703,60 @@ describe.skipIf(!hasDatabaseUrl)('agentos_app RLS rehearsal (real PostgreSQL)', 
         expect(setting === null || setting.trim() === '').toBe(true);
       } finally {
         client.release();
+      }
+    });
+    it('expires only the approvals in the tenant context', async () => {
+      const actionInsert =
+        'INSERT INTO agentos.actions (id, tenant_id, skill_name, effect_key, target_channel, action_payload) ' +
+        "VALUES ($1, $2, 'rls-sweep', $3, 'test', '{}'::jsonb)";
+      const approvalInsert =
+        'INSERT INTO agentos.approvals (id, tenant_id, run_id, action_id, effect_key, payload, reason, expires_at) ' +
+        "VALUES ($1, $2, $3, $4, $5, '{}'::jsonb, 'RLS sweep fixture', CURRENT_TIMESTAMP - INTERVAL '1 minute')";
+
+      await fixturePool.query(actionInsert, [SWEEP_ACTION_A, TENANT_A, 'rls-sweep-a']);
+      await fixturePool.query(actionInsert, [SWEEP_ACTION_B, TENANT_B, 'rls-sweep-b']);
+      await fixturePool.query(approvalInsert, [
+        SWEEP_APPROVAL_A,
+        TENANT_A,
+        'rls-sweep-run-a',
+        SWEEP_ACTION_A,
+        'rls-sweep-a',
+      ]);
+      await fixturePool.query(approvalInsert, [
+        SWEEP_APPROVAL_B,
+        TENANT_B,
+        'rls-sweep-run-b',
+        SWEEP_ACTION_B,
+        'rls-sweep-b',
+      ]);
+
+      try {
+        await expect(new ApprovalRepository().expireOverdueApprovals(TENANT_A, 500)).resolves.toEqual([
+          SWEEP_APPROVAL_A,
+        ]);
+
+        const stateA = await asAppRole(fixturePool, TENANT_A, (client) =>
+          client.query<SweepStateRow>(
+            'SELECT p.decision, a.status AS action_status FROM agentos.approvals p JOIN agentos.actions a ON a.tenant_id = p.tenant_id AND a.id = p.action_id WHERE p.id = ANY($1::uuid[]) ORDER BY p.id',
+            [[SWEEP_APPROVAL_A, SWEEP_APPROVAL_B]],
+          ),
+        );
+        expect(stateA.rows).toEqual([{ decision: 'EXPIRED', action_status: 'failed' }]);
+
+        const stateB = await asAppRole(fixturePool, TENANT_B, (client) =>
+          client.query<SweepStateRow>(
+            'SELECT p.decision, a.status AS action_status FROM agentos.approvals p JOIN agentos.actions a ON a.tenant_id = p.tenant_id AND a.id = p.action_id WHERE p.id = $1',
+            [SWEEP_APPROVAL_B],
+          ),
+        );
+        expect(stateB.rows).toEqual([{ decision: 'PENDING', action_status: 'pending' }]);
+      } finally {
+        await fixturePool.query('DELETE FROM agentos.approvals WHERE id = ANY($1::uuid[])', [
+          [SWEEP_APPROVAL_A, SWEEP_APPROVAL_B],
+        ]);
+        await fixturePool.query('DELETE FROM agentos.actions WHERE id = ANY($1::uuid[])', [
+          [SWEEP_ACTION_A, SWEEP_ACTION_B],
+        ]);
       }
     });
   });

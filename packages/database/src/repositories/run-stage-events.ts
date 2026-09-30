@@ -216,17 +216,36 @@ function assertNullableNonNegativeInteger(value: unknown, field: string, code: s
   assertNonNegativeInteger(value, field, code);
 }
 
+function canonicalDecimal(value: string | number): string | null {
+  const text = typeof value === 'number' ? String(value) : value;
+  if (!/^\d+(?:\.\d{1,8})?$/.test(text) || text.length > 32) return null;
+
+  const decimalPoint = text.indexOf('.');
+  const integer = decimalPoint === -1 ? text : text.slice(0, decimalPoint);
+  const fraction = decimalPoint === -1 ? '' : text.slice(decimalPoint + 1);
+  const canonicalInteger = integer.replace(/^0+(?=\d)/, '');
+  const canonicalFraction = fraction.replace(/0+$/, '');
+
+  return canonicalFraction.length === 0
+    ? canonicalInteger
+    : `${canonicalInteger}.${canonicalFraction}`;
+}
+
+function sameDecimal(left: string | number | null, right: string | number | null): boolean {
+  if (left === null || right === null) return left === right;
+  const canonicalLeft = canonicalDecimal(left);
+  const canonicalRight = canonicalDecimal(right);
+  return canonicalLeft !== null && canonicalLeft === canonicalRight;
+}
+
 function assertCost(value: unknown, code: string): string | null {
   if (value === undefined || value === null) return null;
   const normalized = typeof value === 'number' ? String(value) : value;
-  if (
-    typeof normalized !== 'string' ||
-    !/^\d+(?:\.\d{1,8})?$/.test(normalized) ||
-    normalized.length > 32
-  ) {
+  const canonical = typeof normalized === 'string' ? canonicalDecimal(normalized) : null;
+  if (canonical === null) {
     throw new Error(`${code}: estimated_cost_amount must be a non-negative decimal (${CODE_OWNER}).`);
   }
-  return normalized;
+  return canonical;
 }
 
 function toStageRecord(row: RunStageEventRow): RunStageEventRecord {
@@ -299,7 +318,7 @@ function assertProviderReplayMatches(
     existing.prompt_tokens !== (input.prompt_tokens ?? null) ||
     existing.completion_tokens !== (input.completion_tokens ?? null) ||
     existing.cached_tokens !== (input.cached_tokens ?? null) ||
-    existing.estimated_cost_amount !== estimated_cost_amount ||
+    !sameDecimal(existing.estimated_cost_amount, estimated_cost_amount) ||
     existing.currency !== (input.currency ?? null) ||
     existing.cost_status !== (input.cost_status ?? null) ||
     !recordedAt
@@ -331,14 +350,36 @@ export class RunStageEventsRepository {
     this.runInTenantTransaction = runInTenantTransaction;
   }
 
-  /** The claimed worker lease serializes starts; derive the next attempt from committed events. */
+  /** Allocates from a durable per-run cursor, seeded from committed events on its first use. */
   async nextAttemptOrdinal(tenant_id: string, run_id: string): Promise<number> {
     assertIdentifier(tenant_id, 'tenant_id', 36, 'RUN_STAGE_EVENT_TENANT_ID_REQUIRED');
     assertIdentifier(run_id, 'run_id', 64, 'RUN_STAGE_EVENT_RUN_ID_REQUIRED');
     return this.runInTenantTransaction(tenant_id, async (client) => {
+      const task = await client.query<{ readonly task_id: string }>(
+        `SELECT task_id
+           FROM agentos.platform_durable_tasks
+          WHERE tenant_id = $1 AND run_id = $2
+          FOR UPDATE`,
+        [tenant_id, run_id],
+      );
+      if (task.rowCount !== 1) {
+        throw new Error(
+          `RUN_STAGE_EVENT_RUN_NOT_FOUND: run ${run_id} does not belong to tenant ${tenant_id} (${CODE_OWNER}).`,
+        );
+      }
+
       const result = await client.query<{ attempt_ordinal: number }>(
-        `SELECT COALESCE(MAX(attempt_ordinal), 0)::int + 1 AS attempt_ordinal
-         FROM ${RUN_STAGE_EVENTS} WHERE tenant_id = $1 AND run_id = $2`,
+        `WITH current_ordinal AS (
+           SELECT COALESCE(MAX(attempt_ordinal), 0)::int + 1 AS ordinal
+             FROM ${RUN_STAGE_EVENTS}
+            WHERE tenant_id = $1 AND run_id = $2
+         )
+         INSERT INTO agentos.run_attempt_ordinals AS allocation (tenant_id, run_id, last_ordinal)
+         SELECT $1, $2, ordinal
+           FROM current_ordinal
+         ON CONFLICT (tenant_id, run_id) DO UPDATE
+           SET last_ordinal = allocation.last_ordinal + 1
+         RETURNING last_ordinal AS attempt_ordinal`,
         [tenant_id, run_id],
       );
       return result.rows[0]!.attempt_ordinal;

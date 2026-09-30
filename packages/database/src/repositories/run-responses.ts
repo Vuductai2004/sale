@@ -47,15 +47,21 @@ const RESPONSE_PROJECTION = `
     message_id,
     created_at`;
 
-/** The unique key is the concurrency fence: one winner creates the row, later callers lock it. */
+/** A durable run lock serializes response/message creation without UPDATE privileges on run_responses. */
+const LOCK_RUN = `SELECT run_id
+  FROM agentos.platform_durable_tasks
+  WHERE tenant_id = $1 AND run_id = $2
+  FOR UPDATE`;
+
 const INSERT_RESPONSE = `INSERT INTO ${RUN_RESPONSES} (
     tenant_id,
     run_id,
     answer,
     sources,
-    conversation_id
+    conversation_id,
+    message_id
   )
-  VALUES ($1, $2, $3, $4::jsonb, $5)
+  VALUES ($1, $2, $3, $4::jsonb, $5, $6)
   ON CONFLICT (tenant_id, run_id) DO NOTHING
   RETURNING${RESPONSE_PROJECTION}`;
 
@@ -64,8 +70,8 @@ const SELECT_RESPONSE = `SELECT${RESPONSE_PROJECTION}
   WHERE tenant_id = $1 AND run_id = $2`;
 
 /**
- * The losing concurrent writer must wait for and lock the winner before it compares or returns the
- * response. This is what prevents two replays from each appending an agent message.
+ * The response row remains immutable after insertion. The durable run lock above serializes
+ * concurrent writers, and this lock is used only for exact replay reads.
  */
 const SELECT_RESPONSE_FOR_UPDATE = `${SELECT_RESPONSE}
   FOR UPDATE`;
@@ -85,10 +91,6 @@ const INSERT_AGENT_MESSAGE = `INSERT INTO ${CONVERSATION_MESSAGES} (
   VALUES ($1, $2, 'agent', $3, $4)
   RETURNING id AS message_id`;
 
-const SET_MESSAGE_ID = `UPDATE ${RUN_RESPONSES}
-  SET message_id = $3
-  WHERE tenant_id = $1 AND run_id = $2 AND message_id IS NULL
-  RETURNING${RESPONSE_PROJECTION}`;
 
 interface RunResponseRow extends QueryResultRow {
   tenant_id: string;
@@ -158,9 +160,9 @@ function assertReplayMatches(
 /**
  * Persists one terminal run response and, for conversational runs, its one agent message.
  *
- * Every method runs through a tenant transaction. The response primary key `(tenant_id, run_id)` is
- * inserted before the message; a competing replay therefore waits on the unique key, then takes a
- * `FOR UPDATE` lock and observes the winner's `message_id` instead of inserting a second message.
+ * Every method runs through a tenant transaction. The owning durable run is locked before the
+ * response is read or written; a conversational message is inserted first, then the immutable
+ * response points at it in the same transaction.
  */
 export class RunResponseRepository {
   private readonly runInTenantTransaction: TenantTransactionRunner;
@@ -188,82 +190,77 @@ export class RunResponseRepository {
     const sources = serializeJsonb(input.sources, 'RUN_RESPONSE_SOURCES_INVALID');
 
     return this.runInTenantTransaction(input.tenant_id, async (client) => {
+      const lockedRun = await client.query<{ readonly run_id: string }>(LOCK_RUN, [
+        input.tenant_id,
+        input.run_id,
+      ]);
+      if (lockedRun.rowCount !== 1) {
+        throw new Error(
+          `RUN_RESPONSE_RUN_NOT_FOUND: run ${input.run_id} does not belong to tenant ` +
+            `${input.tenant_id} (${CODE_OWNER}).`,
+        );
+      }
+
+      const existing = await client.query<RunResponseRow>(SELECT_RESPONSE_FOR_UPDATE, [
+        input.tenant_id,
+        input.run_id,
+      ]);
+      const existingRow = existing.rows[0];
+      if (existingRow !== undefined) {
+        const existingRecord = toRunResponseRecord(existingRow);
+        assertReplayMatches(existingRecord, input);
+        if (existingRecord.message_id === null && conversation_id !== null) {
+          throw new Error(
+            `RUN_RESPONSE_INCOMPLETE: response ${input.run_id} has no linked agent message; ` +
+              `refusing to mutate the append-only response (${CODE_OWNER}).`,
+          );
+        }
+        return existingRecord;
+      }
+
+      let message_id: string | null = null;
+      if (conversation_id !== null) {
+        const advanced = await client.query(TOUCH_CONVERSATION, [input.tenant_id, conversation_id]);
+        if (advanced.rowCount !== 1) {
+          throw new Error(
+            `RUN_RESPONSE_CONVERSATION_NOT_FOUND: this tenant holds no conversation ` +
+              `${conversation_id}; refusing to store an agent message without its conversation ` +
+              `(${CODE_OWNER}).`,
+          );
+        }
+
+        const message = await client.query<InsertedMessageRow>(INSERT_AGENT_MESSAGE, [
+          input.tenant_id,
+          conversation_id,
+          input.sender_id,
+          input.answer,
+        ]);
+        const messageRow = message.rows[0];
+        if (messageRow === undefined) {
+          throw new Error(
+            `RUN_RESPONSE_MESSAGE_MISSING: the agent message insert returned no id ` +
+              `(${CODE_OWNER}).`,
+          );
+        }
+        message_id = messageRow.message_id;
+      }
+
       const inserted = await client.query<RunResponseRow>(INSERT_RESPONSE, [
         input.tenant_id,
         input.run_id,
         input.answer,
         sources,
         conversation_id,
+        message_id,
       ]);
-
-      let row = inserted.rows[0];
-
+      const row = inserted.rows[0];
       if (row === undefined) {
-        const existing = await client.query<RunResponseRow>(SELECT_RESPONSE_FOR_UPDATE, [
-          input.tenant_id,
-          input.run_id,
-        ]);
-        row = existing.rows[0];
-
-        if (row === undefined) {
-          throw new Error(
-            `RUN_RESPONSE_UNSTABLE: the unique response key was taken but no row is visible for ` +
-              `tenant ${input.tenant_id} and run ${input.run_id} (${CODE_OWNER}).`,
-          );
-        }
-
-        const existingRecord = toRunResponseRecord(row);
-        assertReplayMatches(existingRecord, input);
-
-        // A committed repository write always has the message when conversation_id is non-null.
-        // This branch only repairs an externally-created incomplete row while retaining the same
-        // row lock and concurrency fence; it still commits response and message atomically.
-        if (existingRecord.message_id !== null || conversation_id === null) {
-          return existingRecord;
-        }
-      }
-
-      if (conversation_id === null) {
-        return toRunResponseRecord(row);
-      }
-
-      const advanced = await client.query(TOUCH_CONVERSATION, [input.tenant_id, conversation_id]);
-      if (advanced.rowCount !== 1) {
         throw new Error(
-          `RUN_RESPONSE_CONVERSATION_NOT_FOUND: this tenant holds no conversation ` +
-            `${conversation_id}; refusing to store an agent message without its conversation ` +
+          `RUN_RESPONSE_UNSTABLE: response ${input.run_id} was taken outside the durable run lock ` +
             `(${CODE_OWNER}).`,
         );
       }
-
-      const message = await client.query<InsertedMessageRow>(INSERT_AGENT_MESSAGE, [
-        input.tenant_id,
-        conversation_id,
-        input.sender_id,
-        input.answer,
-      ]);
-      const messageRow = message.rows[0];
-      if (messageRow === undefined) {
-        throw new Error(
-          `RUN_RESPONSE_MESSAGE_MISSING: the agent message insert returned no id ` +
-            `(${CODE_OWNER}).`,
-        );
-      }
-
-      const updated = await client.query<RunResponseRow>(SET_MESSAGE_ID, [
-        input.tenant_id,
-        input.run_id,
-        messageRow.message_id,
-      ]);
-      const updatedRow = updated.rows[0];
-      if (updatedRow === undefined) {
-        throw new Error(
-          `RUN_RESPONSE_UPDATE_MISSING: response ${input.run_id} lost its row before message ` +
-            `linkage was committed (${CODE_OWNER}).`,
-        );
-      }
-
-      return toRunResponseRecord(updatedRow);
+      return toRunResponseRecord(row);
     });
   }
 

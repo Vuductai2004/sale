@@ -6,6 +6,8 @@
  * or another runtime package. Structural input/output types live in `../contracts/index.ts`, which
  * this package publishes as a type-only entry point.
  */
+export { canonicalizeJson, sha256CanonicalJson } from './canonical-json.js';
+
 
 export {
   admitCareTurn,
