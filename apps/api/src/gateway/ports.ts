@@ -402,6 +402,13 @@ export interface GatewayAuditPort {
   }): Promise<void>;
 }
 
+/** Read-only tenant governance settings used by approval policy routes. */
+export interface GovernancePort {
+  get(tenant_id: string): Promise<{
+    readonly require_distinct_approver: boolean;
+  }>;
+}
+
 /** The single exit path from a route to the durable reservation protocol (`04` §4.4). */
 export interface ReceiptPort {
   /** Returns the cached receipt for an identical replay; never re-executes the effect. */
@@ -430,6 +437,7 @@ export interface GatewayRuntime {
   readonly kpi: KpiPort;
   readonly identity: IdentityPort;
   readonly webhooks: WebhookVerificationPort;
+  readonly governance?: GovernancePort;
   readonly audit: GatewayAuditPort;
   readonly providerCalls?: ProviderCallPort;
   readonly receipts: ReceiptPort;

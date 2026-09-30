@@ -37,3 +37,4 @@ export type {
   CustomerIdentityLookup,
   CustomerOperatorCustomerLookup,
 } from './bindings/approval-identity-port.js';
+export { createGovernancePort } from './bindings/governance-port.js';

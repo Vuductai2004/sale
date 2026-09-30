@@ -29,6 +29,10 @@ const QUEUED_AT = '2026-09-23T00:01:00.000Z';
 
 function buildHarness(options?: {
   approvalDetail?: ApprovalDetailResponse | null;
+  governanceSetting?: boolean;
+  governanceFailure?: boolean;
+  runSessionId?: string;
+  runReadFailure?: boolean;
   decideImpl?: (input: {
     tenant_id: string;
     approval_id: string;
@@ -80,6 +84,18 @@ function buildHarness(options?: {
   });
 
   const auditRecord = vi.fn(async () => undefined);
+  const governanceGet = vi.fn(async () => {
+    if (options?.governanceFailure === true) {
+      throw new Error('governance lookup failed');
+    }
+    return { require_distinct_approver: options?.governanceSetting ?? false };
+  });
+  const runRead = vi.fn(async () => {
+    if (options?.runReadFailure === true) {
+      throw new Error('run lookup failed');
+    }
+    return { session_id: options?.runSessionId ?? 'different-drafter' };
+  });
 
   const runtime = {
     approvals: {
@@ -87,6 +103,8 @@ function buildHarness(options?: {
       detail: detailFn,
       decide,
     },
+    governance: { get: governanceGet },
+    runs: { read: runRead },
     audit: { record: auditRecord },
     clock: () => new Date('2026-09-23T00:00:00.000Z'),
     ids: () => 'corr-approval-test',
@@ -190,6 +208,102 @@ describe('POST /approvals/:approval_id/decision (R05 approvals.decide)', () => {
           expected_payload_sha256: PAYLOAD_SHA256,
         },
       });
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('allows the draft owner to approve when the distinct-approver setting is off', async () => {
+    const { app, decide } = buildHarness({ runSessionId: OPERATOR_ID });
+
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: `/approvals/${APPROVAL_ID}/decision`,
+        headers: { authorization: `Bearer ${OPERATOR_TOKEN}` },
+        payload: {
+          decision: 'APPROVE',
+          reason: 'Approved under the disabled distinct-approver policy',
+          expected_payload_sha256: PAYLOAD_SHA256,
+        },
+      });
+
+      expect(response.statusCode).toBe(202);
+      expect(decide).toHaveBeenCalledTimes(1);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('refuses a same-operator decision when the distinct-approver setting is on', async () => {
+    const { app, decide } = buildHarness({
+      governanceSetting: true,
+      runSessionId: OPERATOR_ID,
+    });
+
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: `/approvals/${APPROVAL_ID}/decision`,
+        headers: { authorization: `Bearer ${OPERATOR_TOKEN}` },
+        payload: {
+          decision: 'APPROVE',
+          reason: 'Attempted self-approval',
+          expected_payload_sha256: PAYLOAD_SHA256,
+        },
+      });
+
+      expect(response.statusCode).toBe(403);
+      expect(response.json()).toMatchObject({ error_code: 'APPROVER_MUST_DIFFER' });
+      expect(decide).not.toHaveBeenCalled();
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('allows a different operator when the distinct-approver setting is on', async () => {
+    const { app, decide } = buildHarness({
+      governanceSetting: true,
+      runSessionId: 'drafting-operator',
+    });
+
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: `/approvals/${APPROVAL_ID}/decision`,
+        headers: { authorization: `Bearer ${OPERATOR_TOKEN}` },
+        payload: {
+          decision: 'APPROVE',
+          reason: 'Independent approval',
+          expected_payload_sha256: PAYLOAD_SHA256,
+        },
+      });
+
+      expect(response.statusCode).toBe(202);
+      expect(decide).toHaveBeenCalledTimes(1);
+    } finally {
+      await app.close();
+    }
+  });
+
+  it('refuses the decision when the governance lookup fails', async () => {
+    const { app, decide } = buildHarness({ governanceFailure: true });
+
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: `/approvals/${APPROVAL_ID}/decision`,
+        headers: { authorization: `Bearer ${OPERATOR_TOKEN}` },
+        payload: {
+          decision: 'APPROVE',
+          reason: 'Governance lookup must succeed before approval',
+          expected_payload_sha256: PAYLOAD_SHA256,
+        },
+      });
+
+      expect(response.statusCode).toBe(503);
+      expect(response.json()).toMatchObject({ error_code: 'PROVIDER_TIMEOUT' });
+      expect(decide).not.toHaveBeenCalled();
     } finally {
       await app.close();
     }

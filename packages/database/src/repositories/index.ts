@@ -173,3 +173,5 @@ export type {
   TenantRecord,
   TenantWorkspaceRecord,
 } from './p5-provisioning.js';
+export { TenantGovernanceRepository } from './tenant-governance.js';
+export type { TenantGovernanceSettingsRecord } from './tenant-governance.js';

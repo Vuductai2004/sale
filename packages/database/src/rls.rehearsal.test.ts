@@ -37,6 +37,34 @@ const FIXTURE_TENANTS: readonly string[] = [TENANT_A, TENANT_B];
 
 const FIXTURE_INSERTS: readonly { readonly text: string; readonly values: readonly unknown[] }[] = [
   {
+    text: 'INSERT INTO agentos.tenants (tenant_id, status, display_name, idempotency_key, request_fingerprint) VALUES ($1, $2, $3, $4, $5)',
+    values: [
+      TENANT_A,
+      'PROVISIONED',
+      'fixture-tenant-a',
+      'fixture-tenant-a'.padEnd(64, 'a'),
+      'fixture-tenant-a'.padEnd(64, 'b'),
+    ],
+  },
+  {
+    text: 'INSERT INTO agentos.tenants (tenant_id, status, display_name, idempotency_key, request_fingerprint) VALUES ($1, $2, $3, $4, $5)',
+    values: [
+      TENANT_B,
+      'PROVISIONED',
+      'fixture-tenant-b',
+      'fixture-tenant-b'.padEnd(64, 'a'),
+      'fixture-tenant-b'.padEnd(64, 'b'),
+    ],
+  },
+  {
+    text: 'INSERT INTO agentos.tenant_governance_settings (tenant_id, require_distinct_approver) VALUES ($1, $2)',
+    values: [TENANT_A, true],
+  },
+  {
+    text: 'INSERT INTO agentos.tenant_governance_settings (tenant_id, require_distinct_approver) VALUES ($1, $2)',
+    values: [TENANT_B, false],
+  },
+  {
     text: 'INSERT INTO agentos.customers (id, tenant_id, display_name, verification_status) VALUES ($1, $2, $3, $4)',
     values: [CUSTOMER_A, TENANT_A, 'fixture-customer-a', 'verified'],
   },
@@ -68,6 +96,7 @@ const FIXTURE_INSERTS: readonly { readonly text: string; readonly values: readon
 
 /** Children before parents so composite ON DELETE RESTRICT edges never block cleanup. */
 const FIXTURE_DELETES: readonly string[] = [
+  'DELETE FROM agentos.tenant_governance_settings WHERE tenant_id = ANY($1::uuid[])',
   'DELETE FROM agentos.evidences WHERE tenant_id = ANY($1::uuid[])',
   'DELETE FROM agentos.service_cases WHERE tenant_id = ANY($1::uuid[])',
   'DELETE FROM agentos.recommendations WHERE tenant_id = ANY($1::uuid[])',
@@ -76,6 +105,7 @@ const FIXTURE_DELETES: readonly string[] = [
   'DELETE FROM agentos.conversations WHERE tenant_id = ANY($1::uuid[])',
   'DELETE FROM agentos.products WHERE tenant_id = ANY($1::uuid[])',
   'DELETE FROM agentos.customers WHERE tenant_id = ANY($1::uuid[])',
+  'DELETE FROM agentos.tenants WHERE tenant_id = ANY($1::uuid[])',
 ];
 
 const INSERT_ORDER =
@@ -378,6 +408,54 @@ describe.skipIf(!hasDatabaseUrl)('agentos_app RLS rehearsal (real PostgreSQL)', 
       expect(outcome.seesCustomerA).toBe(false);
       expect(outcome.hijackUpdate.rowCount).toBe(0);
       expectSqlState(outcome.rejectedInsert, '42501');
+    });
+  });
+
+  describe('tenant governance settings', () => {
+    it('allows SELECT only and isolates settings rows by tenant', async () => {
+      const visibleA = await asAppRole(fixturePool, TENANT_A, (client) =>
+        client.query<{ tenant_id: string; require_distinct_approver: boolean }>(
+          'SELECT tenant_id::text AS tenant_id, require_distinct_approver FROM agentos.tenant_governance_settings WHERE tenant_id = ANY($1::uuid[]) ORDER BY tenant_id',
+          [[TENANT_A, TENANT_B]],
+        ),
+      );
+      const visibleB = await asAppRole(fixturePool, TENANT_B, (client) =>
+        client.query<{ tenant_id: string; require_distinct_approver: boolean }>(
+          'SELECT tenant_id::text AS tenant_id, require_distinct_approver FROM agentos.tenant_governance_settings WHERE tenant_id = ANY($1::uuid[]) ORDER BY tenant_id',
+          [[TENANT_A, TENANT_B]],
+        ),
+      );
+      const rejectedInsert = await captureFailure(() =>
+        asAppRole(fixturePool, TENANT_A, (client) =>
+          client.query(
+            'INSERT INTO agentos.tenant_governance_settings (tenant_id, require_distinct_approver) VALUES ($1, $2)',
+            [TENANT_A, false],
+          ),
+        ),
+      );
+      const rejectedUpdate = await captureFailure(() =>
+        asAppRole(fixturePool, TENANT_A, (client) =>
+          client.query(
+            'UPDATE agentos.tenant_governance_settings SET require_distinct_approver = $1 WHERE tenant_id = $2',
+            [false, TENANT_A],
+          ),
+        ),
+      );
+      const rejectedDelete = await captureFailure(() =>
+        asAppRole(fixturePool, TENANT_A, (client) =>
+          client.query('DELETE FROM agentos.tenant_governance_settings WHERE tenant_id = $1', [TENANT_A]),
+        ),
+      );
+
+      expect(visibleA.rows).toEqual([
+        { tenant_id: TENANT_A, require_distinct_approver: true },
+      ]);
+      expect(visibleB.rows).toEqual([
+        { tenant_id: TENANT_B, require_distinct_approver: false },
+      ]);
+      expectSqlState(rejectedInsert, '42501');
+      expectSqlState(rejectedUpdate, '42501');
+      expectSqlState(rejectedDelete, '42501');
     });
   });
 

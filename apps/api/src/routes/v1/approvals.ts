@@ -185,6 +185,33 @@ export function registerApprovalRoutes(
           fail('NOT_FOUND', 'this tenant holds no approval with that identifier');
         }
 
+        let require_distinct_approver = false;
+        const governance = runtime.governance;
+        try {
+          if (governance === undefined) {
+            throw new Error('GOVERNANCE_SETTINGS_UNBOUND');
+          }
+          const settings = await governance.get(principal.tenant_id);
+          require_distinct_approver = settings.require_distinct_approver;
+        } catch {
+          fail('PROVIDER_TIMEOUT', 'governance settings could not be read; the decision was refused');
+        }
+
+        if (require_distinct_approver) {
+          let run: { readonly session_id?: string } | null = null;
+          try {
+            run = await runtime.runs.read({ tenant_id: principal.tenant_id, run_id: detail.run_id });
+          } catch {
+            fail('PROVIDER_TIMEOUT', 'the draft owner could not be read; the decision was refused');
+          }
+          if (run === null || run.session_id === undefined || run.session_id.length === 0) {
+            fail('PROVIDER_TIMEOUT', 'the draft owner could not be read; the decision was refused');
+          }
+          if (run.session_id === operator_id) {
+            fail('APPROVER_MUST_DIFFER', 'the approver must differ from the draft owner');
+          }
+        }
+
         const decided = await runtime.approvals.decide({
           tenant_id: principal.tenant_id,
           approval_id,

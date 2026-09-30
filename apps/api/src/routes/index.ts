@@ -6,6 +6,7 @@ import type { DemoCredentialStore } from '../runtime/demo-auth.js';
 import type { TurnIntentPort } from '../runtime/bindings/turn-intent.js';
 import { registerAnalyticsRoutes } from './v1/analytics.js';
 import { registerApprovalRoutes } from './v1/approvals.js';
+import { registerCompanySettingsRoutes } from './v1/company-settings.js';
 import { registerCampaignRoutes } from './v1/campaigns.js';
 import { registerChatRoutes } from './v1/chat.js';
 import { registerConversationRoutes } from './v1/conversations.js';
@@ -85,6 +86,7 @@ export function registerRoutes(app: FastifyInstance, deps: RouteDependencies): v
       registerChatRoutes(scope);
       registerEventRoutes(scope, deps);
       registerApprovalRoutes(scope, deps);
+      registerCompanySettingsRoutes(scope, deps);
       registerOperationRoutes(scope, deps);
       registerTelemetryRoutes(scope, deps);
       registerAnalyticsRoutes(scope, deps);
