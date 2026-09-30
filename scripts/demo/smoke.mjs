@@ -4,9 +4,10 @@ import { isMainModule } from './lib/main-module.mjs';
 import { stableUuid } from './seed.mjs';
 
 const TENANT_ID = '99999999-9999-4999-8999-999999999999';
-const ROLE_PASSWORDS = Object.freeze([
-  'DEMO_TENANT_OPERATOR_PASSWORD',
-  'DEMO_MARKETING_APPROVER_PASSWORD',
+const AUTH_ENV_KEYS = Object.freeze([
+  'DEMO_COMPANY_ADMIN_EMAIL',
+  'DEMO_COMPANY_ADMIN_PASSWORD',
+  'DEMO_PLATFORM_ADMIN_EMAIL',
   'DEMO_PLATFORM_ADMIN_PASSWORD',
 ]);
 
@@ -42,7 +43,7 @@ export function validateDemoSmokeEnvironment(env, profile = 'offline') {
   if (env.DEMO_TENANT_ID !== undefined && env.DEMO_TENANT_ID !== TENANT_ID) {
     throw new Error('DEMO_SMOKE_FAILED: DEMO_TENANT_ID is not the canonical NovaMart tenant');
   }
-  for (const key of ROLE_PASSWORDS) {
+  for (const key of AUTH_ENV_KEYS) {
     if (!requiredValue(env, key)) throw new Error(`DEMO_SMOKE_FAILED: ${key} is required`);
   }
   if (profile === 'live') {
@@ -67,16 +68,22 @@ async function request(base, path, init = {}) {
   return { response, body: await json(response) };
 }
 
-async function login(base, role, password) {
+async function login(base, email, password, audience) {
   const { response, body } = await request(base, 'demo/login', {
     method: 'POST',
     headers: { accept: 'application/json', 'content-type': 'application/json' },
-    body: JSON.stringify({ role, password }),
+    body: JSON.stringify({ email, password, audience }),
   });
-  if (!response.ok || !body || typeof body.access_token !== 'string' || body.tenant_id !== TENANT_ID) {
-    throw new Error(`DEMO_SMOKE_FAILED: ${role} login returned HTTP ${response.status}`);
+  if (
+    !response.ok
+    || !body
+    || typeof body.access_token !== 'string'
+    || body.membership?.tenant_id !== TENANT_ID
+    || body.membership?.scope !== audience
+  ) {
+    throw new Error(`DEMO_SMOKE_FAILED: ${audience} login returned HTTP ${response.status}`);
   }
-  return body.access_token;
+  return body;
 }
 
 async function readFirstStreamChunk(response) {
@@ -141,14 +148,36 @@ async function runFlow(env, profile) {
   validateDemoSmokeEnvironment(env, profile);
   const base = apiV1Base(env);
   const origin = (env.DEMO_WIDGET_ORIGINS ?? 'http://localhost:3000').split(',')[0].trim();
-  const tenantToken = await login(base, 'tenant_operator', env.DEMO_TENANT_OPERATOR_PASSWORD);
-  const approverToken = await login(base, 'marketing_approver', env.DEMO_MARKETING_APPROVER_PASSWORD);
-  const platformToken = await login(base, 'platform_admin', env.DEMO_PLATFORM_ADMIN_PASSWORD);
+  const companySession = await login(
+    base,
+    env.DEMO_COMPANY_ADMIN_EMAIL,
+    env.DEMO_COMPANY_ADMIN_PASSWORD,
+    'company',
+  );
+  const platformSession = await login(
+    base,
+    env.DEMO_PLATFORM_ADMIN_EMAIL,
+    env.DEMO_PLATFORM_ADMIN_PASSWORD,
+    'platform',
+  );
+  if (
+    !Array.isArray(companySession.permissions)
+    || companySession.permissions.length !== 7
+    || !companySession.permissions.includes('approval:decide')
+    || !companySession.permissions.includes('campaign:draft')
+  ) {
+    throw new Error('DEMO_SMOKE_FAILED: company session must expose the seven company-admin permissions');
+  }
+  if (platformSession.membership.scope !== 'platform') {
+    throw new Error('DEMO_SMOKE_FAILED: platform session must have platform scope');
+  }
+  const companyToken = companySession.access_token;
+  const platformToken = platformSession.access_token;
   const auth = (token) => ({ accept: 'application/json', authorization: `Bearer ${token}` });
 
   const widget = await request(base, 'demo/widget-session', {
     method: 'POST',
-    headers: { ...auth(tenantToken), origin, 'content-type': 'application/json' },
+    headers: { ...auth(companyToken), origin, 'content-type': 'application/json' },
     body: JSON.stringify({ persona: 'C05' }),
   });
   if (!widget.response.ok || typeof widget.body?.access_token !== 'string') {
@@ -156,7 +185,7 @@ async function runFlow(env, profile) {
   }
   const widgetToken = widget.body.access_token;
 
-  const catalog = await request(base, 'demo/catalog', { headers: auth(tenantToken) });
+  const catalog = await request(base, 'demo/catalog', { headers: auth(companyToken) });
   if (!catalog.response.ok || !Array.isArray(catalog.body?.items) || catalog.body.items.length === 0) {
     throw new Error(`DEMO_SMOKE_FAILED: catalog HTTP ${catalog.response.status}`);
   }
@@ -181,10 +210,10 @@ async function runFlow(env, profile) {
     }, 'care');
   }
 
-  const conversations = await request(base, 'conversations?limit=20', { headers: auth(tenantToken) });
+  const conversations = await request(base, 'conversations?limit=20', { headers: auth(companyToken) });
   if (!conversations.response.ok) throw new Error(`DEMO_SMOKE_FAILED: conversations HTTP ${conversations.response.status}`);
 
-  const approvals = await request(base, 'approvals?status=PENDING&limit=20', { headers: auth(approverToken) });
+  const approvals = await request(base, 'approvals?status=PENDING&limit=20', { headers: auth(companyToken) });
   if (!approvals.response.ok) throw new Error(`DEMO_SMOKE_FAILED: approvals HTTP ${approvals.response.status}`);
 
   let campaign = null;
@@ -192,7 +221,7 @@ async function runFlow(env, profile) {
     const idempotencyKey = `demo-smoke-${profile}-marketing-${Date.now()}`;
     campaign = await request(base, 'campaigns/drafts', {
       method: 'POST',
-      headers: { ...auth(tenantToken), 'content-type': 'application/json', 'x-idempotency-key': idempotencyKey },
+      headers: { ...auth(companyToken), 'content-type': 'application/json', 'x-idempotency-key': idempotencyKey },
       body: JSON.stringify({
         idempotency_key: idempotencyKey,
         segment_id: stableUuid('segment', 'inactive90'),

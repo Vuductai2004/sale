@@ -14,8 +14,8 @@ The [root README](../../README.md) provides the role-based reading guide. Requir
 
 The demo is local/CI-only. It is intentionally fail-closed: `DEMO_MODE=true` is accepted only with
 `APP_ENV=local|ci`, the canonical tenant
-`99999999-9999-4999-8999-999999999999`, and all three role passwords.
-
+`99999999-9999-4999-8999-999999999999`, both account emails and passwords, and dedicated cookie
+signing keys.
 ### Preflight order
 
 ```bash
@@ -26,10 +26,11 @@ pnpm demo:smoke
 ```
 
 `demo:preflight` validates the NovaMart pack, tenant, mock ERP boundary, database URL, widget
-origins, and required demo credentials without printing secret values. `demo:seed` is idempotent and
-requires the isolated demo database to be migrated. `demo:smoke` requires API/worker/console services
-already running and exercises operator login, widget minting, catalog reads, storefront receipt
-streaming, readiness, conversations, approvals, and campaign-draft admission.
+origins, account credentials, email shape, and cookie-key length without printing secret values.
+`demo:seed` is idempotent and requires the isolated demo database to be migrated. `demo:smoke`
+requires API/worker/console services already running and exercises company login, widget minting,
+catalog reads, storefront receipt streaming, readiness, conversations, approvals, and campaign-draft
+admission.
 
 ### Compose
 
@@ -38,8 +39,9 @@ does not override `.env`, so two files silently disagree:
 
 ```bash
 cp .env.example .env
-# edit .env: DEMO_MODE=true, the three DEMO_* passwords, DEMO_WIDGET_ORIGINS, WORKER_TENANT_IDS,
-# KNOWLEDGE_TENANT_IDS, KNOWLEDGE_ROOT (absolute), ENABLED_AGENT_MODULES, the SALES_/MARKETING_ signal vars.
+# edit .env: DEMO_MODE=true, the two DEMO_* email/password pairs, the two cookie HMAC keys,
+# DEMO_WIDGET_ORIGINS, WORKER_TENANT_IDS, KNOWLEDGE_TENANT_IDS, KNOWLEDGE_ROOT (absolute),
+# ENABLED_AGENT_MODULES, and the SALES_/MARKETING_ signal vars.
 docker compose up -d --build
 # Compose creates the extensions and least-privilege roles only; apply the schema before seeding.
 # Use the bootstrap (superuser) URL, exactly as the CI database gates do: the first migrations
@@ -71,7 +73,7 @@ real key for scenario B.
 - `ENABLED_AGENT_MODULES=sales,support,marketing` (API and worker) admits the three domains.
 - `SALES_SIGNAL_SOURCE_CHANNELS=WEB_CHAT` and `SALES_SIGNAL_EVENT_TYPES=message.received` bind the
   Sales domain contract; `MARKETING_SIGNAL_SOURCE_CHANNELS=MARKETING_CAMPAIGN` with
-  `MARKETING_SIGNAL_EVENT_TYPES=campaign.requested` binds the operator campaign contract.
+  `MARKETING_SIGNAL_EVENT_TYPES=campaign.requested` binds the company-account campaign contract.
   `WORKER_TENANT_IDS` scopes the worker schedule and `KNOWLEDGE_ROOT`/`KNOWLEDGE_TENANT_IDS`
   point Care and Marketing at the approved synthetic corpus (tenant-checked at read time).
 - `MOCK_ERP_DEMO_PACK=novamart` makes the mock system of record serve only the NovaMart tenant.
@@ -88,7 +90,7 @@ real key for scenario B.
 - Marketing audience membership is computed by the worker from the tenant's own Customer360 rows
   (last paid purchase older than the inactivity window, opt-outs for the demo email channel removed),
   capped at 100 customers by the campaign plan.
-- An operator campaign draft is admitted under `source_channel=MARKETING_CAMPAIGN` (the Marketing
+- A company-account campaign draft is admitted under `source_channel=MARKETING_CAMPAIGN` (the Marketing
   domain contract's own channel, never a browser `WEB_CHAT` turn) with
   `event_type=campaign.requested`. The fixed plan is segment → content → brand → **dispatch**, and
   `skill.mkt.dispatch_campaign` (AUTH-4) pauses for an approval: nothing is sent before a decision.
@@ -96,15 +98,22 @@ real key for scenario B.
   deliberately no pre-approval per-customer consent step, because a segment identifier is not a
   customer identity and the policy engine refuses a payload that asserts one.
 
-### Role flows
+### Demo login
 
-- `tenant_operator`: storefront/widget session, conversations, takeover, operator replies, and
-  campaign draft admission.
-- `marketing_approver`: pending campaign approvals and digest-bound decisions.
-- `platform_admin`: redacted readiness and tenant-fenced run traces.
+The demo has two account-based sign-ins; there is no role selector. The API login body is
+`{email, password, audience}`, while each console supplies its fixed audience:
 
-The storefront receives only a scoped widget token. API bearer tokens stay in the server-side BFF
-session store for console workflows; no password or provider secret is sent to browser code.
+- **Company account** (`DEMO_COMPANY_ADMIN_EMAIL` / `DEMO_COMPANY_ADMIN_PASSWORD`, audience
+  `company`) has the seven company permissions: campaign drafting, conversation takeover, customer
+  reads, run reads, telemetry reads, approval reads, and approval decisions. It can create campaign
+  drafts and decide their digest-bound approvals.
+- **Platform account** (`DEMO_PLATFORM_ADMIN_EMAIL` / `DEMO_PLATFORM_ADMIN_PASSWORD`, audience
+  `platform`) has platform scope for redacted readiness and tenant-fenced run operations. It cannot
+  draft campaigns or decide company approvals.
+
+Passwords are used only by the server-side BFF/API flow. The storefront receives only a scoped
+widget token; API bearer tokens stay in the server-side BFF session store, and no password or
+provider secret is sent to browser code.
 
 The customer-visible Sales/Care answer is the durable run response written by the response
 finalizer from that run's own successful receipts (verified quote, approved FAQ citation, verified
@@ -158,8 +167,9 @@ Marketing provider success.
 
 #### Blocked prerequisites
 
-- `demo:smoke:live` requires `DEMO_PROVIDER_MODE=live`, `DATABASE_URL`, the three demo credentials,
-  and `OPENAI_API_KEY`/`OPENAI_BASE_URL`/`PRIMARY_REASONING_MODEL`.
+- `demo:smoke:live` requires `DEMO_PROVIDER_MODE=live`, `DATABASE_URL`, the two account
+  email/password pairs, the two cookie HMAC keys, and `OPENAI_API_KEY`/`OPENAI_BASE_URL`/
+  `PRIMARY_REASONING_MODEL`.
 - Live acceptance is fail-closed without those prerequisites; offline smoke never claims provider
   success and reports Care/Marketing as `not_exercised_offline`.
 

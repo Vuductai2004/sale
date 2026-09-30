@@ -9,9 +9,12 @@ const OFFLINE_ENV = Object.freeze({
   DEMO_PROVIDER_MODE: 'offline',
   DEMO_MODE: 'true',
   DEMO_TENANT_ID: '99999999-9999-4999-8999-999999999999',
-  DEMO_TENANT_OPERATOR_PASSWORD: 'tenant-password',
-  DEMO_MARKETING_APPROVER_PASSWORD: 'approver-password',
+  DEMO_COMPANY_ADMIN_EMAIL: 'admin@novamart.demo',
+  DEMO_COMPANY_ADMIN_PASSWORD: 'company-password',
+  DEMO_PLATFORM_ADMIN_EMAIL: 'admin@agentos.demo',
   DEMO_PLATFORM_ADMIN_PASSWORD: 'platform-password',
+  TENANT_COOKIE_HMAC_KEY: 'tenant-cookie-key-that-is-at-least-32-bytes',
+  PLATFORM_COOKIE_HMAC_KEY: 'platform-cookie-key-that-is-at-least-32-bytes',
   DATABASE_URL: 'postgresql://localhost:5432/agentos_dev',
   MOCK_SECRET_KEY: 'mock-secret',
   MOCK_ERP_ENABLED: 'true',
@@ -25,6 +28,16 @@ describe('demo smoke profile gates', () => {
     const result = await runDemoPreflight({ ...OFFLINE_ENV });
     assert.equal(result.profile, 'offline');
     assert.equal(result.provider, 'not_required');
+  });
+  it('rejects malformed account emails and undersized cookie keys', async () => {
+    await assert.rejects(
+      runDemoPreflight({ ...OFFLINE_ENV, DEMO_COMPANY_ADMIN_EMAIL: 'not-an-email' }),
+      /DEMO_PREFLIGHT_FAILED: DEMO_COMPANY_ADMIN_EMAIL must look like an email address/,
+    );
+    await assert.rejects(
+      runDemoPreflight({ ...OFFLINE_ENV, TENANT_COOKIE_HMAC_KEY: 'short' }),
+      /DEMO_PREFLIGHT_FAILED: TENANT_COOKIE_HMAC_KEY must be at least 32 bytes/,
+    );
   });
 
   it('fails live acceptance closed when provider credentials are absent', () => {

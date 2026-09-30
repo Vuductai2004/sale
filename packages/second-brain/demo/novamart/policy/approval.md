@@ -13,13 +13,21 @@ synthetic: true
 
 Any action classified at `AUTH-4`—specifically `skill.mkt.dispatch_campaign` for the 90-day reactivation workflow—must pause before external or outbox side effects and record an immutable pending approval entry (`status = 'awaiting_approval'`).
 
-## Role-Separated Operator Permissions
+## Company and Platform Account Permissions
 
-NovaMart enforces strict role-based separation of duties across its authenticated demo operator principals:
+NovaMart demo authentication uses account credentials and an explicit audience, not API-token
+role selectors:
 
-1. **Tenant Creator (`DEMO_TENANT_CREATOR_API_TOKEN`):** Holds `campaign:create`, `campaign:read`, `conversation:read`, `conversation:reply`, `conversation:takeover`, `approval:read`, `customer:read`, and `run:read`. May initiate Marketing campaign drafts (`POST /api/v1/campaigns/drafts`) and handle Customer Care takeovers, but holds **no `approval:decide` permission** and cannot self-approve a campaign draft.
-2. **Tenant Approver (`DEMO_TENANT_APPROVER_API_TOKEN`):** Holds `approval:read`, `approval:decide`, and `run:read`, with **no `campaign:create` permission**. Authorized to review and approve or reject pending `AUTH-4` campaign requests after verifying the payload digest, audience count (`<= 100`), brand audit pass receipt, and customer consent evidence.
-3. **Platform Viewer (`DEMO_PLATFORM_VIEWER_API_TOKEN`):** Holds read-only platform telemetry and readiness permissions (`run:read`, `telemetry:read`); cannot initiate campaigns or decide tenant approvals.
+1. **Company Admin (`DEMO_COMPANY_ADMIN_EMAIL` / `DEMO_COMPANY_ADMIN_PASSWORD`):** Holds the
+   seven company permissions: `campaign:draft`, `conversation:takeover`, `customer:read`,
+   `run:read`, `telemetry:read`, `approval:read`, and `approval:decide`. May initiate Marketing
+   campaign drafts and handle Customer Care takeovers, then review or decide pending `AUTH-4`
+   requests after verifying the payload digest, audience count (`<= 100`), brand audit pass receipt,
+   and customer consent evidence.
+2. **Platform Admin (`DEMO_PLATFORM_ADMIN_EMAIL` / `DEMO_PLATFORM_ADMIN_PASSWORD`):** Has
+   `platform` scope with `platform:admin`, `run:read`, `run:retry`, `run:reconcile`, and
+   `telemetry:read`. It is authorized for redacted readiness and tenant-fenced run operations, but
+   cannot initiate campaigns or decide company approvals.
 
 ## Digest Integrity and Pre-Resume Revalidation
 
