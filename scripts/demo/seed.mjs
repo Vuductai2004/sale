@@ -257,10 +257,12 @@ export async function seedNovaMart(env = process.env) {
       await client.query('SET LOCAL ROLE agentos_app');
       await client.query('SET LOCAL search_path TO agentos, public');
       await client.query("SELECT set_config('app.current_tenant_id', $1, true)", [NOVAMART_TENANT_ID]);
+      await client.query('SET LOCAL ROLE agentos_platform');
       const bootstrap = await client.query(
         'SELECT agentos.provision_tenant_shell_for_id($1::uuid,$2::char(64),$3::char(64),$4::varchar(128)) AS tenant_id',
         [NOVAMART_TENANT_ID, DEMO_IDEMPOTENCY_KEY, DEMO_REQUEST_FINGERPRINT, 'NovaMart Demo'],
       );
+      await client.query('SET LOCAL ROLE agentos_app');
       if (bootstrap.rows[0]?.tenant_id !== NOVAMART_TENANT_ID) {
         throw new Error('DEMO_TENANT_MISMATCH: bootstrap returned a different tenant');
       }

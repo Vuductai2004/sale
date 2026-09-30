@@ -71,10 +71,16 @@ export function registerProvisioningRoutes(
     await authenticateRequest(request, reply);
   };
 
-  app.post('/provisioning/tenants', { preHandler }, async (request, reply) => {
+  const createTenantShell = async (request: FastifyRequest, reply: FastifyReply) => {
     const runtime = deps.runtime;
     try {
-      requireOperator(request, 'platform:admin');
+      const principal = requireOperator(request, 'platform:admin');
+      if (principal.scope !== 'platform') {
+        fail(
+          'INSUFFICIENT_AUTHORITY',
+          'tenant provisioning requires a platform-scoped operator',
+        );
+      }
       const body: unknown = request.body;
       if (body !== undefined && body !== null && !isPlainRecord(body)) {
         fail('VALIDATION_FAILED', 'the request body must be a JSON object when supplied');
@@ -112,7 +118,9 @@ export function registerProvisioningRoutes(
       }
       return replyFailure(reply, error, correlationIdOf(request, runtime));
     }
-  });
+  };
+
+  app.post('/provisioning/tenants', { preHandler }, createTenantShell);
 
   const autonomyAdmin = deps.autonomyAdmin;
   if (autonomyAdmin !== undefined) {
