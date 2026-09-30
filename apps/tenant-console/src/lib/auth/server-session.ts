@@ -3,7 +3,7 @@ import { headers } from 'next/headers';
 import {
   destroySession,
   getCookie,
-  getSessionStore,
+  getSessionFromRequest,
   TENANT_SESSION_COOKIE,
   verifySessionCookie,
   type SessionCookieReference,
@@ -28,7 +28,7 @@ export async function getServerSession(): Promise<AuthSession | null> {
     return null;
   }
   if (!reference) return null;
-  if (!getSessionStore().has(reference.sessionId)) return null;
+  if (!(await getSessionFromRequest(request))) return null;
 
   try {
     return await demoAuthProvider.getSession(request);

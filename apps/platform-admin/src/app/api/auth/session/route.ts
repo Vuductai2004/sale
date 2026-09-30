@@ -40,7 +40,7 @@ export async function GET(request: Request): Promise<Response> {
       if (hasSessionCookie) return expiredResponse(request);
       return csrf ? response : withSetCookies(response, [csrfCookieHeader(request, ensureCsrfCookie(request))]);
     }
-    const stored = readStoredSession(request, env);
+    const stored = await readStoredSession(request, env);
     if (!stored) return expiredResponse(request);
     const currentCsrf = getCookie(request, 'agentos_platform_csrf');
     return currentCsrf === stored.session.csrfToken ? jsonResponse(session) : withSetCookies(jsonResponse(session), [csrfCookieHeader(request, stored.session.csrfToken)]);

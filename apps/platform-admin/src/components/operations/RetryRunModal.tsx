@@ -57,8 +57,14 @@ export function RetryRunModal({
       const trimmedReason = reason.trim();
       const requestPayload: RunRetryRequest = trimmedReason ? { reason: trimmedReason } : {};
       const receipt = await adminOperationsClient.retryRun(run.run_id, requestPayload);
-
-      // Claim success ONLY after authoritative wire response received
+      if (
+        typeof receipt?.task_id !== 'string'
+        || typeof receipt?.task_version !== 'number'
+        || typeof receipt?.status !== 'string'
+        || typeof receipt?.correlation_id !== 'string'
+      ) {
+        throw new Error('Retry response was not an accepted task receipt.');
+      }
       onSuccess(receipt);
       onClose();
     } catch (err: unknown) {
@@ -81,7 +87,7 @@ export function RetryRunModal({
       aria-modal="true"
       aria-labelledby="retry-modal-title"
       aria-describedby="retry-modal-description"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/20 p-4 backdrop-blur-sm"
+      className="platform-scrim fixed inset-0 z-50 flex items-center justify-center p-4"
       onKeyDown={(event) => {
         if (event.key !== 'Tab') return;
         const focusable = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>('button:not([disabled]), [href], input:not([disabled]), textarea:not([disabled])') ?? []);
@@ -98,21 +104,21 @@ export function RetryRunModal({
         }
       }}
     >
-      <div className="ui-section-card w-full max-w-md p-6 shadow-xl">
-        <h2 id="retry-modal-title" className="text-sm font-semibold text-slate-100 font-mono">
+      <div className="platform-card platform-card--raised w-full max-w-md p-6">
+        <h2 id="retry-modal-title" className="font-mono text-sm font-semibold text-ink">
           Confirm Safe Run Retry
         </h2>
         <p id="retry-modal-description" className="mt-1 text-xs text-muted">
           Target run: <span className="font-mono text-brand">{run.run_id}</span>
         </p>
 
-        <div className="mt-3 rounded border border-amber-900/60 bg-amber-950/40 p-2.5 text-[11px] text-amber-300">
+        <div className="platform-alert platform-alert--warning mt-3 text-[11px]">
           Verified side-effect-free class: <span className="font-mono font-bold">{run.last_error_class}</span>.
           Re-queuing will re-dispatch execution with an incremented task version.
         </div>
 
         {errorMessage && (
-          <div className="mt-3 rounded border border-rose-900/60 bg-rose-950/40 p-2.5 text-[11px] text-rose-300">
+          <div className="platform-alert platform-alert--danger mt-3 text-[11px]">
             {errorMessage}
           </div>
         )}
@@ -135,12 +141,12 @@ export function RetryRunModal({
             />
           </div>
 
-          <div className="mt-5 flex items-center justify-end gap-2 pt-2 border-t border-slate-800">
+          <div className="mt-5 flex items-center justify-end gap-2 border-t border-line pt-3">
             <button
               type="button"
               onClick={onClose}
               disabled={isSubmitting}
-              className="rounded px-3 py-1.5 text-xs font-medium text-slate-400 hover:text-slate-200 hover:bg-slate-800 disabled:opacity-50"
+              className="ui-button ui-button--ghost ui-button--sm"
             >
               Cancel
             </button>

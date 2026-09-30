@@ -8,6 +8,8 @@ export interface DataTableColumn<TRow> {
   readonly header?: ReactNode;
   readonly label?: ReactNode;
   readonly render?: (row: TRow, index: number) => ReactNode;
+  /** Right-aligns numeric values while preserving tabular-nums. */
+  readonly numeric?: boolean;
 }
 
 export interface DataTableProps<TRow> {
@@ -51,7 +53,11 @@ export function DataTable<TRow>({
               const value = column.render
                 ? column.render(row, index)
                 : (row as unknown as Record<string, unknown>)[column.key];
-              return <td key={column.key}>{value as ReactNode}</td>;
+              return (
+                <td key={column.key} className={column.numeric ? 'ui-table__numeric' : undefined}>
+                  {value as ReactNode}
+                </td>
+              );
             })}
           </tr>
         ));
@@ -63,7 +69,11 @@ export function DataTable<TRow>({
         <thead>
           <tr>
             {columns.map((column) => (
-              <th key={column.key} scope="col">
+              <th
+                key={column.key}
+                scope="col"
+                className={column.numeric ? 'ui-table__numeric' : undefined}
+              >
                 {column.header ?? column.label ?? column.key}
               </th>
             ))}

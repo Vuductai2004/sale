@@ -1,18 +1,20 @@
 'use client';
 
 import { X } from 'lucide-react';
-import { useId, useRef, type MouseEvent } from 'react';
+import { useId, useRef, type MouseEvent, type ReactNode } from 'react';
 import { t } from '../i18n/index.js';
-import { useFocusTrap } from './useFocusTrap.js';
 import type { SidebarItem } from './Sidebar.js';
+import { useFocusTrap } from './useFocusTrap.js';
 
 export interface MobileNavDrawerProps {
   readonly open: boolean;
   readonly onClose: () => void;
   readonly items: readonly SidebarItem[];
+  readonly workspace?: ReactNode;
+  readonly footer?: ReactNode;
 }
 
-export function MobileNavDrawer({ open, onClose, items }: MobileNavDrawerProps) {
+export function MobileNavDrawer({ open, onClose, items, workspace, footer }: MobileNavDrawerProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
   const titleId = useId();
   useFocusTrap(dialogRef, open, onClose);
@@ -38,6 +40,7 @@ export function MobileNavDrawer({ open, onClose, items }: MobileNavDrawerProps) 
             <X aria-hidden="true" size={20} />
           </button>
         </div>
+        {workspace ? <div className="mobile-nav-drawer__workspace">{workspace}</div> : null}
         <nav aria-label={t('common.menu')}>
           <ul>
             {items.map((item) => (
@@ -56,6 +59,7 @@ export function MobileNavDrawer({ open, onClose, items }: MobileNavDrawerProps) 
             ))}
           </ul>
         </nav>
+        {footer ? <div className="mobile-nav-drawer__footer">{footer}</div> : null}
       </div>
     </div>
   );

@@ -333,7 +333,6 @@ describe('SCR-005 Conversation Console Contracts', () => {
     const client = new TenantConsoleClient({ baseUrl: 'http://localhost:4000', fetch: spy.mockFetch });
 
     const req: ConversationTakeoverRequest = {
-      operator_id: 'operator-1',
       reason: 'Customer requested human supervisor',
       takeover_mode: 'FULL_CONTROL',
     };
@@ -342,7 +341,7 @@ describe('SCR-005 Conversation Console Contracts', () => {
 
     expect(spy.getLastUrl()).toBe('http://localhost:4000/api/v1/conversations/conv-101/takeover');
     expect(spy.getLastInit()?.method).toBe('POST');
-    expect(spy.getBodyJson()).toEqual(req);
+    expect(spy.getBodyJson()).toEqual({ reason: req.reason, takeover_mode: req.takeover_mode });
     expect(result.lease_expires_at).toBe('2026-09-23T12:01:00Z');
   });
 
@@ -358,7 +357,6 @@ describe('SCR-005 Conversation Console Contracts', () => {
     const client = new TenantConsoleClient({ baseUrl: 'http://localhost:4000', fetch: spy.mockFetch });
 
     const heartbeatReq: ConversationTakeoverHeartbeatRequest = {
-      operator_id: 'operator-1',
       extend_seconds: 60,
     };
 
@@ -366,7 +364,7 @@ describe('SCR-005 Conversation Console Contracts', () => {
 
     expect(spy.getLastUrl()).toBe('http://localhost:4000/api/v1/conversations/conv-101/takeover/heartbeat');
     expect(spy.getLastInit()?.method).toBe('POST');
-    expect(spy.getBodyJson()).toEqual(heartbeatReq);
+    expect(spy.getBodyJson()).toEqual({ extend_seconds: heartbeatReq.extend_seconds });
     expect(result.lease_expires_at).toBe('2026-09-23T12:02:00Z');
   });
 
@@ -381,7 +379,6 @@ describe('SCR-005 Conversation Console Contracts', () => {
     const client = new TenantConsoleClient({ baseUrl: 'http://localhost:4000', fetch: spy.mockFetch });
 
     const resumeReq: ConversationResumeRequest = {
-      operator_id: 'operator-1',
       handoff_summary: 'Issue resolved; returning to autonomous routing',
     };
 
@@ -389,11 +386,11 @@ describe('SCR-005 Conversation Console Contracts', () => {
 
     expect(spy.getLastUrl()).toBe('http://localhost:4000/api/v1/conversations/conv-101/resume');
     expect(spy.getLastInit()?.method).toBe('POST');
-    expect(spy.getBodyJson()).toEqual(resumeReq);
+    expect(spy.getBodyJson()).toEqual({ handoff_summary: resumeReq.handoff_summary });
     expect(result.status).toBe('ACTIVE');
   });
 
-  it('calls POST /api/v1/conversations/{id}/messages with idempotency key', async () => {
+  it('calls POST /api/v1/conversations/{id}/operator-messages with idempotency key', async () => {
     const spy = createFetchSpy(
       createMockJsonResponse(
         {
@@ -415,7 +412,7 @@ describe('SCR-005 Conversation Console Contracts', () => {
 
     const result = await client.postConversationMessage('conv-101', messageReq);
 
-    expect(spy.getLastUrl()).toBe('http://localhost:4000/api/v1/conversations/conv-101/messages');
+    expect(spy.getLastUrl()).toBe('http://localhost:4000/api/v1/conversations/conv-101/operator-messages');
     expect(spy.getLastInit()?.method).toBe('POST');
     expect(spy.getBodyJson()).toEqual(messageReq);
     expect(result.status).toBe('accepted');

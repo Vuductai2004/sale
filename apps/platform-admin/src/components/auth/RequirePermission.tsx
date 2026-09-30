@@ -17,6 +17,6 @@ export function RequirePermission({
   const allowed = permission !== undefined
     ? can(session, permission)
     : permissions !== undefined && canAny(session, permissions);
-  if (!allowed) return <p role="alert">Không có quyền truy cập</p>;
+  if (!allowed) return <p role="alert" className="platform-alert platform-alert--danger text-sm">Không có quyền truy cập</p>;
   return <>{children}</>;
 }

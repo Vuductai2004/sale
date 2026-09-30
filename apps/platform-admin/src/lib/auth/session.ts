@@ -1,6 +1,13 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { AuthSession } from '@agentos/ui-foundation/auth';
 
+import {
+  createConfiguredSessionStore,
+  MemorySessionStore,
+  type RedisSessionClient,
+  type SessionStore,
+} from './session-store';
+
 export const PLATFORM_SESSION_COOKIE = 'agentos_platform_session';
 export const PLATFORM_CSRF_COOKIE = 'agentos_platform_csrf';
 export const CSRF_HEADER = 'x-csrf-token';
@@ -23,17 +30,36 @@ interface SessionCookieParts {
 }
 
 declare global {
+  // Keep the store stable across Next.js development module reloads.
   // eslint-disable-next-line no-var
-  var __agentosPlatformAuthSessions: Map<string, StoredAuthSession> | undefined;
+  var __agentosPlatformAuthSessionStore: SessionStore<StoredAuthSession> | undefined;
 }
 
-function sessionStore(): Map<string, StoredAuthSession> {
-  globalThis.__agentosPlatformAuthSessions ??= new Map<string, StoredAuthSession>();
-  return globalThis.__agentosPlatformAuthSessions;
+const storeOptions = {
+  identityOf: (session: StoredAuthSession): string => session.identityId,
+  expiresAtOf: (session: StoredAuthSession): number => session.expiresAtMs,
+};
+
+/** Memory by default; AUTH_SESSION_STORE=redis requires REDIS_URL and an injected client (fail closed). */
+function sessionStore(): SessionStore<StoredAuthSession> {
+  globalThis.__agentosPlatformAuthSessionStore ??= createConfiguredSessionStore({ ...storeOptions, env: process.env });
+  return globalThis.__agentosPlatformAuthSessionStore;
+}
+
+export function configureSessionStore(options: {
+  readonly store?: SessionStore<StoredAuthSession>;
+  readonly redisClient?: RedisSessionClient;
+  readonly env?: AuthEnvironment;
+} = {}): void {
+  globalThis.__agentosPlatformAuthSessionStore = options.store ?? createConfiguredSessionStore({
+    ...storeOptions,
+    env: options.env ?? process.env,
+    ...(options.redisClient === undefined ? {} : { redisClient: options.redisClient }),
+  });
 }
 
 export function clearSessionsForTests(): void {
-  sessionStore().clear();
+  globalThis.__agentosPlatformAuthSessionStore = new MemorySessionStore(storeOptions);
 }
 
 export function cookieHmacKey(env: AuthEnvironment = process.env): Buffer | null {
@@ -89,30 +115,26 @@ export function getSessionCookie(request: Request, env: AuthEnvironment = proces
   return value ? verifySessionCookie(value, env) : null;
 }
 
-export function sweepExpiredSessions(nowMs = Date.now()): void {
-  for (const [id, session] of sessionStore()) {
-    if (session.expiresAtMs <= nowMs) sessionStore().delete(id);
-  }
+export async function sweepExpiredSessions(nowMs = Date.now()): Promise<void> {
+  await sessionStore().sweep(nowMs);
 }
 
-export function revokeSessionsForIdentity(identityId: string): StoredAuthSession[] {
-  const revoked: StoredAuthSession[] = [];
-  for (const [id, session] of sessionStore()) {
-    if (session.identityId === identityId) {
-      revoked.push(session);
-      sessionStore().delete(id);
-    }
-  }
-  return revoked;
+export async function revokeSessionsForIdentity(identityId: string): Promise<StoredAuthSession[]> {
+  return sessionStore().deleteByIdentity(identityId);
 }
 
-export function createStoredSession(input: {
+/** Persists a refreshed session (e.g. a revalidated AuthSession) back to the configured store. */
+export async function saveStoredSession(id: string, session: StoredAuthSession): Promise<void> {
+  await sessionStore().set(id, session);
+}
+
+export async function createStoredSession(input: {
   readonly apiToken: string;
   readonly authSession: AuthSession;
   readonly csrfToken?: string;
   readonly nowMs?: number;
-}, env: AuthEnvironment = process.env): { id: string; cookieValue: string; session: StoredAuthSession } | null {
-  sweepExpiredSessions(input.nowMs);
+}, env: AuthEnvironment = process.env): Promise<{ id: string; cookieValue: string; session: StoredAuthSession } | null> {
+  await sweepExpiredSessions(input.nowMs);
   const nowMs = input.nowMs ?? Date.now();
   const requestedExpiry = Date.parse(input.authSession.expires_at);
   if (!Number.isFinite(requestedExpiry) || requestedExpiry <= nowMs) return null;
@@ -129,27 +151,25 @@ export function createStoredSession(input: {
     expiresAtMs,
     authSession: input.authSession,
   };
-  sessionStore().set(id, session);
+  await sessionStore().set(id, session);
   return { id, cookieValue, session };
 }
 
-export function readStoredSession(request: Request, env: AuthEnvironment = process.env): { id: string; session: StoredAuthSession } | null {
+export async function readStoredSession(request: Request, env: AuthEnvironment = process.env): Promise<{ id: string; session: StoredAuthSession } | null> {
   const parts = getSessionCookie(request, env);
   if (!parts) return null;
-  const session = sessionStore().get(parts.id);
+  const session = await sessionStore().get(parts.id);
   if (!session || session.expiresAtMs <= Date.now() || Math.floor(session.expiresAtMs / 1000) !== parts.expiresAtSec) {
-    sessionStore().delete(parts.id);
+    await sessionStore().delete(parts.id);
     return null;
   }
   return { id: parts.id, session };
 }
 
-export function deleteStoredSession(request: Request, env: AuthEnvironment = process.env): StoredAuthSession | null {
+export async function deleteStoredSession(request: Request, env: AuthEnvironment = process.env): Promise<StoredAuthSession | null> {
   const parts = getSessionCookie(request, env);
   if (!parts) return null;
-  const session = sessionStore().get(parts.id) ?? null;
-  sessionStore().delete(parts.id);
-  return session;
+  return (await sessionStore().delete(parts.id)) ?? null;
 }
 
 function isSecureRequest(request: Request): boolean {

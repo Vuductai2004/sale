@@ -45,7 +45,7 @@ function AuthPageContent() {
       <div className="mb-8">
         <h1 className="text-2xl font-semibold tracking-tight text-ink">{t('auth.sign_in')}</h1>
         <p className="mt-2 text-sm leading-6 text-muted">Sử dụng email và mật khẩu tài khoản của bạn.</p>
-        {expired && <p role="status" className="mt-3 text-sm text-amber-700">{t('auth.session_expired')}</p>}
+        {expired && <p role="status" className="mt-3 text-sm text-warning">{t('auth.session_expired')}</p>}
       </div>
 
       {error && (

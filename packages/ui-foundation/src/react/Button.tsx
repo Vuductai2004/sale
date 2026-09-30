@@ -3,8 +3,8 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
 import { t } from '../i18n/index.js';
 
-export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger';
-export type ButtonSize = 'sm' | 'md' | 'lg';
+export type ButtonVariant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'ai';
+export type ButtonSize = 'sm' | 'md' | 'lg' | 'compact';
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   readonly variant?: ButtonVariant;

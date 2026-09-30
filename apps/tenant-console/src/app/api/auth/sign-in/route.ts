@@ -73,7 +73,7 @@ export async function POST(request: Request): Promise<Response> {
 
   let created: CreatedSession;
   try {
-    created = createSession({ accessToken: result.accessToken, session: result.session });
+    created = await createSession({ accessToken: result.accessToken, session: result.session });
   } catch {
     return invalidRequest(request, 'INVALID_LOGIN_RESPONSE', 502);
   }

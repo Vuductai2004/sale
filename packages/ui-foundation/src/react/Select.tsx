@@ -21,7 +21,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(function Select
     <select
       {...props}
       ref={ref}
-      className={['ui-input', 'ui-focus-ring', className].filter(Boolean).join(' ')}
+      className={['ui-input', 'ui-select', 'ui-focus-ring', className].filter(Boolean).join(' ')}
     >
       {options
         ? options.map((option) => (

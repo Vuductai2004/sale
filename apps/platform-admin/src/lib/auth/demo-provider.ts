@@ -11,6 +11,7 @@ import {
   readStoredSession,
   revokeSessionsForIdentity,
   sessionCookieHeaders,
+  saveStoredSession,
   sweepExpiredSessions,
   withSetCookies,
   type AuthEnvironment,
@@ -173,8 +174,8 @@ export class DemoAuthProvider implements AuthProvider {
     const parsed = parseAuthSession(payload, true);
     if (!parsed || !parsed.token) throw new AuthProviderError(502, 'DEMO_UNAVAILABLE');
 
-    sweepExpiredSessions();
-    const previous = revokeSessionsForIdentity(parsed.session.identity.user_id);
+    await sweepExpiredSessions();
+    const previous = await revokeSessionsForIdentity(parsed.session.identity.user_id);
     await Promise.all(previous.map(async (session) => {
       const logoutUrl = apiUrl('/demo/logout', this.env);
       if (!logoutUrl) return;
@@ -184,7 +185,7 @@ export class DemoAuthProvider implements AuthProvider {
         // Local revocation is authoritative if the old upstream token is unavailable.
       }
     }));
-    const created = createStoredSession({ apiToken: parsed.token, authSession: parsed.session }, this.env);
+    const created = await createStoredSession({ apiToken: parsed.token, authSession: parsed.session }, this.env);
     if (!created) throw new AuthProviderError(503, 'AUTH_CONFIGURATION');
     return {
       session: created.session.authSession,
@@ -196,7 +197,7 @@ export class DemoAuthProvider implements AuthProvider {
   }
 
   async getSession(request: Request): Promise<AuthSession | null> {
-    const found = readStoredSession(request, this.env);
+    const found = await readStoredSession(request, this.env);
     if (!found) return null;
     const url = apiUrl('/demo/session', this.env);
     if (!url) throw new AuthProviderError(503, 'DEMO_UNAVAILABLE');
@@ -208,22 +209,22 @@ export class DemoAuthProvider implements AuthProvider {
     }
     const payload = await readJson(response);
     if (response.status === 401) {
-      deleteStoredSession(request, this.env);
+      await deleteStoredSession(request, this.env);
       throw new ExpiredSessionError();
     }
     if (response.status === 403) throw providerError(response, payload);
     if (!response.ok) throw new AuthProviderError(502, 'DEMO_UNAVAILABLE');
     const parsed = parseAuthSession(payload, false);
     if (!parsed || parsed.session.identity.user_id !== found.session.identityId) {
-      deleteStoredSession(request, this.env);
+      await deleteStoredSession(request, this.env);
       throw new AuthProviderError(403, 'PERMISSION_DENIED');
     }
-    found.session.authSession = parsed.session;
+    await saveStoredSession(found.id, { ...found.session, authSession: parsed.session });
     return parsed.session;
   }
 
   async signOut(request: Request): Promise<void> {
-    const found = readStoredSession(request, this.env);
+    const found = await readStoredSession(request, this.env);
     if (!found) return;
     try {
       const url = apiUrl('/demo/logout', this.env);
@@ -233,13 +234,13 @@ export class DemoAuthProvider implements AuthProvider {
     } catch {
       // Destroy the local credential even if the API is unavailable.
     } finally {
-      deleteStoredSession(request, this.env);
+      await deleteStoredSession(request, this.env);
     }
   }
 
   async verifyForProxy(request: Request): Promise<{ token: string } | null> {
     await this.getSession(request);
-    const found = readStoredSession(request, this.env);
+    const found = await readStoredSession(request, this.env);
     return found ? { token: found.session.apiToken } : null;
   }
 }
@@ -261,9 +262,14 @@ export function isAllowedProxyPath(method: string, rawPath: string): boolean {
   if (upperMethod === 'GET') {
     return path === 'runs'
       || path === 'demo/readiness'
+      || path === 'platform/tenants'
+      || path === 'platform/usage'
+      || path === 'platform/providers'
       || path === 'admin/tenants/current'
       || path === 'admin/autonomy'
       || path === 'telemetry/kpi-snapshot'
+      || /^platform\/tenants\/[A-Za-z0-9._:-]+$/.test(path)
+      || /^platform\/tenants\/[A-Za-z0-9._:-]+\/readiness$/.test(path)
       || /^runs\/[A-Za-z0-9._:-]+\/trace$/.test(path);
   }
   if (upperMethod === 'POST') {
@@ -298,7 +304,7 @@ export async function proxyPlatformApi(request: Request, rawPath: string, env: A
   const path = normalizeProxyPath(rawPath);
   if (!path || !isAllowedProxyPath(method, path)) return jsonResponse({ error: 'NOT_FOUND' }, 404);
   const provider = createDemoAuthProvider({ env, fetchImpl });
-  const found = readStoredSession(request, env);
+  const found = await readStoredSession(request, env);
   if (!found) return jsonResponse({ reason: 'unauthenticated' }, 401);
   const protection = method === 'GET' ? null : mutationProtection(request, found.session);
   if (protection) return protection;
@@ -333,7 +339,7 @@ export async function proxyPlatformApi(request: Request, rawPath: string, env: A
     return jsonResponse({ error: 'DEMO_UNAVAILABLE' }, 502);
   }
   if (upstream.status === 401) {
-    deleteStoredSession(request, env);
+    await deleteStoredSession(request, env);
     return withSetCookies(jsonResponse({ reason: 'expired' }, 401), clearSessionCookieHeaders(request));
   }
   // A 403 is an authorization decision from the API. Preserve the session and pass it through.

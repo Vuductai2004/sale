@@ -20,6 +20,7 @@ import {
   ExpiredProviderSessionError,
   ProviderHttpError,
 } from '../../../../lib/auth/demo-provider';
+import { isAllowedPath, routePath } from '../../../../lib/bff-allowlist';
 export const dynamic = 'force-dynamic';
 
 
@@ -44,25 +45,6 @@ const FORWARDED_RESPONSE_HEADERS = [
 
 type RouteContext = { params: { path?: string[] } | Promise<{ path?: string[] }> };
 
-function routePath(segments: string[] | undefined): string | undefined {
-  if (!segments || segments.length === 0) return undefined;
-  if (segments.some((segment) => segment.length === 0 || segment === '.' || segment === '..' || segment.includes('/'))) return undefined;
-  return segments.join('/');
-}
-
-function isAllowedPath(path: string, method: string): boolean {
-  if (path === 'demo/widget-session') return method === 'POST';
-  if (path === 'demo/catalog') return method === 'GET';
-  if (/^approvals(?:\/[^/]+(?:\/decision)?)?$/.test(path)) return true;
-  if (path === 'customers' || /^customers\/[^/]+\/(?:profile|timeline)$/.test(path)) return method === 'GET';
-  if (/^telemetry(?:\/kpi-snapshot|\/stream)?$/.test(path)) return true;
-  if (/^conversations(?:\/[^/]+\/summary|\/[^/]+(?:\/(?:takeover|takeover\/heartbeat|resume|messages|operator-messages))?)?$/.test(path)) return true;
-  if (/^storefront\/(?:stream|events)$/.test(path)) return true;
-  if (/^tasks\/[^/]+$/.test(path)) return true;
-  if (/^runs\/[^/]+\/trace$/.test(path)) return method === 'GET';
-  if (/^campaigns(?:\/[^/]+)?$/.test(path)) return true;
-  return false;
-}
 
 
 
@@ -96,7 +78,7 @@ async function proxy(request: Request, context: RouteContext): Promise<Response>
   const path = routePath(params.path);
   if (!path || !isAllowedPath(path, request.method.toUpperCase())) return jsonResponse({ error: 'NOT_FOUND' }, 404);
 
-  const session = getSessionFromRequest(request);
+  const session = await getSessionFromRequest(request);
   if (!session) return unauthorizedResponse();
   if (isMutationMethod(request.method)) {
     const guard = mutationGuard(request, session);
@@ -108,7 +90,7 @@ async function proxy(request: Request, context: RouteContext): Promise<Response>
     verified = await demoAuthProvider.getSession(request);
   } catch (error) {
     if (error instanceof ExpiredProviderSessionError) {
-      destroySession(request);
+      await destroySession(request);
       const response = unauthorizedResponse('expired');
       appendClearedCookies(response, request);
       return response;

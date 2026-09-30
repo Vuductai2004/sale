@@ -27,10 +27,15 @@ const nextConfig = {
   output: process.env.NEXT_STANDALONE === '1' ? 'standalone' : undefined,
   reactStrictMode: true,
   eslint: { ignoreDuringBuilds: true },
-  experimental: { instrumentationHook: true },
+  async redirects() {
+    return [
+      { source: '/demo/readiness', destination: '/system-health', permanent: false },
+      { source: '/analytics', destination: '/usage', permanent: false },
+    ];
+  },
   async headers() {
     return [{ source: '/(.*)', headers: securityHeaders }];
   },
+  experimental: { instrumentationHook: true },
 };
-
 export default nextConfig;

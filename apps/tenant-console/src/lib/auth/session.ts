@@ -1,5 +1,12 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import type { AuthSession } from '@agentos/ui-foundation/auth';
+import {
+  createConfiguredSessionStore,
+  MemorySessionStore,
+  type RedisSessionClient,
+  type SessionStore,
+  type SessionStoreEnvironment,
+} from './session-store';
 
 export const TENANT_SESSION_COOKIE = 'agentos_tenant_session';
 export const TENANT_CSRF_COOKIE = 'agentos_tenant_csrf';
@@ -10,7 +17,7 @@ export const MAX_PROXY_BODY_BYTES = 1024 * 1024;
 const COOKIE_VERSION = 'v1';
 const MIN_COOKIE_KEY_BYTES = 32;
 
-type SessionMap = Map<string, StoredSession>;
+type TenantSessionStore = SessionStore<StoredSession>;
 
 export interface StoredSession {
   readonly id: string;
@@ -39,21 +46,42 @@ export interface CreatedSession {
 declare global {
   // Keep the in-process store stable across Next.js development module reloads.
   // eslint-disable-next-line no-var
-  var __agentosTenantAuthSessions: SessionMap | undefined;
+  var __agentosTenantAuthSessionStore: TenantSessionStore | undefined;
 }
 
-function store(): SessionMap {
-  globalThis.__agentosTenantAuthSessions ??= new Map<string, StoredSession>();
-  return globalThis.__agentosTenantAuthSessions;
+const memoryStoreOptions = {
+  identityOf: (session: StoredSession): string => session.userId,
+  expiresAtOf: (session: StoredSession): number => session.expiresAtEpochSec,
+};
+
+function store(): TenantSessionStore {
+  globalThis.__agentosTenantAuthSessionStore ??= createConfiguredSessionStore({
+    ...memoryStoreOptions,
+    env: process.env,
+  });
+  return globalThis.__agentosTenantAuthSessionStore;
+}
+
+export function configureSessionStore(options: {
+  readonly store?: TenantSessionStore;
+  readonly redisClient?: RedisSessionClient;
+  readonly env?: SessionStoreEnvironment;
+} = {}): void {
+  globalThis.__agentosTenantAuthSessionStore = options.store ?? createConfiguredSessionStore({
+    ...memoryStoreOptions,
+    env: options.env ?? process.env,
+    ...(options.redisClient === undefined ? {} : { redisClient: options.redisClient }),
+  });
 }
 
 export function resetSessionsForTests(): void {
-  store().clear();
+  globalThis.__agentosTenantAuthSessionStore = new MemorySessionStore(memoryStoreOptions);
 }
 
-export function getSessionStore(): ReadonlyMap<string, StoredSession> {
+export function getSessionStore(): TenantSessionStore {
   return store();
 }
+
 
 export function isAuthEnabled(): boolean {
   return process.env.DEMO_MODE === 'true' && (process.env.APP_ENV === 'local' || process.env.APP_ENV === 'ci');
@@ -186,14 +214,12 @@ function randomToken(bytes = 32): string {
   return randomBytes(bytes).toString('base64url');
 }
 
-function sweepExpired(nowEpochSec = Math.floor(Date.now() / 1000)): void {
-  for (const [id, session] of store()) {
-    if (session.expiresAtEpochSec <= nowEpochSec) store().delete(id);
-  }
+export async function sweepExpired(nowEpochSec = Math.floor(Date.now() / 1000)): Promise<void> {
+  await store().sweep(nowEpochSec);
 }
 
-export function createSession(input: CreateSessionInput): CreatedSession {
-  sweepExpired();
+export async function createSession(input: CreateSessionInput): Promise<CreatedSession> {
+  await sweepExpired();
   const expiresAtMs = Date.parse(input.session.expires_at);
   if (!input.accessToken || !Number.isFinite(expiresAtMs) || expiresAtMs <= Date.now()) {
     throw new Error('Cannot create an expired authentication session');
@@ -211,7 +237,7 @@ export function createSession(input: CreateSessionInput): CreatedSession {
     csrfToken: input.csrfToken ?? randomToken(24),
     expiresAtEpochSec,
   };
-  store().set(session.id, session);
+  await store().set(session.id, session);
   return { cookieValue: signSessionCookie(session.id, expiresAtEpochSec), session };
 }
 
@@ -235,12 +261,12 @@ function cookieReferenceIncludingExpired(request: Request): SessionCookieReferen
   }
 }
 
-export function getSessionFromRequest(request: Request): StoredSession | undefined {
+export async function getSessionFromRequest(request: Request): Promise<StoredSession | undefined> {
   const reference = cookieReference(request);
   if (!reference) return undefined;
-  const session = store().get(reference.sessionId);
+  const session = await store().get(reference.sessionId);
   if (!session || session.expiresAtEpochSec <= Math.floor(Date.now() / 1000) || session.expiresAtEpochSec !== reference.expiresAtEpochSec) {
-    store().delete(reference.sessionId);
+    await store().delete(reference.sessionId);
     return undefined;
   }
   return session;
@@ -253,24 +279,17 @@ export function hasExpiredSessionCookie(request: Request): boolean {
   return Boolean(reference && reference.expiresAtEpochSec <= Math.floor(Date.now() / 1000));
 }
 
-export function destroySession(request: Request): void {
+export async function destroySession(request: Request): Promise<void> {
   const reference = cookieReferenceIncludingExpired(request);
-  if (reference) store().delete(reference.sessionId);
+  if (reference) await store().delete(reference.sessionId);
 }
 
-export function destroySessionById(sessionId: string): void {
-  store().delete(sessionId);
+export async function destroySessionById(sessionId: string): Promise<void> {
+  await store().delete(sessionId);
 }
 
-export function revokeSessionsForUser(userId: string): StoredSession[] {
-  const revoked: StoredSession[] = [];
-  for (const [id, session] of store()) {
-    if (session.userId === userId) {
-      revoked.push(session);
-      store().delete(id);
-    }
-  }
-  return revoked;
+export async function revokeSessionsForUser(userId: string): Promise<StoredSession[]> {
+  return store().deleteByIdentity(userId);
 }
 
 export function csrfTokenForSession(session: StoredSession): string {
@@ -283,12 +302,13 @@ export function setSessionCookies(response: Response, request: Request, created:
   appendCsrfCookie(response, request, created.session.csrfToken, remaining);
 }
 
-export function ensureCsrfCookie(response: Response, request: Request, session?: StoredSession): string {
+export async function ensureCsrfCookie(response: Response, request: Request, session?: StoredSession): Promise<string> {
   const existing = getCookie(request, TENANT_CSRF_COOKIE);
   if (session) {
     if (existing && constantTimeEqual(existing, session.csrfToken)) return existing;
     const generated = randomToken(24);
     session.csrfToken = generated;
+    await store().set(session.id, session);
     appendCsrfCookie(response, request, generated);
     return generated;
   }

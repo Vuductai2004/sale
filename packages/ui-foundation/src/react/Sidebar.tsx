@@ -13,15 +13,18 @@ export interface SidebarItem {
 export interface SidebarProps {
   readonly items: readonly SidebarItem[];
   readonly collapsed?: boolean;
+  readonly workspace?: ReactNode;
+  readonly footer?: ReactNode;
   readonly className?: string;
 }
 
-export function Sidebar({ items, collapsed = false, className = '' }: SidebarProps) {
+export function Sidebar({ items, collapsed = false, workspace, footer, className = '' }: SidebarProps) {
   return (
     <aside
       className={`app-sidebar ${collapsed ? 'app-sidebar--collapsed' : ''} ${className}`.trim()}
       data-collapsed={collapsed ? 'true' : 'false'}
     >
+      {workspace ? <div className="app-sidebar__workspace">{workspace}</div> : null}
       <ul className="app-sidebar__items">
         {items.map((item) => (
           <li key={item.href}>
@@ -38,6 +41,7 @@ export function Sidebar({ items, collapsed = false, className = '' }: SidebarPro
           </li>
         ))}
       </ul>
+      {footer ? <div className="app-sidebar__footer">{footer}</div> : null}
     </aside>
   );
 }

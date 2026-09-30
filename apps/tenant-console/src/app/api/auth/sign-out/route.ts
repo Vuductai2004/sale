@@ -24,7 +24,7 @@ function redirectResponse(): Response {
 export async function POST(request: Request): Promise<Response> {
   if (!isAuthEnabled()) return jsonResponse({ error: 'AUTH_UNAVAILABLE' }, 404);
   if (!hasCookieKey()) return configurationResponse();
-  const current = getSessionFromRequest(request);
+  const current = await getSessionFromRequest(request);
   const guard = mutationGuard(request, current);
   if (guard) return guard;
   if (!current) {
@@ -34,7 +34,7 @@ export async function POST(request: Request): Promise<Response> {
   }
 
   await demoAuthProvider.signOut(request);
-  destroySession(request);
+  await destroySession(request);
   const response = acceptsJson(request) ? jsonResponse({ ok: true }) : redirectResponse();
   appendClearedCookies(response, request);
   return response;

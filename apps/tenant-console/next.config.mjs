@@ -59,6 +59,16 @@ const nextConfig = {
   async headers() {
     return [{ source: '/(.*)', headers: securityHeaders }];
   },
+  async redirects() {
+    return [
+      { source: '/demo/operations', destination: '/conversations', permanent: false },
+      { source: '/takeover', destination: '/conversations', permanent: false },
+      { source: '/demo/campaigns', destination: '/campaigns', permanent: false },
+      { source: '/demo/trace', has: [{ type: 'query', key: 'run_id' }], destination: '/runs/:run_id', permanent: false },
+      { source: '/demo/trace', destination: '/', permanent: false },
+      { source: '/demo/storefront', destination: '/ai-team/sales/try', permanent: false },
+    ];
+  },
 };
 
 export default nextConfig;

@@ -25,14 +25,17 @@ function renderShell() {
 }
 
 describe('PlatformShell', () => {
-  it('renders platform navigation items', () => {
+  it('renders all platform navigation items', () => {
     renderShell();
 
-    expect(screen.getByRole('link', { name: 'Overview' })).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Operations' })).toBeTruthy();
-    expect(screen.getByRole('link', { name: /Demo readiness/ })).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Analytics' })).toBeTruthy();
-    expect(screen.getByRole('link', { name: 'Settings' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Tổng quan' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Công ty' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Vận hành' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Mức sử dụng' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Nhà cung cấp AI' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Tình trạng hệ thống' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Gói dịch vụ' })).toBeTruthy();
+    expect(screen.getByRole('link', { name: 'Cài đặt' })).toBeTruthy();
   });
 
   it('opens and closes the mobile drawer with focus return', async () => {

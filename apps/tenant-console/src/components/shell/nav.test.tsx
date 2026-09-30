@@ -39,6 +39,30 @@ describe('CompanyShell navigation', () => {
 
     expect(screen.getByText('Phê duyệt')).toBeTruthy();
     expect(screen.getByText('Chiến dịch')).toBeTruthy();
+    const tryAssistant = screen.getByRole('link', { name: /Thử trợ lý/i });
+    expect(tryAssistant.getAttribute('href')).toBe('/ai-team/sales/try');
+    expect(tryAssistant.textContent).toContain('Demo');
+    expect(screen.queryByRole('link', { name: /Chi tiết thực thi/i })).toBeNull();
+
+  });
+
+  it('hides navigation entries when the session lacks their permission', () => {
+    const telemetryOnly: AuthSession = {
+      ...companyAdmin,
+      permissions: ['telemetry:read'],
+    };
+    render(
+      <SessionProvider session={telemetryOnly}>
+        <CompanyShell><div>content</div></CompanyShell>
+      </SessionProvider>,
+    );
+
+    const nav = screen.getByRole('navigation', { name: 'Company sections' });
+    expect(nav.textContent).toContain('Tổng quan');
+    expect(nav.textContent).toContain('AI Team');
+    expect(nav.textContent).not.toContain('Khách hàng');
+    expect(nav.textContent).not.toContain('Hội thoại');
+    expect(nav.textContent).not.toContain('Thử trợ lý');
   });
 
   it('opens the mobile drawer, closes on Escape, and returns focus to the menu button', async () => {

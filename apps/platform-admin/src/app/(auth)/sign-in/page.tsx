@@ -114,9 +114,10 @@ function AuthPageContent() {
   const loading = viewState === 'loading';
 
   return (
-    <AuthLayout audience="platform" demo>
-      <h1 id="sign-in-title" className="text-2xl font-semibold tracking-tight text-ink">{t('auth.sign_in')}</h1>
-      <p className="mt-2 text-sm leading-6 text-muted">Use your account credentials to access platform operations.</p>
+    <AuthLayout audience="platform" demo className="platform-auth">
+      <p className="font-mono text-[10px] uppercase tracking-[0.16em] text-brand">{t('platform.auth_eyebrow')}</p>
+      <h1 id="sign-in-title" className="mt-2 text-2xl font-semibold tracking-tight text-ink">{t('auth.sign_in')}</h1>
+      <p className="mt-2 text-sm leading-6 text-muted">{t('platform.auth_description')}</p>
 
       {loading ? <p role="status" className="ui-state ui-state--loading mt-6">{t('common.loading')}</p> : null}
       {message ? <p role="alert" className={`ui-state mt-6 ${unavailable ? 'ui-state--blocked' : 'ui-state--error'}`}>{message}</p> : null}

@@ -1,4 +1,4 @@
-export type Tone = 'success' | 'warning' | 'info' | 'neutral' | 'danger' | 'demo';
+export type Tone = 'success' | 'warning' | 'info' | 'neutral' | 'danger' | 'demo' | 'ai';
 
 export type StatusIcon =
   | 'CheckCircle2'

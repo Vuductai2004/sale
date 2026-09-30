@@ -4,17 +4,32 @@ import type {
   ApprovalDecisionRequest,
   ApprovalDecisionResponse,
   ApprovalDetailResponse,
+  CompanyActivityResponse,
+  CompanyAiTeamResponse,
+  CompanyAttentionResponse,
+  CompanyGovernanceResponse,
+  CompanyIntegrationsResponse,
+  CompanyOverviewResponse,
+  GetApprovalsParams,
+  GetApprovalsResponse,
+} from '@agentos/api-contract';
+import type {
+  ConversationListParams,
+  ConversationListResponse,
+  ConversationMessagesResponse,
   ConversationResumeRequest,
   ConversationResumeResponse,
+  ConversationSummaryResponse,
   ConversationTakeoverHeartbeatRequest,
   ConversationTakeoverHeartbeatResponse,
   ConversationTakeoverRequest,
   ConversationTakeoverResponse,
+  CustomerListParams,
+  CustomerListResponse,
+  CustomerProfileResponse,
   CustomerTimelineParams,
   CustomerTimelineResponse,
   EventIngestionResponse,
-  GetApprovalsParams,
-  GetApprovalsResponse,
   GetKpiSnapshotParams,
   KpiSnapshotResponse,
   PlatformEventEnvelope,
@@ -153,6 +168,38 @@ export class TenantConsoleClient extends HttpClient {
     });
   }
 
+  async getCompanyOverview(options?: RequestOptions | undefined): Promise<CompanyOverviewResponse> {
+    return this.request<CompanyOverviewResponse>('/company/overview', { method: 'GET' }, undefined, options);
+  }
+
+  async getCompanyAttention(options?: RequestOptions | undefined): Promise<CompanyAttentionResponse> {
+    return this.request<CompanyAttentionResponse>('/company/attention', { method: 'GET' }, undefined, options);
+  }
+
+  async getCompanyAiTeam(options?: RequestOptions | undefined): Promise<CompanyAiTeamResponse> {
+    return this.request<CompanyAiTeamResponse>('/company/ai-team', { method: 'GET' }, undefined, options);
+  }
+
+  async getCompanyActivity(
+    params: { readonly limit?: number | undefined; readonly cursor?: string | undefined } = {},
+    options?: RequestOptions | undefined,
+  ): Promise<CompanyActivityResponse> {
+    return this.request<CompanyActivityResponse>(
+      '/company/activity',
+      { method: 'GET' },
+      { limit: params.limit, cursor: params.cursor },
+      options,
+    );
+  }
+
+  async getCompanyIntegrations(options?: RequestOptions | undefined): Promise<CompanyIntegrationsResponse> {
+    return this.request<CompanyIntegrationsResponse>('/company/integrations', { method: 'GET' }, undefined, options);
+  }
+
+  async getCompanyGovernance(options?: RequestOptions | undefined): Promise<CompanyGovernanceResponse> {
+    return this.request<CompanyGovernanceResponse>('/company/settings/governance', { method: 'GET' }, undefined, options);
+  }
+
   async getApprovals(
     params: GetApprovalsParams = { status: 'PENDING' },
     options?: RequestOptions | undefined,
@@ -204,6 +251,67 @@ export class TenantConsoleClient extends HttpClient {
         from: params?.from,
         to: params?.to,
       },
+      options,
+    );
+  }
+
+  async getConversations(
+    params: ConversationListParams = {},
+    options?: RequestOptions | undefined,
+  ): Promise<ConversationListResponse> {
+    return this.request<ConversationListResponse>(
+      '/conversations',
+      { method: 'GET' },
+      { cursor: params.cursor, limit: params.limit },
+      options,
+    );
+  }
+
+  async getConversationMessages(
+    conversationId: string,
+    params: ConversationListParams = {},
+    options?: RequestOptions | undefined,
+  ): Promise<ConversationMessagesResponse> {
+    return this.request<ConversationMessagesResponse>(
+      `/conversations/${encodeURIComponent(conversationId)}/messages`,
+      { method: 'GET' },
+      { cursor: params.cursor, limit: params.limit },
+      options,
+    );
+  }
+
+  async getConversationSummary(
+    conversationId: string,
+    options?: RequestOptions | undefined,
+  ): Promise<ConversationSummaryResponse> {
+    return this.request<ConversationSummaryResponse>(
+      `/conversations/${encodeURIComponent(conversationId)}/summary`,
+      { method: 'GET' },
+      undefined,
+      options,
+    );
+  }
+
+  async getCustomers(
+    params: CustomerListParams = {},
+    options?: RequestOptions | undefined,
+  ): Promise<CustomerListResponse> {
+    return this.request<CustomerListResponse>(
+      '/customers',
+      { method: 'GET' },
+      { query: params.query, cursor: params.cursor, limit: params.limit },
+      options,
+    );
+  }
+
+  async getCustomerProfile(
+    customerId: string,
+    options?: RequestOptions | undefined,
+  ): Promise<CustomerProfileResponse> {
+    return this.request<CustomerProfileResponse>(
+      `/customers/${encodeURIComponent(customerId)}/profile`,
+      { method: 'GET' },
+      undefined,
       options,
     );
   }
@@ -278,7 +386,7 @@ export class TenantConsoleClient extends HttpClient {
     options?: RequestOptions | undefined,
   ): Promise<TaskAcceptedResponse> {
     return this.request<TaskAcceptedResponse>(
-      `/conversations/${encodeURIComponent(conversationId)}/messages`,
+      `/conversations/${encodeURIComponent(conversationId)}/operator-messages`,
       { method: 'POST', body: JSON.stringify(body) },
       undefined,
       options,

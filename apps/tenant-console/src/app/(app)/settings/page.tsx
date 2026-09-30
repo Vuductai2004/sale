@@ -1,21 +1,10 @@
-import { PageHeader, SectionHeader, StatusBadge } from '@agentos/ui-foundation/react';
+import { SettingsPage } from '../../../components/company/SettingsPage';
 
 export const metadata = {
   title: 'Settings | AgentOS',
-  description: 'Tenant settings capability state.',
+  description: 'Tenant identity and governance settings.',
 };
 
-export default function SettingsPage() {
-  return (
-    <div className="space-y-6">
-      <PageHeader eyebrow="Company workspace" title="Settings" description="This surface reports tenant settings availability without redirecting into platform authority." />
-      <section className="ui-section-card">
-        <SectionHeader title="Tenant settings" description="No tenant-facing settings contract is currently exposed through the BFF." />
-        <div className="p-5">
-          <div className="flex flex-wrap items-center gap-3"><StatusBadge code="NOT_INTEGRATED" label="Not integrated" /><span className="text-sm text-muted">Read-only capability state</span></div>
-          <p className="mt-4 max-w-2xl text-sm leading-6 text-muted">Workspace identity, connector mutation, knowledge management, and membership switching remain server-owned capabilities. No editable controls are shown.</p>
-        </div>
-      </section>
-    </div>
-  );
+export default function SettingsRoute() {
+  return <SettingsPage />;
 }

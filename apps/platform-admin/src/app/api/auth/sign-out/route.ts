@@ -19,7 +19,7 @@ export async function POST(request: Request): Promise<Response> {
   const env = process.env as AuthEnvironment;
   const gate = demoGateResponse(env);
   if (gate) return gate;
-  const found = readStoredSession(request, env);
+  const found = await readStoredSession(request, env);
   const protection = mutationProtection(request, found?.session ?? null);
   if (protection) return protection;
   const provider = createDemoAuthProvider({ env });

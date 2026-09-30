@@ -3,6 +3,7 @@ import {
   createSession,
   getSessionStore,
   resetSessionsForTests,
+  revokeSessionsForUser,
   signSessionCookie,
   verifySessionCookie,
 } from './session';
@@ -41,12 +42,26 @@ describe('tenant v1 session cookie', () => {
 });
 
 describe('tenant session store', () => {
-  it('sweeps expired sessions whenever a session is created', () => {
+  it('sweeps expired sessions whenever a session is created', async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date('2030-01-01T00:00:00.000Z'));
-    createSession({ accessToken: 'token-1', session: authSession });
+    const first = await createSession({ accessToken: 'token-1', session: authSession });
     vi.advanceTimersByTime(31 * 60 * 1000);
-    createSession({ accessToken: 'token-2', session: { ...authSession, identity: { ...authSession.identity, user_id: 'user-2' } } });
-    expect(getSessionStore().size).toBe(1);
+    const second = await createSession({ accessToken: 'token-2', session: { ...authSession, identity: { ...authSession.identity, user_id: 'user-2' } } });
+    expect(await getSessionStore().get(first.session.id)).toBeUndefined();
+    expect(await getSessionStore().get(second.session.id)).toBeDefined();
+  });
+  it('revokes the first session when the same identity signs in again at the store level', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2030-01-01T00:00:00.000Z'));
+    expect(await revokeSessionsForUser(authSession.identity.user_id)).toEqual([]);
+    const first = await createSession({ accessToken: 'token-1', session: authSession });
+
+    expect(await revokeSessionsForUser(authSession.identity.user_id)).toEqual([first.session]);
+    const second = await createSession({ accessToken: 'token-2', session: authSession });
+
+    expect(first.session.id).not.toBe(second.session.id);
+    expect(await getSessionStore().get(first.session.id)).toBeUndefined();
+    expect(await getSessionStore().get(second.session.id)).toEqual(second.session);
   });
 });

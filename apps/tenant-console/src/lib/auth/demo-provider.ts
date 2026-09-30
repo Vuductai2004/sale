@@ -166,13 +166,13 @@ class DemoAuthProvider implements AuthProvider {
     if (!response.ok) throw new ProviderHttpError(response.status, payload, response.headers.get('retry-after') ?? undefined);
     const parsed = loginResponseSession(payload);
     if (!parsed) throw new ProviderHttpError(502, undefined);
-    const previous = revokeSessionsForUser(parsed.session.identity.user_id);
+    const previous = await revokeSessionsForUser(parsed.session.identity.user_id);
     await Promise.all(previous.map((session) => revokeUpstreamToken(session.apiToken, this.fetch())));
     return parsed;
   }
 
   async getSession(request: Request): Promise<AuthSession | null> {
-    const current = getSessionFromRequest(request);
+    const current = await getSessionFromRequest(request);
     if (!current) return null;
     const { response, payload } = await fetchJson(this.fetch(), apiV1Url('/demo/session'), {
       method: 'GET',
@@ -186,13 +186,14 @@ class DemoAuthProvider implements AuthProvider {
   }
 
   async signOut(request: Request): Promise<void> {
-    const current = getSessionFromRequest(request);
+    const current = await getSessionFromRequest(request);
     try {
       if (current) await revokeUpstreamToken(current.apiToken, this.fetch());
     } finally {
-      destroySession(request);
+      await destroySession(request);
     }
   }
+
 }
 
 export function createDemoAuthProvider(fetchImpl?: FetchLike): AuthProvider {

@@ -24,15 +24,14 @@ export async function GET(request: Request): Promise<Response> {
   if (!isAuthEnabled()) return jsonResponse({ error: 'AUTH_UNAVAILABLE' }, 404);
   if (!hasCookieKey()) return configurationResponse();
 
-  const current = getSessionFromRequest(request);
+  const current = await getSessionFromRequest(request);
   if (!current) {
     const expired = hasExpiredSessionCookie(request);
     const response = unauthorizedResponse(expired ? 'expired' : 'unauthenticated');
     if (expired) {
-      destroySession(request);
-      appendClearedCookies(response, request);
+      await destroySession(request);
     } else {
-      ensureCsrfCookie(response, request);
+      await ensureCsrfCookie(response, request);
     }
     return response;
   }
@@ -42,7 +41,7 @@ export async function GET(request: Request): Promise<Response> {
     session = await demoAuthProvider.getSession(request);
   } catch (error) {
     if (error instanceof ExpiredProviderSessionError) {
-      destroySession(request);
+      await destroySession(request);
       const response = unauthorizedResponse('expired');
       appendClearedCookies(response, request);
       return response;
@@ -60,6 +59,6 @@ export async function GET(request: Request): Promise<Response> {
     return response;
   }
   const response = jsonResponse(session);
-  ensureCsrfCookie(response, request, current);
+  await ensureCsrfCookie(response, request, current);
   return response;
 }
