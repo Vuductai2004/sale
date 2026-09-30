@@ -1,12 +1,11 @@
 'use client';
 
-import { can, type AuthSession } from '@agentos/ui-foundation/auth';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import { DemoBadge, StatusBadge } from '../ui/Primitives';
+import { useSession } from '../auth/SessionProvider';
+import { DemoBadge } from '../ui/Primitives';
 
-type PlatformSession = AuthSession;
 
 type NavItem = {
   readonly href: string;
@@ -45,16 +44,6 @@ function cookieToken(name: string): string {
   }
 }
 
-function isValidPlatformSession(value: unknown): value is PlatformSession {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
-  const candidate = value as Partial<PlatformSession>;
-  return Boolean(
-    candidate.identity && typeof candidate.identity.user_id === 'string' && candidate.identity.user_id.length > 0
-    && candidate.membership && typeof candidate.membership.tenant_id === 'string' && candidate.membership.tenant_id.length > 0
-    && Array.isArray(candidate.permissions) && typeof candidate.expires_at === 'string'
-    && can(candidate as PlatformSession, 'platform:admin'),
-  );
-}
 
 function MenuIcon() {
   return <svg aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" className="h-5 w-5"><path d="M4 6h16M4 12h16M4 18h16" strokeLinecap="round" /></svg>;
@@ -66,31 +55,10 @@ function CloseIcon() {
 
 export function PlatformShell({ children }: { readonly children: ReactNode }) {
   const pathname = usePathname() || '/';
-  const [session, setSession] = useState<PlatformSession | null>(null);
-  const [sessionState, setSessionState] = useState<'loading' | 'ready' | 'signed_out'>('loading');
+  const session = useSession();
   const [menuOpen, setMenuOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
-  useEffect(() => {
-    let active = true;
-    void fetch('/api/auth/session', { credentials: 'same-origin', cache: 'no-store', headers: { Accept: 'application/json' } })
-      .then(async (response) => {
-        const payload: unknown = await response.json().catch(() => null);
-        if (!response.ok || !isValidPlatformSession(payload)) throw new Error('session unavailable');
-        return payload;
-      })
-      .then((value) => {
-        if (!active) return;
-        setSession(value);
-        setSessionState('ready');
-      })
-      .catch(() => {
-        if (!active) return;
-        setSession(null);
-        setSessionState('signed_out');
-      });
-    return () => { active = false; };
-  }, []);
 
   useEffect(() => {
     setMenuOpen(false);
@@ -107,7 +75,6 @@ export function PlatformShell({ children }: { readonly children: ReactNode }) {
 
   const visibleItems = useMemo(() => NAV_ITEMS, []);
 
-  if (pathname === '/sign-in') return <>{children}</>;
 
   async function logout() {
     setLoggingOut(true);
@@ -139,7 +106,7 @@ export function PlatformShell({ children }: { readonly children: ReactNode }) {
             <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Authority scope</p>
             <p className="mt-1 text-sm font-semibold text-ink">Current tenant only</p>
             <p className="mt-1 truncate font-mono text-xs text-muted" title={session?.membership.tenant_id}>{session?.membership.tenant_id ?? 'Sign in to identify'}</p>
-            <div className="mt-2 flex flex-wrap items-center gap-2">{session ? <DemoBadge /> : <StatusBadge label={sessionState === 'loading' ? 'Loading identity' : 'Not signed in'} tone={sessionState === 'loading' ? 'loading' : 'not-configured'} />}</div>
+            <div className="mt-2 flex flex-wrap items-center gap-2"><DemoBadge /></div>
           </div>
 
           <nav className="mt-7 flex-1" aria-label="Platform sections">
@@ -153,11 +120,11 @@ export function PlatformShell({ children }: { readonly children: ReactNode }) {
             <ul className="mt-2 space-y-1">{UNAVAILABLE_ROWS.map((label) => <li key={label} className="flex items-center justify-between gap-3 rounded-lg px-3 py-2 text-sm text-muted"><span>{label}</span><span className="text-[10px] uppercase tracking-wide">Unavailable</span></li>)}</ul>
           </nav>
 
-          <div className="border-t border-line pt-4"><div className="flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-soft text-sm font-semibold text-brand-deep" aria-hidden="true">P</span><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-ink">Platform administrator</p><p className="truncate text-xs text-muted">{session?.identity.user_id ?? 'Session-owned identity'}</p></div>{session ? <button type="button" className="rounded-md p-2 text-muted hover:bg-surface-low hover:text-ink focus-visible:outline-none" onClick={() => void logout()} disabled={loggingOut} aria-label="Sign out">{loggingOut ? '…' : '↗'}</button> : null}</div></div>
+          <div className="border-t border-line pt-4"><div className="flex items-center gap-3"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-brand-soft text-sm font-semibold text-brand-deep" aria-hidden="true">{session.identity.display_name.slice(0, 1).toUpperCase()}</span><div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold text-ink">{session.identity.display_name}</p><p className="truncate text-xs text-muted">{session.identity.email}</p></div><button type="button" className="rounded-md p-2 text-muted hover:bg-surface-low hover:text-ink focus-visible:outline-none" onClick={() => void logout()} disabled={loggingOut} aria-label="Sign out">{loggingOut ? '…' : '↗'}</button></div></div>
         </div>
       </aside>
 
-      <div className="app-main"><header className="app-topbar" role="banner"><div className="flex min-w-0 items-center gap-3"><button type="button" className="mobile-menu-button rounded-md p-2 text-muted hover:bg-surface-low" aria-label="Open navigation" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)}><MenuIcon /></button><div className="min-w-0"><p className="truncate text-sm font-semibold text-ink">{pageLabel(pathname)}</p><p className="hidden text-xs text-muted sm:block">Platform controls are bounded to the current tenant</p></div></div><div className="flex shrink-0 items-center gap-2 sm:gap-3">{session ? <DemoBadge /> : null}<span className="hidden text-xs font-medium text-muted sm:inline">{sessionState === 'ready' ? 'Signed in' : 'Session unavailable'}</span></div></header><main>{children}</main></div>
+      <div className="app-main"><header className="app-topbar" role="banner"><div className="flex min-w-0 items-center gap-3"><button type="button" className="mobile-menu-button rounded-md p-2 text-muted hover:bg-surface-low" aria-label="Open navigation" aria-expanded={menuOpen} onClick={() => setMenuOpen(true)}><MenuIcon /></button><div className="min-w-0"><p className="truncate text-sm font-semibold text-ink">{pageLabel(pathname)}</p><p className="hidden text-xs text-muted sm:block">Platform controls are bounded to the current tenant</p></div></div><div className="flex shrink-0 items-center gap-2 sm:gap-3"><DemoBadge /><span className="hidden text-xs font-medium text-muted sm:inline">Signed in</span></div></header><main className="app-content">{children}</main></div>
     </div>
   );
 }

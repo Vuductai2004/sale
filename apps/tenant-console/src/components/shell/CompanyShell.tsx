@@ -5,7 +5,8 @@ import { usePathname } from 'next/navigation';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { can, canAny, type AuthSession, type Permission } from '@agentos/ui-foundation/auth';
 import { tenantConsoleClient } from '../../lib/tenant-console-client';
-import { DemoBadge, StatusBadge } from '../ui/Primitives';
+import { useSession } from '../auth/SessionProvider';
+import { DemoBadge } from '../ui/Primitives';
 
 type NavItem = {
   readonly href: string;
@@ -23,29 +24,12 @@ const NAV_ITEMS: readonly NavItem[] = [
   { href: '/demo/operations', label: 'Operations demo', description: 'Scoped run activity', permission: 'conversation:takeover', demo: true },
   { href: '/demo/campaigns', label: 'Marketing demo', description: 'Draft and approval handoff', permissions: ['campaign:draft', 'approval:read'], demo: true },
   { href: '/demo/storefront', label: 'Sales demo', description: 'Session-bound storefront', permission: 'customer:read', demo: true },
-  { href: '/analytics', label: 'Analytics', description: 'Observed metrics only' },
+  { href: '/analytics', label: 'Analytics', description: 'Observed metrics only', permission: 'telemetry:read' },
   { href: '/settings', label: 'Settings', description: 'Tenant settings status' },
 ];
 
 const CAPABILITY_ROWS = ['AI team roster', 'Knowledge management', 'Integrations'];
 
-function isValidAuthSession(value: unknown): value is AuthSession {
-  if (typeof value !== 'object' || value === null) return false;
-  const candidate = value as Partial<AuthSession>;
-  const identity = candidate.identity;
-  const membership = candidate.membership;
-  return typeof candidate.expires_at === 'string'
-    && Array.isArray(candidate.permissions)
-    && candidate.permissions.every((permission) => typeof permission === 'string')
-    && typeof identity === 'object' && identity !== null
-    && typeof identity.user_id === 'string'
-    && typeof identity.email === 'string'
-    && typeof identity.display_name === 'string'
-    && typeof membership === 'object' && membership !== null
-    && typeof membership.tenant_id === 'string'
-    && (membership.tenant_name === null || typeof membership.tenant_name === 'string')
-    && typeof membership.scope === 'string';
-}
 
 function hasPermission(session: AuthSession | null, item: NavItem): boolean {
   if (item.permissions) return canAny(session, item.permissions);
@@ -72,27 +56,10 @@ function CloseIcon() {
 
 export function CompanyShell({ children }: { readonly children: ReactNode }) {
   const pathname = usePathname() || '/';
-  const [session, setSession] = useState<AuthSession | null>(null);
-  const [sessionState, setSessionState] = useState<'loading' | 'ready' | 'signed_out'>('loading');
+  const session = useSession();
   const [menuOpen, setMenuOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
 
-  useEffect(() => {
-    let active = true;
-    void tenantConsoleClient.getAuthSession()
-      .then((value) => {
-        if (!active) return;
-        if (!isValidAuthSession(value)) throw new Error('Invalid auth session response');
-        setSession(value);
-        setSessionState('ready');
-      })
-      .catch(() => {
-        if (!active) return;
-        setSession(null);
-        setSessionState('signed_out');
-      });
-    return () => { active = false; };
-  }, []);
 
   useEffect(() => {
     setMenuOpen(false);
@@ -112,7 +79,6 @@ export function CompanyShell({ children }: { readonly children: ReactNode }) {
     [session],
   );
 
-  if (pathname === '/sign-in') return <>{children}</>;
 
   async function logout() {
     setLoggingOut(true);
@@ -145,7 +111,7 @@ export function CompanyShell({ children }: { readonly children: ReactNode }) {
             <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">Current tenant</p>
             <p className="mt-1 truncate font-mono text-xs text-ink" title={session?.membership.tenant_id}>{session?.membership.tenant_name ?? session?.membership.tenant_id ?? 'Sign in to identify'}</p>
             <div className="mt-2 flex flex-wrap items-center gap-2">
-              {session ? <DemoBadge /> : <StatusBadge label={sessionState === 'loading' ? 'Loading identity' : 'Not signed in'} tone={sessionState === 'loading' ? 'loading' : 'not-configured'} />}
+              <DemoBadge />
             </div>
           </div>
 

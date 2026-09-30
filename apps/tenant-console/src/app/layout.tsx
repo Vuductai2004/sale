@@ -1,7 +1,7 @@
 import type { Metadata } from 'next';
 import type { ReactNode } from 'react';
 import './globals.css';
-import { CompanyShell } from '../components/shell/CompanyShell';
+ 
 
 export const metadata: Metadata = {
   title: 'AgentOS Company Workspace',
@@ -12,7 +12,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" data-app="tenant">
       <body className="min-h-screen bg-canvas font-sans antialiased text-ink selection:bg-brand selection:text-white">
-        <CompanyShell>{children}</CompanyShell>
+        {children}
       </body>
     </html>
   );
