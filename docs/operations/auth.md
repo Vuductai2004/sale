@@ -21,7 +21,8 @@ The API keeps the internal bundles below:
 ## Environment migration
 
 The old split role-password setup is replaced by two explicit account identities. The platform
-password variable remains, and its email variable is now required as well.
+password variable remains, and its email variable is now required as well. The two console
+framework secrets are separate and are not cookie-signing keys.
 
 | Previous configuration | Replacement |
 | --- | --- |
@@ -48,8 +49,11 @@ The tenant and platform BFFs use separate keys and cookie names:
 - `TENANT_COOKIE_HMAC_KEY` signs `agentos_tenant_session`.
 - `PLATFORM_COOKIE_HMAC_KEY` signs `agentos_platform_session`.
 
-Each key is required only when `DEMO_MODE=true` and must contain at least 32 bytes. Neither key
-may reuse `NEXTAUTH_SECRET`.
+Each cookie key is required only when `DEMO_MODE=true` and must contain at least 32 bytes.
+`TENANT_NEXTAUTH_SECRET` supplies the tenant console's `NEXTAUTH_SECRET`, while
+`PLATFORM_NEXTAUTH_SECRET` supplies the platform console's `NEXTAUTH_SECRET`; keep both
+framework secrets separate from both cookie HMAC keys. The API uses its dedicated `SESSION_SECRET`
+for signed session tokens; `JWT_SECRET` is never used as a session-signing fallback.
 
 Cookie values use versioned format:
 
@@ -68,6 +72,17 @@ BFF handling of the upstream API is deliberately asymmetric:
   `{ "reason": "expired" }`.
 - Upstream **403** passes through as forbidden and keeps the BFF session. A valid session does
   not become logged out merely because it lacks a permission.
+
+## Platform scope and database role
+
+The platform account must authenticate with `audience=platform`, `scope=platform`, and
+`platform:admin`; a company-scoped principal cannot use platform control-plane routes. Migration
+`0016_platform_directory.sql` creates the `agentos_platform` database role as `NOLOGIN
+NOBYPASSRLS` and grants it non-inheriting membership for explicit transaction-local platform
+projections. Migration `0017_restrict_tenant_shell_provisioning.sql` revokes tenant application
+and public execute access to tenant-shell provisioning functions and grants it only to
+`agentos_platform`; provisioning therefore requires the platform scope and role.
+
 
 ## Governance setting D2
 

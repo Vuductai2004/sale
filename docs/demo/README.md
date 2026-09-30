@@ -32,10 +32,32 @@ requires API/worker/console services already running and exercises company login
 catalog reads, storefront receipt streaming, readiness, conversations, approvals, and campaign-draft
 admission.
 
+### One-command lifecycle
+
+After preparing `.env`, bring up the Compose stack, wait for healthy services, run
+the bootstrap migration, then run preflight, seed, and offline smoke in order; the
+completion summary prints the console URLs:
+
+```bash
+pnpm demo:up
+pnpm demo:up -- --env-file .env.demo
+```
+
+The default env file is `.env`. Tear the stack down while keeping named volumes,
+or remove them explicitly:
+
+```bash
+pnpm demo:down
+pnpm demo:down -- --env-file .env.demo --volumes
+```
+
+The commands do not print demo account values; the completion summary lists only
+the account environment-variable names.
+
 ### Compose
 
-Compose reads the repository's `.env` file. Put the demo values there — a second `--env-file`
-does not override `.env`, so two files silently disagree:
+For direct Compose commands, `.env` is used by default. When using another file,
+pass `--env-file` explicitly so the Compose up/down commands resolve the same values:
 
 ```bash
 cp .env.example .env
@@ -103,17 +125,22 @@ real key for scenario B.
 The demo has two account-based sign-ins; there is no role selector. The API login body is
 `{email, password, audience}`, while each console supplies its fixed audience:
 
-- **Company account** (`DEMO_COMPANY_ADMIN_EMAIL` / `DEMO_COMPANY_ADMIN_PASSWORD`, audience
+- **Company admin account** (`DEMO_COMPANY_ADMIN_EMAIL` / `DEMO_COMPANY_ADMIN_PASSWORD`, audience
   `company`) has the seven company permissions: campaign drafting, conversation takeover, customer
   reads, run reads, telemetry reads, approval reads, and approval decisions. It can create campaign
   drafts and decide their digest-bound approvals.
-- **Platform account** (`DEMO_PLATFORM_ADMIN_EMAIL` / `DEMO_PLATFORM_ADMIN_PASSWORD`, audience
+- **Platform admin account** (`DEMO_PLATFORM_ADMIN_EMAIL` / `DEMO_PLATFORM_ADMIN_PASSWORD`, audience
   `platform`) has platform scope for redacted readiness and tenant-fenced run operations. It cannot
   draft campaigns or decide company approvals.
 
 Passwords are used only by the server-side BFF/API flow. The storefront receives only a scoped
 widget token; API bearer tokens stay in the server-side BFF session store, and no password or
 provider secret is sent to browser code.
+
+After a successful sign-in, the console redirects to the safe requested `next` path, or `/` when
+no path was requested. Missing, malformed, or expired session cookies redirect to sign-in with an
+expiry reason and clear the session cookie; an upstream API `401` does the same through the BFF.
+An upstream `403` remains a forbidden response and does not log out an otherwise valid session.
 
 The customer-visible Sales/Care answer is the durable run response written by the response
 finalizer from that run's own successful receipts (verified quote, approved FAQ citation, verified
@@ -122,40 +149,40 @@ one agent message are recorded per admitted conversational run.
 
 ### Verification status for this branch
 
-No three-agent live-provider acceptance run was executed in this checkout. Docker health smoke,
-offline demo smoke, and the database rehearsal were executed; none claims live Sales, Care, or
-Marketing provider success.
+No live-provider acceptance run is claimed here. Docker health smoke, offline demo smoke, and
+PostgreSQL/RLS rehearsal cover local wiring; they do not establish live Sales, Care, or Marketing
+provider success.
 
 #### Verified locally
 
-- `pnpm check:demo-boundary`: 162 files scanned, 0 platform/demo violations.
-- Demo helper tests: 12 passed, including pack counts, C05/C06 identity facts, seed transaction
+- `pnpm check:demo-boundary` passed with no platform/demo violations.
+- Demo helper tests passed, including pack counts, C05/C06 identity facts, seed transaction
   fencing, offline/live profile gates, and the boundary checker.
 - `pnpm typecheck`, `pnpm lint`, and production-mode `pnpm build` passed. A build with the shell's
   `NODE_ENV=development` failed Next.js prerendering; production builds require
   `NODE_ENV=production`.
-- Unit matrix passed: API 136, Worker 650, Database 120, Skills 70, Core Engine 185, Adapters 41,
-  Tenant Console 45, and Platform Admin 31 tests.
-- Contract (29), adversarial (106), security (117), pilot (27), and Worker E2E (9) tests passed.
-  The offline composition does not create a PostgreSQL recorder.
-- Provider adapter tests passed (7), including 401/429/5xx classification, timeout, cancellation,
+- The unit matrix passed for API, Worker, Database, Skills, Core Engine, Adapters, Tenant Console,
+  and Platform Admin.
+- Contract, adversarial, security, pilot, and Worker E2E tests passed. The offline composition does
+  not create a PostgreSQL recorder.
+- Provider adapter tests passed, including 401/429/5xx classification, timeout, cancellation,
   malformed JSON, invalid structured output, missing usage, bounded response, and secret redaction.
-  Mock ERP boundary tests passed (16).
-- `pnpm test:integration` passed 24 tests against an isolated PostgreSQL application role:
-  Care 7, cross-domain handoff 12, and Sales 5. The same run verified idempotency conflicts,
-  retry recovery, tenant/customer ownership, durable evidence, and the three-leg handoff journey.
-- On a disposable PostgreSQL container, all 13 migrations applied from empty state, replayed
-  idempotently, both RLS suites passed (6 policy and 17 rehearsal tests), and `pnpm demo:seed`
-  passed twice with 24 products, 28 SKUs, 12 customers, 20 orders, 53 events, 2 segments, 1
-  campaign, 8 engagement events, 4 cases, and 13 agents.
+- Mock ERP boundary tests passed.
+- `pnpm test:integration` passed against an isolated PostgreSQL application role; Care,
+  cross-domain handoff, and Sales scenarios verified idempotency conflicts, retry recovery,
+  tenant/customer ownership, durable evidence, and the three-leg handoff journey.
+- On a disposable PostgreSQL container, the 22 currently shipped migration files (`0000`–`0022`, with
+  `0008` intentionally skipped/never shipped) applied from empty state and replayed idempotently;
+  the RLS policy/rehearsal checks passed, and `pnpm demo:seed` passed twice with the seeded demo
+  fixtures.
+- `pnpm docker:smoke` built, inspected, started, health-checked, and tore down API, Worker, Tenant
+  Console, and Platform Admin images.
+- `pnpm demo:smoke` passed against a fresh API/mock-ERP stack. It accepted the Sales turn and
+  explicitly reported the provider as `not_exercised`; Care and Marketing were
+  `not_exercised_offline`. The live profile refused before requests when provider/database
+  prerequisites were absent.
 - Changing the seeded tenant display name caused the second seed to fail and preserved the
   mismatched value; it did not silently overwrite tenant identity.
-- `pnpm docker:smoke --env-file .env.example --project agentos-ci-smoke-20260929` built, inspected,
-  started, health-checked, and tore down API, Worker, Tenant Console, and Platform Admin images.
-- `demo:smoke:offline` passed against a fresh API/mock-ERP stack with 28 catalog items. It accepted
-  the Sales turn and explicitly reported the provider as `not_exercised`; Care and Marketing were
-  `not_exercised_offline`. `demo:smoke:live` refused before requests when provider/database
-  prerequisites were absent.
 - Customer-facing responses remain receipt-grounded: missing successful receipts, source versions,
   or tenant-bound evidence refuse finalization rather than rendering fallback text. The C06 route
   and storefront persona control are demo-only and support the cross-customer denial scenario.
