@@ -50,6 +50,7 @@ export async function handleFaqEngine<TOutput>(
 
   // 3. Deterministic search
   const tokens = query_text
+    .toLowerCase()
     .split(/[\s,?.!;:()\[\]{}"']+/)
     .map((t) => t.trim())
     .filter((t) => t.length >= 2);

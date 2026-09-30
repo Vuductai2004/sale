@@ -85,8 +85,20 @@ export default function OperationsPage() {
   const [session, setSession] = useState<Session | null>(null);
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [selectedId, setSelectedId] = useState('');
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [lease, setLease] = useState<Lease | null>(null);
+  const [leases, setLeases] = useState<Record<string, Lease>>({});
+  const lease = selectedId ? leases[selectedId] ?? null : null;
+  const setLease = useCallback((nextLease: Lease | null, targetId?: string) => {
+    const id = targetId ?? selectedId;
+    if (!id) return;
+    setLeases((prev) => {
+      if (!nextLease) {
+        const copy = { ...prev };
+        delete copy[id];
+        return copy;
+      }
+      return { ...prev, [id]: nextLease };
+    });
+  }, [selectedId]);
   const [reply, setReply] = useState('');
   const [takeoverReason, setTakeoverReason] = useState('Customer requested human assistance');
   const [isLoading, setIsLoading] = useState(true);
@@ -183,7 +195,6 @@ export default function OperationsPage() {
   }, [fetchConversations]);
 
   useEffect(() => {
-    setLease(null);
     setNotice(null);
     void fetchMessages(selectedId);
   }, [fetchMessages, selectedId]);

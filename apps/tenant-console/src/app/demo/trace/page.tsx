@@ -164,6 +164,12 @@ function TraceConsole() {
     }
   }
 
+  useEffect(() => {
+    if (session && runId.trim() && !run && !isLoading && !error) {
+      void readRun();
+    }
+  }, [session, runId]);
+
   async function logout() {
     try {
       await apiFetch('/api/demo/logout', { method: 'POST', body: '{}' });

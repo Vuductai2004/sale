@@ -31,10 +31,12 @@ export interface SalesTurnRequirements {
 export function salesRequirementsFor(message: string): SalesTurnRequirements | undefined {
   const normalized = message.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[đĐ]/g, 'd').toLowerCase();
   const category = /\b(laptop|notebook|computer)\b|may tinh/i.test(normalized) ? 'laptops'
-    : /\b(phone|smartphone)\b|dien thoai/i.test(normalized) ? 'phones'
+    : /\b(phone|smartphone|mobile)\b|dien thoai/i.test(normalized) ? 'phones'
+    : /\b(monitor|screen)\b|man hinh/i.test(normalized) ? 'monitors'
+    : /\b(ssd|storage|drive)\b|o cung/i.test(normalized) ? 'storage'
     : undefined;
   const budgetMatch = normalized.match(
-    /(?:under|below|budget|duoi|duoi muc|less than)\s*(?:vnd|₫)?\s*([0-9]{1,3}(?:[.,][0-9]{3})+(?!\d)|[0-9]+(?:[.,][0-9]+)?)\s*(m|million|trieu|tr|k)?/i,
+    /(?:under|below|budget|duoi|duoi muc|less than|tam|khoang|tam khoang|ngan sach|gia|toi da|up to|at most|maximum)\s*(?:vnd|₫|dong|d)?\s*([0-9]{1,3}(?:[.,][0-9]{3})+(?!\d)|[0-9]+(?:[.,][0-9]+)?)\s*(m|million|trieu|tr|k|nghin)?/i,
   );
   const rawBudget = budgetMatch?.[1];
   const unit = budgetMatch?.[2]?.toLowerCase();
@@ -46,13 +48,15 @@ export function salesRequirementsFor(message: string): SalesTurnRequirements | u
       const num = Number(rawBudget.replace(',', '.'));
       parsed = unit === 'm' || unit === 'million' || unit === 'trieu' || unit === 'tr'
         ? Math.round(num * 1_000_000)
-        : unit === 'k'
+        : unit === 'k' || unit === 'nghin'
           ? Math.round(num * 1_000)
           : num;
     }
   }
   const use_case = /\b(graphic design|design|creator)\b|do hoa/i.test(normalized) ? 'graphic design'
     : /\b(gaming|game)\b|choi game/i.test(normalized) ? 'gaming'
+    : /\b(office|work|business)\b|van phong|cong so|hoc tap|hoc sinh|sinh vien/i.test(normalized) ? 'office'
+    : /\b(travel|portable|lightweight)\b|du lich|di chuyen|mong nhe/i.test(normalized) ? 'travel'
     : undefined;
   if (category === undefined || use_case === undefined || parsed === undefined || !Number.isSafeInteger(parsed) || parsed <= 0) return undefined;
   return { category, budget_vnd: parsed, use_case };

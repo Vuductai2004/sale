@@ -168,9 +168,10 @@ function parseReceiptLine(line: string): TaskReceipt | null {
     const value: unknown = JSON.parse(candidate);
     if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
     const record = value as Record<string, unknown>;
-    if (typeof record.task_id !== 'string') return null;
+    const isHumanOwned = record.status === 'HUMAN_OWNED';
+    if (typeof record.task_id !== 'string' && !isHumanOwned) return null;
     return {
-      task_id: record.task_id,
+      ...(typeof record.task_id === 'string' ? { task_id: record.task_id } : {}),
       ...(typeof record.conversation_id === 'string' ? { conversation_id: record.conversation_id } : {}),
       ...(typeof record.status === 'string' ? { status: record.status } : {}),
       ...(typeof record.task_version === 'number' ? { task_version: record.task_version } : {}),
@@ -434,6 +435,15 @@ export default function StorefrontDemoPage() {
         throw new Error(errorMessage(payload, response.status === 401 || response.status === 403 ? 'The widget session is not permitted to send this message.' : 'The message could not be accepted.'));
       }
       const receipt = await readReceipt(response);
+      if (receipt.status === 'HUMAN_OWNED') {
+        setActiveTaskId(null);
+        setEntries((current) => current.map((entry) => entry.id === assistantId ? {
+          ...entry,
+          status: 'awaiting_human',
+          text: 'Tin nhắn đã được chuyển đến chuyên viên tư vấn hỗ trợ.',
+        } : entry));
+        return;
+      }
       const taskId = receipt.task_id;
       if (!taskId) throw new Error('The storefront receipt did not include a task.');
       setActiveTaskId(taskId);

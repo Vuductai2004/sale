@@ -44,6 +44,21 @@ describe('salesRequirementsFor', () => {
       budget_vnd: 20_000_000,
       use_case: 'graphic design',
     });
+    expect(salesRequirementsFor('Tư vấn màn hình ngân sách 10 triệu văn phòng')).toEqual({
+      category: 'monitors',
+      budget_vnd: 10_000_000,
+      use_case: 'office',
+    });
+    expect(salesRequirementsFor('Tìm máy tính tầm 15tr cho sinh viên học tập')).toEqual({
+      category: 'laptops',
+      budget_vnd: 15_000_000,
+      use_case: 'office',
+    });
+    expect(salesRequirementsFor('Tư vấn laptop tối đa 25 triệu mỏng nhẹ đi du lịch')).toEqual({
+      category: 'laptops',
+      budget_vnd: 25_000_000,
+      use_case: 'travel',
+    });
   });
 
   it('fails closed when a required requirement is absent', () => {

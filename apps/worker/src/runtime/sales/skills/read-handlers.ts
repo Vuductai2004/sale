@@ -609,6 +609,7 @@ export async function handleCheckPrice(
     typeof input.requested_discount_percent === 'number'
     && Number.isFinite(input.requested_discount_percent)
     && input.requested_discount_percent > 0
+    && input.requested_discount_percent <= 100
   ) {
     const discounted = Number((decision.list_price * (1 - input.requested_discount_percent / 100)).toFixed(2));
     if (discounted >= decision.p_floor) {
