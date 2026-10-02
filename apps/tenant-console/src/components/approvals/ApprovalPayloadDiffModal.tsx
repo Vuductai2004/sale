@@ -256,7 +256,7 @@ export function ApprovalPayloadDiffModal({
             disabled={isSubmitting}
             className="ui-button ui-button--ghost ui-button--sm"
           >
-            Close
+            Đóng
           </button>
         </div>
 
@@ -341,10 +341,10 @@ export function ApprovalPayloadDiffModal({
                 {jsonParseError ? <p className="font-mono text-xs text-danger">{jsonParseError}</p> : null}
                 <div className="flex justify-end gap-2 pt-1">
                   <button type="button" onClick={handleCancelModify} disabled={isSubmitting} className="ui-button ui-button--secondary ui-button--sm">
-                    Cancel Edit
+                    Hủy sửa
                   </button>
                   <button type="button" onClick={handleSaveModify} disabled={isSubmitting} className="ui-button ui-button--primary ui-button--sm">
-                    {isSubmitting ? 'Submitting Revision…' : 'Submit MODIFY Revision'}
+                    {isSubmitting ? 'Đang gửi bản sửa đổi…' : 'Gửi bản sửa đổi'}
                   </button>
                 </div>
               </div>
@@ -361,7 +361,7 @@ export function ApprovalPayloadDiffModal({
                   Submit REJECT Decision (AUTH-4 Terminal Stop)
                 </span>
                 <button type="button" onClick={() => setShowRejectForm(false)} className="ui-button ui-button--ghost ui-button--sm">
-                  Cancel
+                  Hủy
                 </button>
               </div>
 
@@ -395,7 +395,7 @@ export function ApprovalPayloadDiffModal({
 
               <div className="flex justify-end pt-1">
                 <button type="button" onClick={handleConfirmReject} disabled={isSubmitting || digestMissing} className="ui-button ui-button--danger ui-button--sm">
-                  {isSubmitting ? 'Submitting REJECT…' : 'Confirm REJECT'}
+                  {isSubmitting ? 'Đang gửi từ chối…' : 'Xác nhận từ chối'}
                 </button>
               </div>
             </div>
@@ -487,7 +487,7 @@ export function ApprovalPayloadDiffModal({
               disabled={isSubmitting || digestMissing || isModifying || showRejectForm || !!decisionReceipt || item.status === 'QUEUED'}
               className="ui-button ui-button--primary ui-button--sm"
             >
-              {isSubmitting ? 'Submitting…' : 'Approve'}
+              {isSubmitting ? 'Đang gửi…' : 'Phê duyệt'}
             </button>
           </div>
         </div>

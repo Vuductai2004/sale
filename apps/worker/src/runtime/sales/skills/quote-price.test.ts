@@ -446,7 +446,7 @@ describe('SalesSkillServices - quote, price floor and payment-policy skills', ()
       price_floor: { read },
     });
 
-    await services.tool_port.invoke({
+    const output = await services.tool_port.invoke({
       skill_id: 'skill.sales.check_price',
       tool_binding: 'API-001.PricingEngine',
       input: {
@@ -470,6 +470,45 @@ describe('SalesSkillServices - quote, price floor and payment-policy skills', ()
       sku_id: 'SKU-1',
       proposed_price: 90,
     });
+    expect((output as Record<string, unknown>).final_price).toBe(90);
+    expect((output as Record<string, unknown>).discount_allowed).toBe(true);
+  });
+
+  it('check_price: rejects proposed_price below p_floor and keeps list_price', async () => {
+    const read = vi.fn(async () => ({
+      ok: true as const,
+      owner_approved: true as const,
+      list_price: 100,
+      currency: 'TWD',
+      p_floor: 80,
+      floor_source: 'engine:approved:pricing-v1',
+      quote_ttl_seconds: 3600,
+    }));
+    const services = createServices({
+      price_floor: { read },
+    });
+
+    const output = await services.tool_port.invoke({
+      skill_id: 'skill.sales.check_price',
+      tool_binding: 'API-001.PricingEngine',
+      input: {
+        tenant_id: TENANT_ID,
+        sku_id: 'SKU-1',
+        customer_id: CUSTOMER_ID,
+        proposed_price: 70,
+      },
+      context: {
+        run_id: 'run-price-proposed-low',
+        tenant_id: TENANT_ID,
+        caller_agent: 'SAL-02' as const,
+        correlation_id: CORRELATION_ID,
+        granted_authority: 'AUTH-3' as const,
+        effect_key: 'effect-price-proposed-low',
+      },
+    });
+
+    expect((output as Record<string, unknown>).final_price).toBe(100);
+    expect((output as Record<string, unknown>).discount_allowed).toBe(false);
   });
 
   it('check_price: HMAC-SHA256 signs quote token with server secret binding tenant, sku, customer, price, floor, currency, and expiry', async () => {

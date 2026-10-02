@@ -380,6 +380,38 @@ Tính đến thời điểm hiện tại, remote `phong/feat/demo-live-3agent` (
   - Tuy nhiên thanh điều hướng `CompanyShell.tsx` chỉ gán duy nhất `permission: 'conversation:takeover'`, khiến các tài khoản giám sát viên/nhân viên chỉ có quyền đọc khách hàng bị ẩn mất tab Hội thoại.
 - **Giải pháp khắc phục:** Cập nhật quyền của mục điều hướng sang `permissions: ['conversation:takeover', 'customer:read']`.
 
+### B-43. Bỏ qua `proposed_price` trong `handleCheckPrice` dẫn đến tính giá sai khi khách đề xuất giá trực tiếp
+- **Mức độ nghiêm trọng:** HIGH (Lỗi tính giá kinh doanh & cam kết giá cho khách hàng)
+- **File:** [apps/worker/src/runtime/sales/skills/read-handlers.ts](file:///d:/New%20folder/apps/worker/src/runtime/sales/skills/read-handlers.ts), [apps/worker/src/runtime/sales/skills/quote-price.test.ts](file:///d:/New%20folder/apps/worker/src/runtime/sales/skills/quote-price.test.ts)
+- **Nguyên nhân gốc rễ:**
+  - Khi khách hàng thương lượng giá bằng cách đưa ra một mức giá cụ thể (ví dụ: trả giá 90 TWD cho món hàng niêm yết 100 TWD với giá sàn 80 TWD), hàm `handleCheckPrice` gửi `proposed_price` cho pricing engine nhưng khi tính toán `final_price` và token quote ký số, code chỉ tính lại giá nếu có `requested_discount_percent`!
+  - Kết quả: Khách hàng đề xuất giá hợp lệ nhưng token báo giá vẫn bị ký ở mức giá gốc niêm yết (100 TWD) thay vì 90 TWD. Ngược lại nếu trả giá dưới sàn mà không có discount percent thì token vẫn bị ký giá niêm yết mà cờ `discount_allowed` không được gắn chính xác.
+- **Giải pháp khắc phục:** Bổ sung logic xử lý `proposed_price`: nếu `proposed_price >= p_floor` và `<= list_price`, chấp nhận giá đề xuất làm `final_price` và bật `discount_allowed = true`; nếu `proposed_price < p_floor`, giữ nguyên `list_price` và đặt `discount_allowed = false`. Bổ sung unit test toàn diện cho cả 2 trường hợp.
+
+### B-44. Thiếu fallback `extend_seconds` trong Takeover Heartbeat gây lỗi 400 khi client gửi payload rỗng
+- **Mức độ nghiêm trọng:** MEDIUM (Đứt gãy heartbeat duy trì phiên tiếp quản của nhân viên)
+- **File:** [apps/api/src/routes/v1/conversations-takeover.ts](file:///d:/New%20folder/apps/api/src/routes/v1/conversations-takeover.ts), [apps/tenant-console/src/lib/types/tenant-console.ts](file:///d:/New%20folder/apps/tenant-console/src/lib/types/tenant-console.ts), [apps/api/src/routes/v1/conversations-takeover.test.ts](file:///d:/New%20folder/apps/api/src/routes/v1/conversations-takeover.test.ts)
+- **Nguyên nhân gốc rễ:**
+  - Route `POST /conversations/:id/takeover/heartbeat` kiểm tra `typeof extend_seconds !== 'number'`. Nếu client gửi `{}` (ping heartbeat tiêu chuẩn), API từ chối với lỗi 400 `VALIDATION_FAILED`.
+  - Type `ConversationTakeoverHeartbeatRequest` trong tenant console cũng yêu cầu bắt buộc trường `extend_seconds`.
+- **Giải pháp khắc phục:** Cho phép `extend_seconds` nhận giá trị mặc định là 60 giây khi bị bỏ qua (`body?.['extend_seconds'] ?? 60`), đồng thời nới lỏng interface `ConversationTakeoverHeartbeatRequest` thành `extend_seconds?: number | undefined`, bổ sung unit test kiểm tra cả payload rỗng và payload chỉ định rõ số giây.
+
+### B-45. Thiếu các phương thức quản lý Campaign và Run Trace trong `TenantConsoleClient`
+- **Mức độ nghiêm trọng:** MEDIUM (Thiếu đồng bộ API client giữa frontend và BFF Proxy)
+- **File:** [apps/tenant-console/src/lib/tenant-console-client.ts](file:///d:/New%20folder/apps/tenant-console/src/lib/tenant-console-client.ts), [apps/tenant-console/src/lib/tenant-console-client.test.ts](file:///d:/New%20folder/apps/tenant-console/src/lib/tenant-console-client.test.ts)
+- **Nguyên nhân gốc rễ:**
+  - Proxy BFF của Tenant Console đã allowlist các endpoint `/campaigns`, `/campaigns/:id`, `/campaigns/drafts` và `/runs/:id/trace`.
+  - Tuy nhiên `TenantConsoleClient` không cung cấp các phương thức tương ứng (`getCampaigns`, `getCampaign`, `createCampaignDraft`, `getRunTrace`), khiến các view và caller phải dùng fetch thô hoặc không gọi được API.
+- **Giải pháp khắc phục:** Bổ sung đầy đủ các phương thức type-safe vào `TenantConsoleClient`, viết kèm bộ 4 unit tests kiểm tra URL, method và payload JSON tương ứng.
+
+### B-46. Bổ sung ánh xạ lỗi phân trang Database Repository & Chuẩn hóa nút bấm Approval Modal
+- **Mức độ nghiêm trọng:** MEDIUM (Tránh lỗi 500 khi client gửi tham số trang sai và hoàn thiện trải nghiệm tiếng Việt)
+- **File:** [apps/api/src/gateway/http.ts](file:///d:/New%20folder/apps/api/src/gateway/http.ts), [apps/api/src/gateway/http.test.ts](file:///d:/New%20folder/apps/api/src/gateway/http.test.ts), [apps/tenant-console/src/components/approvals/ApprovalPayloadDiffModal.tsx](file:///d:/New%20folder/apps/tenant-console/src/components/approvals/ApprovalPayloadDiffModal.tsx)
+- **Nguyên nhân gốc rễ:**
+  - Database repository ném các lỗi tiền tố mã hóa như `CUSTOMER_EVENT_CURSOR_INVALID`, `CUSTOMER_EVENT_LIMIT_INVALID`, `CONVERSATION_LIMIT_INVALID`, `CONVERSATION_MESSAGE_LIMIT_INVALID`, `HANDOFF_LIMIT_INVALID`, `APPROVAL_EXPIRY_LIMIT_INVALID`. Khi gặp các lỗi này, do chưa có trong `REPOSITORY_CODE_MAP`, API gateway ném 500 `INTERNAL_ERROR` thay vì 400 `VALIDATION_FAILED`.
+  - Trong `ApprovalPayloadDiffModal.tsx`, các nút "Close", "Approve", "Cancel Edit", "Submit MODIFY Revision", "Cancel", "Confirm REJECT" bị sót tiếng Anh trong khi các nút khác đã được Việt hóa ("Tạm dừng", "Hủy", "Sửa", "Từ chối…").
+- **Giải pháp khắc phục:** Bổ sung toàn bộ các mã lỗi phân trang vào `REPOSITORY_CODE_MAP` (kèm unit test kiểm tra), và dịch chuẩn xác toàn bộ nhãn nút bấm sang tiếng Việt ("Đóng", "Phê duyệt", "Hủy sửa", "Gửi bản sửa đổi", "Xác nhận từ chối").
+
 ---
 
 ## IV. LỘ TRÌNH KHUYẾN NGHỊ TRIỂN KHAI SỬA LỖI
@@ -413,6 +445,66 @@ Tính đến thời điểm hiện tại, remote `phong/feat/demo-live-3agent` (
 5. **Sửa Bug B-40:** Ánh xạ lỗi phân trang thành 400 Bad Request thay vì 500 Internal Server Error. *(Đã xong)*
 6. **Sửa Bug B-41:** Bổ sung từ vựng mua sắm tiếng Việt tự nhiên và hỗ trợ trạng thái đơn hàng `COMPLETED`. *(Đã xong)*
 7. **Sửa Bug B-42:** Cân bằng quyền hiển thị menu Hội thoại theo chuẩn API. *(Đã xong)*
+
+### Giai đoạn 6: Tính giá theo Đề xuất Trực tiếp, Takeover Heartbeat Fallback, Parity Client & Database Error Mapping (B-43 đến B-46) (Đã hoàn thành trên nhánh `tai`)
+1. **Sửa Bug B-43:** Hỗ trợ tính giá và ký số quote token chuẩn xác theo `proposed_price` trực tiếp trong Sales Worker. *(Đã xong)*
+2. **Sửa Bug B-44:** Hỗ trợ giá trị mặc định `extend_seconds = 60` cho Takeover Heartbeat, chống lỗi 400 khi client gửi `{}`. *(Đã xong)*
+3. **Sửa Bug B-45:** Bổ sung các phương thức Campaign và Run Trace cho `TenantConsoleClient` đồng bộ với BFF proxy. *(Đã xong)*
+4. **Sửa Bug B-46:** Bổ sung ánh xạ toàn diện lỗi phân trang database repository (`CUSTOMER_EVENT`, `CONVERSATION`, `HANDOFF`, `APPROVAL`) sang 400 `VALIDATION_FAILED` và hoàn thiện Việt hóa nút bấm modal phê duyệt. *(Đã xong)*
+
+---
+*Báo cáo được lưu trữ và cập nhật trực tiếp tại: `docs/demo/BUG_AUDIT_REPORT.md`.*
+h muốn mua chuột gaming", "bên bạn có bán bàn phím không" thì phân loại `product_search` chỉ có các từ "tìm", "xem", "danh mục" mà không hề có các động từ "mua", "cần mua", "muốn mua", "có bán". Hậu quả: Intent rơi vào `unknown` và từ chối hỗ trợ.
+  - Trong Care Worker, đơn hàng trạng thái `COMPLETED` từ ERP ném ngoại lệ `Unmappable provider order status` vì danh sách map chỉ có `DELIVERED`, `SHIPPED`, v.v.
+- **Giải pháp khắc phục:** Bổ sung các cụm từ hành vi mua sắm tiếng Việt vào `BUILTIN_SALES_LEXICON.product_search` (với unit test đầy đủ) và ánh xạ trạng thái `COMPLETED` sang `DELIVERED`.
+
+### B-42. Giới hạn sai quyền truy cập menu Hội thoại trên Console Navigation
+- **Mức độ nghiêm trọng:** LOW (Khó khăn phân quyền người dùng)
+- **File:** [apps/tenant-console/src/components/shell/CompanyShell.tsx](file:///d:/New%20folder/apps/tenant-console/src/components/shell/CompanyShell.tsx)
+- **Nguyên nhân gốc rễ:**
+  - API endpoint `/conversations` cho phép nhân viên có quyền `customer:read` hoặc `conversation:takeover` đọc danh sách hội thoại.
+  - Tuy nhiên thanh điều hướng `CompanyShell.tsx` chỉ gán duy nhất `permission: 'conversation:takeover'`, khiến các tài khoản giám sát viên/nhân viên chỉ có quyền đọc khách hàng bị ẩn mất tab Hội thoại.
+- **Giải pháp khắc phục:** Cập nhật quyền của mục điều hướng sang `permissions: ['conversation:takeover', 'customer:read']`.
+
+---
+
+## IV. LỘ TRÌNH KHUYẾN NGHỊ TRIỂN KHAI SỬA LỖI
+
+### Giai đoạn 1: Vá ngay các lỗi Block kịch bản Demo trực tiếp (Đã hoàn thành trên nhánh `tai`)
+1. **Sửa Bug B-24 & B-15:** Viết lại bộ regex nhận diện tiền tệ, ngân sách và phân loại danh mục trong `turn-classifier.ts` để thông suốt kịch bản tư vấn bằng tiếng Việt tự nhiên. *(Đã xong)*
+2. **Sửa Bug B-20:** Cập nhật `storefront/page.tsx` và `care-turn.ts` xử lý êm receipt `HUMAN_OWNED` khi con người tiếp quản hội thoại. *(Đã xong)*
+3. **Sửa Bug B-01, B-03, B-04, B-05:** Vá lỗi FAQ parser, giới hạn trần discount, trace autoload và duy trì map lease theo conversation ID. *(Đã xong)*
+
+### Giai đoạn 2: Vá các lỗi sâu mới phát hiện (B-26 đến B-30) (Đã hoàn thành trên nhánh `tai`)
+1. **Sửa Bug B-26:** Mở rộng nhận diện mã đơn hàng tiếng Việt (`DH-`, `đơn hàng`, `mã đơn`) trong Care Worker runtime. *(Đã xong)*
+2. **Sửa Bug B-27:** Cải tiến heartbeat lease đa hội thoại trong Operations Console. *(Đã xong)*
+3. **Sửa Bug B-28:** Mở khóa nút phê duyệt chiến dịch trong Campaigns Console để kích hoạt fallback nạp detail digest. *(Đã xong)*
+4. **Sửa Bug B-29:** Điều chỉnh logic cờ `discount_allowed` trong `handleCheckPrice` của Sales Worker. *(Đã xong)*
+5. **Sửa Bug B-30:** Chuẩn hóa stream phản hồi cho trạng thái `HUMAN_OWNED` và bảo toàn input text khi gặp lỗi kết nối. *(Đã xong)*
+
+### Giai đoạn 3: Vá các lỗi hợp đồng & hệ sinh thái Mock/Console (B-31 đến B-33) (Đã hoàn thành trên nhánh `tai`)
+1. **Sửa Bug B-31:** Đồng bộ độ dài chỉ thị chiến dịch 2000 ký tự trong Marketing Worker runtime (`factory.ts`), bổ sung unit test. *(Đã xong)*
+2. **Sửa Bug B-32:** Hỗ trợ generic `key` cho Customer Lookup & Sales History trong Mock ERP (`server.mjs`), bổ sung unit test. *(Đã xong)*
+3. **Sửa Bug B-33:** Thêm fallback êm cho `/analytics` và `/settings` khi không có `PLATFORM_ADMIN_URL`, chống sập 500. *(Đã xong)*
+
+### Giai đoạn 4: Hoàn thiện tính năng tương tác Demo Catalog & Human Takeover Console (B-34 đến B-35) (Đã hoàn thành trên nhánh `tai`)
+1. **Sửa Bug B-34:** Đồng bộ route `/catalog/items`, làm giàu fixture và chuẩn hóa projection sản phẩm trong `demo-widget.ts`, bổ sung unit test Mock ERP. *(Đã xong)*
+2. **Sửa Bug B-35:** Tích hợp `postOperatorMessage` vào `TenantConsoleClient` và kết nối với `ConversationConsole.tsx` cho phiên tiếp quản con người, bổ sung unit test. *(Đã xong)*
+
+### Giai đoạn 5: Tối ưu hoá toàn diện giao thức Streaming, Customer 360 DTO, Lease Heartbeat & Tiếng Việt Tự Nhiên (B-36 đến B-42) (Đã hoàn thành trên nhánh `tai`)
+1. **Sửa Bug B-36:** Đồng bộ stream chunk `[pending: awaiting_human]` giữa API và storefront widget. *(Đã xong)*
+2. **Sửa Bug B-37:** Khắc phục triệt để lỗi hiển thị "Mục dữ liệu" và mapping các trường DTO Customer 360. *(Đã xong)*
+3. **Sửa Bug B-38:** Khắc phục lỗi trực kết nối URL trực tiếp của Approval Center. *(Đã xong)*
+4. **Sửa Bug B-39:** Triển khai quản lý lease đa hội thoại chống timeout ngầm cho operator. *(Đã xong)*
+5. **Sửa Bug B-40:** Ánh xạ lỗi phân trang thành 400 Bad Request thay vì 500 Internal Server Error. *(Đã xong)*
+6. **Sửa Bug B-41:** Bổ sung từ vựng mua sắm tiếng Việt tự nhiên và hỗ trợ trạng thái đơn hàng `COMPLETED`. *(Đã xong)*
+7. **Sửa Bug B-42:** Cân bằng quyền hiển thị menu Hội thoại theo chuẩn API. *(Đã xong)*
+
+### Giai đoạn 6: Tính giá theo Đề xuất Trực tiếp, Takeover Heartbeat Fallback, Parity Client & Database Error Mapping (B-43 đến B-46) (Đã hoàn thành trên nhánh `tai`)
+1. **Sửa Bug B-43:** Hỗ trợ tính giá và ký số quote token chuẩn xác theo `proposed_price` trực tiếp trong Sales Worker. *(Đã xong)*
+2. **Sửa Bug B-44:** Hỗ trợ giá trị mặc định `extend_seconds = 60` cho Takeover Heartbeat, chống lỗi 400 khi client gửi `{}`. *(Đã xong)*
+3. **Sửa Bug B-45:** Bổ sung các phương thức Campaign và Run Trace cho `TenantConsoleClient` đồng bộ với BFF proxy. *(Đã xong)*
+4. **Sửa Bug B-46:** Bổ sung ánh xạ toàn diện lỗi phân trang database repository (`CUSTOMER_EVENT`, `CONVERSATION`, `HANDOFF`, `APPROVAL`) sang 400 `VALIDATION_FAILED` và hoàn thiện Việt hóa nút bấm modal phê duyệt. *(Đã xong)*
 
 ---
 *Báo cáo được lưu trữ và cập nhật trực tiếp tại: `docs/demo/BUG_AUDIT_REPORT.md`.*

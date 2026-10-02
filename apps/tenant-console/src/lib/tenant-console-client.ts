@@ -431,6 +431,60 @@ export class TenantConsoleClient extends HttpClient {
       options,
     );
   }
+
+  async getCampaigns(
+    params?: { readonly limit?: number | undefined; readonly cursor?: string | undefined } | undefined,
+    options?: RequestOptions | undefined,
+  ): Promise<{ readonly items: readonly Record<string, unknown>[]; readonly next_cursor?: string | null }> {
+    return this.request(
+      '/campaigns',
+      { method: 'GET' },
+      { limit: params?.limit, cursor: params?.cursor },
+      options,
+    );
+  }
+
+  async getCampaign(
+    runId: string,
+    options?: RequestOptions | undefined,
+  ): Promise<Record<string, unknown>> {
+    return this.request(
+      `/campaigns/${encodeURIComponent(runId)}`,
+      { method: 'GET' },
+      undefined,
+      options,
+    );
+  }
+
+  async createCampaignDraft(
+    body: {
+      readonly idempotency_key: string;
+      readonly segment_id: string;
+      readonly objective: string;
+      readonly instruction?: string | undefined;
+      readonly content_constraints?: Record<string, unknown> | undefined;
+    },
+    options?: RequestOptions | undefined,
+  ): Promise<TaskAcceptedResponse> {
+    return this.request<TaskAcceptedResponse>(
+      '/campaigns/drafts',
+      { method: 'POST', body: JSON.stringify(body) },
+      undefined,
+      options,
+    );
+  }
+
+  async getRunTrace(
+    runId: string,
+    options?: RequestOptions | undefined,
+  ): Promise<Record<string, unknown>> {
+    return this.request(
+      `/runs/${encodeURIComponent(runId)}/trace`,
+      { method: 'GET' },
+      undefined,
+      options,
+    );
+  }
 }
 
 export const tenantConsoleClient = new TenantConsoleClient();

@@ -53,6 +53,10 @@ function buildTakeoverHarness(options: {
     outcome: release_outcome,
     lease: release_outcome === 'HELD_BY_ANOTHER_OPERATOR' ? lease : null,
   }));
+  const renew = vi.fn(async (_input: { extend_seconds?: number }) => ({
+    outcome: 'RENEWED' as const,
+    lease: { operator_id: 'operator-a', expires_at: '2026-09-23T00:02:00.000Z' },
+  }));
   const claim = vi.fn(async (_input: unknown): Promise<'CLAIMED' | 'NO_HANDOFF' | 'HELD_BY_ANOTHER_OPERATOR'> => 'CLAIMED');
   const complete = vi.fn(async (_input: unknown): Promise<'COMPLETED' | 'NO_HANDOFF' | 'NOT_ASSIGNED' | 'HELD_BY_ANOTHER_OPERATOR'> => 'COMPLETED');
   const setState = vi.fn(async (
@@ -83,6 +87,7 @@ function buildTakeoverHarness(options: {
     takeover: {
       acquire,
       release,
+      renew,
       holder: vi.fn(async () => lease),
     },
     handoffs: { claim, complete },
@@ -104,7 +109,7 @@ function buildTakeoverHarness(options: {
       widgets: [],
     }),
   });
-  return { app, acquire, claim, complete, conversation, release, setState, clearTakeoverIfOwned };
+  return { app, acquire, claim, complete, conversation, release, renew, setState, clearTakeoverIfOwned };
 }
 
 describe('conversation takeover durable handoff coordination', () => {
@@ -242,4 +247,60 @@ describe('conversation takeover durable handoff coordination', () => {
     expect(setState).not.toHaveBeenCalled();
     await app.close();
   });
+
+  it('renews takeover lease with default extend_seconds=60 when omitted in request body', async () => {
+    const { app, renew } = buildTakeoverHarness();
+    const response = await app.inject({
+      method: 'POST',
+      url: '/conversations/' + CONVERSATION_ID + '/takeover/heartbeat',
+      headers: { authorization: 'Bearer operator-token' },
+      payload: {},
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({
+      conversation_id: CONVERSATION_ID,
+      status: 'HUMAN_TAKEOVER',
+      operator_id: 'operator-a',
+      lease_expires_at: '2026-09-23T00:02:00.000Z',
+    });
+    expect(renew).toHaveBeenCalledWith({
+      tenant_id: TENANT,
+      conversation_id: CONVERSATION_ID,
+      operator_id: 'operator-a',
+      extend_seconds: 60,
+    });
+    await app.close();
+  });
+
+  it('renews takeover lease with explicit extend_seconds', async () => {
+    const { app, renew } = buildTakeoverHarness();
+    const response = await app.inject({
+      method: 'POST',
+      url: '/conversations/' + CONVERSATION_ID + '/takeover/heartbeat',
+      headers: { authorization: 'Bearer operator-token' },
+      payload: { extend_seconds: 120 },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(renew).toHaveBeenCalledWith({
+      tenant_id: TENANT,
+      conversation_id: CONVERSATION_ID,
+      operator_id: 'operator-a',
+      extend_seconds: 120,
+    });
+    await app.close();
+  });
+
+  it('rejects invalid extend_seconds out of bounds', async () => {
+    const { app } = buildTakeoverHarness();
+    const response = await app.inject({
+      method: 'POST',
+      url: '/conversations/' + CONVERSATION_ID + '/takeover/heartbeat',
+      headers: { authorization: 'Bearer operator-token' },
+      payload: { extend_seconds: 500 },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error_code).toBe('VALIDATION_FAILED');
+    await app.close();
+  });
 });
+

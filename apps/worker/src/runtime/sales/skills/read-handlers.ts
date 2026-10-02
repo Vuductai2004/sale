@@ -693,6 +693,18 @@ export async function handleCheckPrice(
       final_price = decision.list_price;
       discount_allowed = false;
     }
+  } else if (typeof input.proposed_price === 'number') {
+    if (
+      Number.isFinite(input.proposed_price)
+      && input.proposed_price >= decision.p_floor
+      && input.proposed_price <= decision.list_price
+    ) {
+      final_price = input.proposed_price;
+      discount_allowed = true;
+    } else {
+      final_price = decision.list_price;
+      discount_allowed = false;
+    }
   }
 
   if (!hasQuoteSigningSecret(options)) {

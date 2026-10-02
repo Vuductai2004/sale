@@ -151,7 +151,8 @@ export function registerConversationTakeoverRoutes(
         const conversation_id = request.params.conversation_id;
 
         const body = request.body as Record<string, unknown> | undefined;
-        const extend_seconds = body?.['extend_seconds'];
+        const raw_extend = body?.['extend_seconds'];
+        const extend_seconds = raw_extend === undefined ? 60 : raw_extend;
         if (typeof extend_seconds !== 'number' || !Number.isInteger(extend_seconds) || extend_seconds < 1 || extend_seconds > 300) {
           fail('VALIDATION_FAILED', 'extend_seconds must be an integer between 1 and 300');
         }

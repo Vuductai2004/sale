@@ -440,3 +440,72 @@ describe('SCR-005 Conversation Console Contracts', () => {
     expect(result.task_id).toBe('msg-task-556');
   });
 });
+
+describe('Campaign & Run Contracts', () => {
+  it('calls GET /api/v1/campaigns with optional limit and cursor', async () => {
+    const mockData = {
+      items: [{ campaign_id: 'camp-1', name: 'Winback 90d', run_id: 'run-1' }],
+      next_cursor: 'cur-2',
+    };
+    const spy = createFetchSpy(createMockJsonResponse(mockData));
+    const client = new TenantConsoleClient({ baseUrl: 'http://localhost:4000', fetch: spy.mockFetch });
+
+    const result = await client.getCampaigns({ limit: 10, cursor: 'cur-1' });
+
+    expect(spy.getLastUrl()).toBe('http://localhost:4000/api/v1/campaigns?limit=10&cursor=cur-1');
+    expect(spy.getLastInit()?.method).toBe('GET');
+    expect(result).toEqual(mockData);
+  });
+
+  it('calls GET /api/v1/campaigns/:run_id to fetch single campaign', async () => {
+    const mockCampaign = { run_id: 'run-101', name: 'Summer Promo', campaign_status: 'draft' };
+    const spy = createFetchSpy(createMockJsonResponse(mockCampaign));
+    const client = new TenantConsoleClient({ baseUrl: 'http://localhost:4000', fetch: spy.mockFetch });
+
+    const result = await client.getCampaign('run-101');
+
+    expect(spy.getLastUrl()).toBe('http://localhost:4000/api/v1/campaigns/run-101');
+    expect(spy.getLastInit()?.method).toBe('GET');
+    expect(result).toEqual(mockCampaign);
+  });
+
+  it('calls POST /api/v1/campaigns/drafts to submit draft campaign', async () => {
+    const mockReceipt = {
+      task_id: 'run-camp-draft-1',
+      conversation_id: null,
+      status: 'accepted',
+      task_version: 1,
+      correlation_id: 'corr-camp-draft-1',
+    };
+    const spy = createFetchSpy(createMockJsonResponse(mockReceipt, 202));
+    const client = new TenantConsoleClient({ baseUrl: 'http://localhost:4000', fetch: spy.mockFetch });
+
+    const draftInput = {
+      idempotency_key: 'draft-uuid-001',
+      segment_id: 'inactive_90d',
+      objective: 'winback',
+      instruction: 'Special promo email',
+      content_constraints: { channel: 'EMAIL_HTML', locale: 'vi-VN' },
+    };
+
+    const result = await client.createCampaignDraft(draftInput);
+
+    expect(spy.getLastUrl()).toBe('http://localhost:4000/api/v1/campaigns/drafts');
+    expect(spy.getLastInit()?.method).toBe('POST');
+    expect(spy.getBodyJson()).toEqual(draftInput);
+    expect(result).toEqual(mockReceipt);
+  });
+
+  it('calls GET /api/v1/runs/:run_id/trace to inspect run telemetry', async () => {
+    const mockTrace = { run_id: 'run-202', stages: ['PLAN', 'EXECUTE'], status: 'completed' };
+    const spy = createFetchSpy(createMockJsonResponse(mockTrace));
+    const client = new TenantConsoleClient({ baseUrl: 'http://localhost:4000', fetch: spy.mockFetch });
+
+    const result = await client.getRunTrace('run-202');
+
+    expect(spy.getLastUrl()).toBe('http://localhost:4000/api/v1/runs/run-202/trace');
+    expect(spy.getLastInit()?.method).toBe('GET');
+    expect(result).toEqual(mockTrace);
+  });
+});
+

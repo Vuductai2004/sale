@@ -213,7 +213,7 @@ export interface ConversationTakeoverResponse {
   readonly lease_expires_at: string;
 }
 export interface ConversationTakeoverHeartbeatRequest {
-  readonly extend_seconds: number;
+  readonly extend_seconds?: number | undefined;
 }
 export interface ConversationTakeoverHeartbeatResponse {
   readonly conversation_id: string;
