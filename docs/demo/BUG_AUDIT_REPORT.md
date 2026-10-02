@@ -499,9 +499,12 @@ Tính đến thời điểm hiện tại, remote `phong/feat/demo-live-3agent` (
 5. **Ghi nhận Bug B-52:** `DomainPolicyEngine.agentGrantCache` tích lũy vô hạn — cần bounded eviction cho production dài hạn. *(Ghi nhận)*
 6. **Ghi nhận Bug B-54:** `approval-expiry-sweeper` race condition `stop()+start()` — risk thấp với pattern autoStart hiện tại. *(Ghi nhận)*
 7. **Ghi nhận Bug B-56:** `erp-http-transport` phân loại sai `TIMEOUT` vs `UNKNOWN` khi dual-abort signal — edge case production cao tải. *(Ghi nhận)*
+8. **Sửa Bug B-58:** API Gateway (`campaigns.ts`) không validate `objective` trước khi tạo task — bất kỳ chuỗi nào đều được chấp nhận, nhưng worker từ chối nếu không phải `reactivation`/`winback`. Hệ quả: task được cấp phát (202) nhưng ngay lập tức thất bại. Thêm `CAMPAIGN_OBJECTIVES` whitelist + check tại gateway. *(Đã xong)*
+9. **Sửa Bug B-59:** API Gateway (`campaigns.ts`) không validate format `segment_id` — worker yêu cầu khớp pattern `^inactive_[1-9][0-9]*d$` (ví dụ `inactive_90d`). Giá trị sai như UUID hay `all_customers` qua được gateway nhưng bị worker từ chối. Thêm `SEGMENT_ID_PATTERN` regex validation tại gateway. *(Đã xong)*
 
 ---
 *Báo cáo được lưu trữ và cập nhật trực tiếp tại: `docs/demo/BUG_AUDIT_REPORT.md`.*
+
 
 
 

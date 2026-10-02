@@ -31,6 +31,15 @@ const MAX_INSTRUCTION_LENGTH = 2000;
 const MAX_CONSTRAINT_TEXT_LENGTH = 256;
 const MAX_PROHIBITED_CLAIMS = 20;
 
+/** Canonical objectives accepted by the Marketing worker (factory.ts §normalizedCampaignRequest). */
+const CAMPAIGN_OBJECTIVES: Record<string, true> = { reactivation: true, winback: true };
+
+/**
+ * Segment identifier format accepted by the Marketing worker (factory.ts §normalizedCampaignRequest).
+ * Must be `inactive_Nd` where N is a positive integer without leading zeros.
+ */
+const SEGMENT_ID_PATTERN = /^inactive_[1-9][0-9]*d$/;
+
 const CONTENT_CHANNELS: Record<string, true> = {
   LINE_FLEX: true,
   WHATSAPP_TEMPLATE: true,
@@ -184,7 +193,13 @@ function validateDraftBody(body: unknown): {
 
   const idempotency_key = requiredString(body, 'idempotency_key', MAX_IDEMPOTENCY_KEY_LENGTH);
   const segment_id = requiredString(body, 'segment_id', MAX_SEGMENT_ID_LENGTH);
+  if (!SEGMENT_ID_PATTERN.test(segment_id)) {
+    fail('VALIDATION_FAILED', 'segment_id must be a server-normalized inactive_Nd segment (e.g. inactive_90d)');
+  }
   const objective = requiredString(body, 'objective', MAX_OBJECTIVE_LENGTH).toLowerCase();
+  if (!Object.hasOwn(CAMPAIGN_OBJECTIVES, objective)) {
+    fail('VALIDATION_FAILED', 'objective must be reactivation or its winback alias');
+  }
   const instruction = optionalString(body, 'instruction', MAX_INSTRUCTION_LENGTH);
   const content_constraints = validateContentConstraints(body['content_constraints']);
 

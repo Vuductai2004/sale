@@ -136,7 +136,7 @@ describe('POST /campaigns/drafts', () => {
         method: 'POST',
         url: '/campaigns/drafts',
         headers,
-        payload: { ...REQUEST, objective: 'retention' },
+        payload: { ...REQUEST, segment_id: 'inactive_30d' },
       });
 
       expect(first.statusCode).toBe(202);
