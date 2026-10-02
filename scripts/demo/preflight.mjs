@@ -86,6 +86,9 @@ export async function runDemoLivePreflight(env = process.env) {
 }
 
 if (isMainModule(import.meta.url, process.argv[1])) {
+  if (typeof process.loadEnvFile === 'function') {
+    try { process.loadEnvFile(); } catch { /* ignore if .env is missing */ }
+  }
   const profile = process.argv.includes('--live') && !process.argv.includes('--offline') ? 'live' : 'offline';
   runDemoPreflight(process.env, profile).then((result) => {
     console.log(`NovaMart demo ${profile} preflight passed: ${JSON.stringify(result)}`);

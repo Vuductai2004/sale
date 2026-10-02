@@ -2,10 +2,11 @@ import { proxyPlatformApi } from '../../../../lib/auth/demo-provider';
 
 export const dynamic = 'force-dynamic';
 
-type RouteContext = { readonly params: { readonly path?: readonly string[] } };
+type RouteContext = { readonly params: { readonly path?: readonly string[] } | Promise<{ readonly path?: readonly string[] }> };
 
 async function handle(request: Request, context: RouteContext): Promise<Response> {
-  const path = context.params.path?.join('/') ?? '';
+  const params = await context.params;
+  const path = params.path?.join('/') ?? '';
   return proxyPlatformApi(request, path);
 }
 

@@ -35,6 +35,23 @@ describe('salesRequirementsFor', () => {
       use_case: 'travel',
     });
   });
+  it('parses Vietnamese budget expressions and currency symbols properly', () => {
+    expect(salesRequirementsFor('Tư vấn laptop dưới 20 triệu để làm đồ họa')).toEqual({
+      category: 'laptops',
+      budget: { amount: 20_000_000, currency: 'VND' },
+      use_case: 'lam do hoa',
+    });
+    expect(salesRequirementsFor('Tư vấn laptop dưới 20tr để làm đồ họa')).toEqual({
+      category: 'laptops',
+      budget: { amount: 20_000_000, currency: 'VND' },
+      use_case: 'lam do hoa',
+    });
+    expect(salesRequirementsFor('Tư vấn laptop dưới 20.000.000₫')).toEqual({
+      category: 'laptops',
+      budget: { amount: 20_000_000, currency: 'VND' },
+    });
+  });
+
   it('does not treat an English connector as a currency code', () => {
     expect(salesRequirementsFor('Recommend a laptop under 1000 for travel')).toEqual({
       category: 'laptops',

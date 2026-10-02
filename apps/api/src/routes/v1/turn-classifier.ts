@@ -20,6 +20,7 @@ const SYMBOL_CURRENCY_PATTERNS: readonly [RegExp, string][] = [
   [/\$\s*[0-9]/, 'USD'],
   [/€\s*[0-9]/, 'EUR'],
   [/£\s*[0-9]/, 'GBP'],
+  [/(?:₫|đ)\s*[0-9]|[0-9][0-9.,]*\s*(?:₫|đ|\bvnd\b)/iu, 'VND'],
 ];
 
 /** Explicit ISO-4217 allowlist: prose words are never inferred as currency codes. */
@@ -124,49 +125,64 @@ function categoryHint(normalized: string): string | undefined {
   return undefined;
 }
 
+function parseNumericAmount(raw: string): number {
+  const trimmed = raw.trim();
+  if (/^[0-9]{1,3}(?:\.[0-9]{3})+$/.test(trimmed)) return Number(trimmed.replace(/\./g, ''));
+  if (/^[0-9]{1,3}(?:,[0-9]{3})+$/.test(trimmed)) return Number(trimmed.replace(/,/g, ''));
+  if (trimmed.includes(',') && trimmed.includes('.')) {
+    return trimmed.lastIndexOf(',') > trimmed.lastIndexOf('.')
+      ? Number(trimmed.replace(/\./g, '').replace(',', '.'))
+      : Number(trimmed.replace(/,/g, ''));
+  }
+  return Number(trimmed.replace(',', '.'));
+}
+
 function currencyHint(normalized: string): string | undefined {
   for (const [pattern, currency] of SYMBOL_CURRENCY_PATTERNS) {
     if (pattern.test(normalized)) return currency;
   }
 
   const match = normalized.match(
-    /\b([a-z]{3})\b(?=\s*[0-9])|\b([a-z]{3})\b(?=\s*(?:under|below|less than|up to|maximum|at most|budget)\b)|\b[0-9][0-9.,]*\s*(?:million|m|billion|b|thousand|k|trieu|nghin)?\s*([a-z]{3})\b/i,
+    /\b([a-z]{3})\b(?=\s*[0-9])|\b([a-z]{3})\b(?=\s*(?:under|below|less than|up to|maximum|at most|budget)\b)|\b[0-9][0-9.,]*\s*(?:million|m|billion|b|thousand|k|trieu|triệu|nghin|nghìn|tr)?\s*([a-z]{3})\b/iu,
   );
   const candidate = (match?.[1] ?? match?.[2] ?? match?.[3])?.toUpperCase();
-  return candidate !== undefined && ISO_4217_CURRENCY_CODES[candidate] === true ? candidate : undefined;
+  if (candidate !== undefined && ISO_4217_CURRENCY_CODES[candidate] === true) {
+    return candidate;
+  }
+
+  if (/(?:₫|đ|\bdong\b|đồng|\btrieu\b|triệu|\btr\b|\d+\s*tr\b)/iu.test(normalized)) {
+    return 'VND';
+  }
+
+  return undefined;
 }
 
 function budgetHint(normalized: string): SalesBudget | undefined {
   const currency = currencyHint(normalized);
   if (currency === undefined) return undefined;
   const match = normalized.match(
-    /(?:under|below|less than|up to|maximum|at most|budget|duoi|ngan sach)\s*(?:[$€£]\s*)?(?:([0-9]+(?:[.,][0-9]+)?)\s*(million|m|billion|b|thousand|k|trieu|nghin)?|(?:[a-z]{3})\s*([0-9]+(?:[.,][0-9]+)?))/i,
+    /(?:under|below|less than|up to|maximum|at most|budget|duoi|dưới|ngan sach|ngân sách)\s*(?:[$€£₫]\s*)?(?:([0-9]+(?:[.,][0-9]+)*)\s*(million|m|billion|b|thousand|k|trieu|triệu|nghin|nghìn|tr)?|(?:[a-z]{3})\s*([0-9]+(?:[.,][0-9]+)*))/iu,
   );
   if (match === null) return undefined;
   const raw = match[1] ?? match[3];
   if (raw === undefined) return undefined;
-  const normalizedRaw = raw.includes(',') && raw.includes('.')
-    ? raw.replace(/,/g, '')
-    : /,\d{3}$/.test(raw)
-      ? raw.replace(/,/g, '')
-      : raw.replace(',', '.');
   const unit = match[2]?.toLowerCase();
   const multiplier =
-    unit === 'million' || unit === 'm' || unit === 'trieu'
+    unit === 'million' || unit === 'm' || unit === 'trieu' || unit === 'triệu' || unit === 'tr'
       ? 1_000_000
       : unit === 'billion' || unit === 'b'
         ? 1_000_000_000
-        : unit === 'thousand' || unit === 'k' || unit === 'nghin'
+        : unit === 'thousand' || unit === 'k' || unit === 'nghin' || unit === 'nghìn'
           ? 1_000
           : 1;
-  const amount = Number(normalizedRaw) * multiplier;
+  const amount = Math.round(parseNumericAmount(raw) * multiplier);
   if (!Number.isSafeInteger(amount) || amount <= 0) return undefined;
   return { amount, currency };
 }
 
 function useCaseHint(normalized: string): string | undefined {
   const match = normalized.match(
-    /\b(?:for|to use for|dung cho|cho)\s+([^.!?;,]{1,160}?)(?=\s+(?:under|below|up to|budget)\b|[.!?;,]|$)/i,
+    /\b(?:for|to use for|dung cho|dùng cho|cho|de|để)\s+([^.!?;,]{1,160}?)(?=\s+(?:under|below|up to|budget|duoi|dưới|ngan sach|ngân sách)\b|[.!?;,]|$)/iu,
   );
   return match === null ? undefined : textHint(match[1] ?? '', 160);
 }

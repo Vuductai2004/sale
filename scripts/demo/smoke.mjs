@@ -282,6 +282,9 @@ export async function runDemoLiveSmoke(env = process.env) {
 }
 
 if (isMainModule(import.meta.url, process.argv[1])) {
+  if (typeof process.loadEnvFile === 'function') {
+    try { process.loadEnvFile(); } catch { /* ignore if .env is missing */ }
+  }
   const live = process.argv.includes('--live');
   const offline = process.argv.includes('--offline') || !live;
   const run = live && !offline ? runDemoLiveSmoke : runDemoSmoke;
