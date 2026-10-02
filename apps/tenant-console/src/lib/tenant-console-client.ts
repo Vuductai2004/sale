@@ -485,6 +485,17 @@ export class TenantConsoleClient extends HttpClient {
       options,
     );
   }
+
+  async getDemoCatalog(
+    options?: RequestOptions | undefined,
+  ): Promise<{ readonly items: readonly Record<string, unknown>[]; readonly snapshot_at?: string | undefined }> {
+    return this.request(
+      '/demo/catalog',
+      { method: 'GET' },
+      undefined,
+      options,
+    );
+  }
 }
 
 export const tenantConsoleClient = new TenantConsoleClient();

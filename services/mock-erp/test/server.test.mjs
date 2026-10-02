@@ -483,6 +483,46 @@ test('NovaMart order and customer reads stay tenant and customer scoped', async 
     assert.equal(history.status, 200);
     assert.equal(history.body.currency, 'VND');
 
+    // Customer lookup by customer_code, logical_customer_ref, phone, email
+    const byCode = await post(server, '/api/v1/customers/lookup', {
+      tenant_id: DEMO_TENANT_ID,
+      customer_id: 'C01',
+    }, { tenant: DEMO_TENANT_ID });
+    assert.equal(byCode.status, 200);
+    assert.equal(byCode.body.customer_code, 'C01');
+    assert.equal(byCode.body.customer_id, '99000000-0000-4000-8000-000000000001');
+
+    const byLogicalRef = await post(server, '/api/v1/customers/lookup', {
+      tenant_id: DEMO_TENANT_ID,
+      key: 'c01',
+    }, { tenant: DEMO_TENANT_ID });
+    assert.equal(byLogicalRef.status, 200);
+    assert.equal(byLogicalRef.body.customer_id, '99000000-0000-4000-8000-000000000001');
+
+    const byPhone = await post(server, '/api/v1/customers/lookup', {
+      tenant_id: DEMO_TENANT_ID,
+      customer_id: '+84900000001',
+    }, { tenant: DEMO_TENANT_ID });
+    assert.equal(byPhone.status, 200);
+    assert.equal(byPhone.body.customer_code, 'C01');
+
+    // Sales history queried by customer code returns orders and canonical customer_id
+    const historyByCode = await post(server, '/api/v1/customers/sales-history', {
+      tenant_id: DEMO_TENANT_ID,
+      customer_id: 'C01',
+    }, { tenant: DEMO_TENANT_ID });
+    assert.equal(historyByCode.status, 200);
+    assert.equal(historyByCode.body.customer_id, '99000000-0000-4000-8000-000000000001');
+    assert.ok(historyByCode.body.total_order_count > 0);
+
+    // Order status queried with customer code succeeds
+    const orderStatusByCode = await post(server, '/api/v1/orders/status', {
+      key: 'ORD-DEMO-001',
+      customer_id: 'C01',
+    }, { tenant: DEMO_TENANT_ID });
+    assert.equal(orderStatusByCode.status, 200);
+    assert.equal(orderStatusByCode.body.order_id, 'ORD-DEMO-001');
+
     const crossTenantCustomer = await post(server, '/api/v1/customers/lookup', {
       tenant_id: TENANT_ID,
       customer_id: '99000000-0000-4000-8000-000000000005',

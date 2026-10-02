@@ -438,12 +438,13 @@ export function createServer(env = process.env, deps = {}) {
             (order) => order.order_id === orderRef || order.order_number === orderRef,
           )
           : null;
-        if (
-          !orderRef
-          || !match
-          || typeof body?.customer_id !== 'string'
-          || match.customer_id !== body.customer_id
-        ) {
+        const requestedCustomerId = typeof body?.customer_id === 'string' ? body.customer_id : null;
+        const customerMatches = requestedCustomerId !== null && match !== null && (
+          match.customer_id === requestedCustomerId
+          || match.customer_code === requestedCustomerId
+          || match.logical_customer_ref === requestedCustomerId
+        );
+        if (!orderRef || !match || !customerMatches) {
           unavailable(res);
           return;
         }
@@ -475,7 +476,13 @@ export function createServer(env = process.env, deps = {}) {
         send(res, 404, { code: 'AUTHORITATIVE_SOURCE_UNAVAILABLE' });
         return;
       }
-      if (typeof body?.customer_id !== 'string' || match.customer_id !== body.customer_id) {
+      const requestedCustomerId = typeof body?.customer_id === 'string' ? body.customer_id : null;
+      const customerMatches = requestedCustomerId !== null && (
+        match.customer_id === requestedCustomerId
+        || match.customer_code === requestedCustomerId
+        || match.logical_customer_ref === requestedCustomerId
+      );
+      if (!customerMatches) {
         send(res, 404, { code: 'AUTHORITATIVE_SOURCE_UNAVAILABLE' });
         return;
       }
@@ -498,7 +505,11 @@ export function createServer(env = process.env, deps = {}) {
           match = scope === demoPack.tenant_id
             ? demoPack.orders.find(
               (order) => (order.order_id === reference || order.order_number === reference)
-                && order.customer_id === customerId,
+                && (
+                  order.customer_id === customerId
+                  || order.customer_code === customerId
+                  || order.logical_customer_ref === customerId
+                ),
             ) ?? null
             : null;
         } else {
@@ -509,7 +520,11 @@ export function createServer(env = process.env, deps = {}) {
             match = orders.find(
               (order) => order.tenant_id === scope
                 && (order.order_id === reference || order.order_number === reference)
-                && order.customer_id === customerId,
+                && (
+                  order.customer_id === customerId
+                  || order.customer_code === customerId
+                  || order.logical_customer_ref === customerId
+                ),
             ) ?? null;
           } catch {
             match = null;
@@ -555,7 +570,15 @@ export function createServer(env = process.env, deps = {}) {
         : (typeof body?.key === 'string' ? body.key : null);
       if (demoPack) {
         const customer = scope === demoPack.tenant_id
-          ? demoPack.customers.find((candidate) => candidate.customer_id === customerId)
+          ? demoPack.customers.find(
+              (candidate) =>
+                candidate.customer_id === customerId
+                || candidate.customer_code === customerId
+                || candidate.logical_customer_ref === customerId
+                || candidate.email === customerId
+                || candidate.phone === customerId
+                || candidate.web_chat_identity?.channel_identifier === customerId,
+            )
           : null;
         if (!customer) {
           unavailable(res);
@@ -564,7 +587,7 @@ export function createServer(env = process.env, deps = {}) {
         send(res, 200, customer);
         return;
       }
-      if (!customerId || customerId !== CUSTOMER.customer_id) {
+      if (!customerId || (customerId !== CUSTOMER.customer_id && customerId !== CUSTOMER.email && customerId !== CUSTOMER.phone)) {
         send(res, 404, { code: 'AUTHORITATIVE_SOURCE_UNAVAILABLE' });
         return;
       }
@@ -577,18 +600,31 @@ export function createServer(env = process.env, deps = {}) {
         : (typeof body?.key === 'string' ? body.key : null);
       if (demoPack) {
         const customer = scope === demoPack.tenant_id
-          ? demoPack.customers.find((candidate) => candidate.customer_id === customerId)
+          ? demoPack.customers.find(
+              (candidate) =>
+                candidate.customer_id === customerId
+                || candidate.customer_code === customerId
+                || candidate.logical_customer_ref === customerId
+                || candidate.email === customerId
+                || candidate.phone === customerId
+                || candidate.web_chat_identity?.channel_identifier === customerId,
+            )
           : null;
         if (!customer) {
           unavailable(res);
           return;
         }
-        const customerOrders = demoPack.orders.filter((order) => order.customer_id === customerId);
+        const customerOrders = demoPack.orders.filter(
+          (order) =>
+            order.customer_id === customer.customer_id
+            || (customer.customer_code && order.customer_code === customer.customer_code)
+            || (customer.logical_customer_ref && order.logical_customer_ref === customer.logical_customer_ref),
+        );
         const completedOrders = customerOrders.filter((order) => order.status === 'DELIVERED');
         const paidOrders = customerOrders.filter((order) => order.payment_status === 'PAID');
         send(res, 200, {
           tenant_id: scope,
-          customer_id: customerId,
+          customer_id: customer.customer_id,
           currency: demoPack.currency,
           lifetime_spend: paidOrders.reduce((sum, order) => sum + order.total_amount, 0),
           total_order_count: customerOrders.length,
@@ -601,7 +637,7 @@ export function createServer(env = process.env, deps = {}) {
         });
         return;
       }
-      if (!customerId || customerId !== CUSTOMER.customer_id) {
+      if (!customerId || (customerId !== CUSTOMER.customer_id && customerId !== CUSTOMER.email && customerId !== CUSTOMER.phone)) {
         send(res, 404, { code: 'AUTHORITATIVE_SOURCE_UNAVAILABLE' });
         return;
       }

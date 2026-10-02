@@ -100,6 +100,8 @@ const RECEIPT_WAIT_INTERVAL_MS = 250;
 
 const DEFAULT_TURN_RATE_LIMIT_CAPACITY = 10;
 const DEFAULT_TURN_RATE_LIMIT_REFILL_PER_SECOND = 1 / 6;
+const DEFAULT_TURN_RATE_LIMIT_MAX_BUCKETS = 5000;
+const DEFAULT_TURN_RATE_LIMIT_STALE_AFTER_MS = 60 * 60 * 1000;
 
 /** Admission limiter keyed by the authenticated tenant and channel/widget session. */
 export interface TurnRateLimiter {
@@ -109,6 +111,8 @@ export interface TurnRateLimiter {
 export interface InMemoryTurnRateLimiterOptions {
   readonly capacity?: number;
   readonly refill_per_second?: number;
+  readonly max_buckets?: number;
+  readonly stale_after_ms?: number;
   readonly clock?: () => Date;
 }
 
@@ -124,12 +128,16 @@ type TokenBucket = {
 export class InMemoryTurnRateLimiter implements TurnRateLimiter {
   private readonly capacity: number;
   private readonly refill_per_second: number;
+  private readonly max_buckets: number;
+  private readonly stale_after_ms: number;
   private readonly clock: () => Date;
   private readonly buckets = new Map<string, TokenBucket>();
 
   constructor(options: InMemoryTurnRateLimiterOptions = {}) {
     this.capacity = options.capacity ?? DEFAULT_TURN_RATE_LIMIT_CAPACITY;
     this.refill_per_second = options.refill_per_second ?? DEFAULT_TURN_RATE_LIMIT_REFILL_PER_SECOND;
+    this.max_buckets = options.max_buckets ?? DEFAULT_TURN_RATE_LIMIT_MAX_BUCKETS;
+    this.stale_after_ms = options.stale_after_ms ?? DEFAULT_TURN_RATE_LIMIT_STALE_AFTER_MS;
     this.clock = options.clock ?? (() => new Date());
     if (!Number.isSafeInteger(this.capacity) || this.capacity < 1) {
       throw new TypeError('turn rate limiter capacity must be a positive integer');
@@ -137,12 +145,42 @@ export class InMemoryTurnRateLimiter implements TurnRateLimiter {
     if (!Number.isFinite(this.refill_per_second) || this.refill_per_second < 0) {
       throw new TypeError('turn rate limiter refill_per_second must be a non-negative finite number');
     }
+    if (!Number.isSafeInteger(this.max_buckets) || this.max_buckets < 1) {
+      throw new TypeError('turn rate limiter max_buckets must be a positive integer');
+    }
+    if (!Number.isFinite(this.stale_after_ms) || this.stale_after_ms < 0) {
+      throw new TypeError('turn rate limiter stale_after_ms must be a non-negative finite number');
+    }
+  }
+
+  get size(): number {
+    return this.buckets.size;
+  }
+
+  private prune(now_ms: number): void {
+    for (const [key, bucket] of this.buckets.entries()) {
+      if (now_ms - bucket.last_refill_ms > this.stale_after_ms) {
+        this.buckets.delete(key);
+      }
+    }
+    if (this.buckets.size >= this.max_buckets) {
+      const overflow = this.buckets.size - this.max_buckets + 1;
+      let removed = 0;
+      for (const key of this.buckets.keys()) {
+        this.buckets.delete(key);
+        removed += 1;
+        if (removed >= overflow) break;
+      }
+    }
   }
 
   consume(tenant_id: string, session_id: string): boolean {
     const now_ms = this.clock().getTime();
     const key = `${tenant_id}:${session_id}`;
     const previous = this.buckets.get(key);
+    if (previous === undefined && this.buckets.size >= this.max_buckets) {
+      this.prune(now_ms);
+    }
     const bucket: TokenBucket = previous === undefined
       ? { tokens: this.capacity, last_refill_ms: now_ms }
       : previous;

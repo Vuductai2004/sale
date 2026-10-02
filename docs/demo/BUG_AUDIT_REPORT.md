@@ -412,59 +412,37 @@ Tính đến thời điểm hiện tại, remote `phong/feat/demo-live-3agent` (
   - Trong `ApprovalPayloadDiffModal.tsx`, các nút "Close", "Approve", "Cancel Edit", "Submit MODIFY Revision", "Cancel", "Confirm REJECT" bị sót tiếng Anh trong khi các nút khác đã được Việt hóa ("Tạm dừng", "Hủy", "Sửa", "Từ chối…").
 - **Giải pháp khắc phục:** Bổ sung toàn bộ các mã lỗi phân trang vào `REPOSITORY_CODE_MAP` (kèm unit test kiểm tra), và dịch chuẩn xác toàn bộ nhãn nút bấm sang tiếng Việt ("Đóng", "Phê duyệt", "Hủy sửa", "Gửi bản sửa đổi", "Xác nhận từ chối").
 
----
-
-## IV. LỘ TRÌNH KHUYẾN NGHỊ TRIỂN KHAI SỬA LỖI
-
-### Giai đoạn 1: Vá ngay các lỗi Block kịch bản Demo trực tiếp (Đã hoàn thành trên nhánh `tai`)
-1. **Sửa Bug B-24 & B-15:** Viết lại bộ regex nhận diện tiền tệ, ngân sách và phân loại danh mục trong `turn-classifier.ts` để thông suốt kịch bản tư vấn bằng tiếng Việt tự nhiên. *(Đã xong)*
-2. **Sửa Bug B-20:** Cập nhật `storefront/page.tsx` và `care-turn.ts` xử lý êm receipt `HUMAN_OWNED` khi con người tiếp quản hội thoại. *(Đã xong)*
-3. **Sửa Bug B-01, B-03, B-04, B-05:** Vá lỗi FAQ parser, giới hạn trần discount, trace autoload và duy trì map lease theo conversation ID. *(Đã xong)*
-
-### Giai đoạn 2: Vá các lỗi sâu mới phát hiện (B-26 đến B-30) (Đã hoàn thành trên nhánh `tai`)
-1. **Sửa Bug B-26:** Mở rộng nhận diện mã đơn hàng tiếng Việt (`DH-`, `đơn hàng`, `mã đơn`) trong Care Worker runtime. *(Đã xong)*
-2. **Sửa Bug B-27:** Cải tiến heartbeat lease đa hội thoại trong Operations Console. *(Đã xong)*
-3. **Sửa Bug B-28:** Mở khóa nút phê duyệt chiến dịch trong Campaigns Console để kích hoạt fallback nạp detail digest. *(Đã xong)*
-4. **Sửa Bug B-29:** Điều chỉnh logic cờ `discount_allowed` trong `handleCheckPrice` của Sales Worker. *(Đã xong)*
-5. **Sửa Bug B-30:** Chuẩn hóa stream phản hồi cho trạng thái `HUMAN_OWNED` và bảo toàn input text khi gặp lỗi kết nối. *(Đã xong)*
-
-### Giai đoạn 3: Vá các lỗi hợp đồng & hệ sinh thái Mock/Console (B-31 đến B-33) (Đã hoàn thành trên nhánh `tai`)
-1. **Sửa Bug B-31:** Đồng bộ độ dài chỉ thị chiến dịch 2000 ký tự trong Marketing Worker runtime (`factory.ts`), bổ sung unit test. *(Đã xong)*
-2. **Sửa Bug B-32:** Hỗ trợ generic `key` cho Customer Lookup & Sales History trong Mock ERP (`server.mjs`), bổ sung unit test. *(Đã xong)*
-3. **Sửa Bug B-33:** Thêm fallback êm cho `/analytics` và `/settings` khi không có `PLATFORM_ADMIN_URL`, chống sập 500. *(Đã xong)*
-
-### Giai đoạn 4: Hoàn thiện tính năng tương tác Demo Catalog & Human Takeover Console (B-34 đến B-35) (Đã hoàn thành trên nhánh `tai`)
-1. **Sửa Bug B-34:** Đồng bộ route `/catalog/items`, làm giàu fixture và chuẩn hóa projection sản phẩm trong `demo-widget.ts`, bổ sung unit test Mock ERP. *(Đã xong)*
-2. **Sửa Bug B-35:** Tích hợp `postOperatorMessage` vào `TenantConsoleClient` và kết nối với `ConversationConsole.tsx` cho phiên tiếp quản con người, bổ sung unit test. *(Đã xong)*
-
-### Giai đoạn 5: Tối ưu hoá toàn diện giao thức Streaming, Customer 360 DTO, Lease Heartbeat & Tiếng Việt Tự Nhiên (B-36 đến B-42) (Đã hoàn thành trên nhánh `tai`)
-1. **Sửa Bug B-36:** Đồng bộ stream chunk `[pending: awaiting_human]` giữa API và storefront widget. *(Đã xong)*
-2. **Sửa Bug B-37:** Khắc phục triệt để lỗi hiển thị "Mục dữ liệu" và mapping các trường DTO Customer 360. *(Đã xong)*
-3. **Sửa Bug B-38:** Khắc phục lỗi trực kết nối URL trực tiếp của Approval Center. *(Đã xong)*
-4. **Sửa Bug B-39:** Triển khai quản lý lease đa hội thoại chống timeout ngầm cho operator. *(Đã xong)*
-5. **Sửa Bug B-40:** Ánh xạ lỗi phân trang thành 400 Bad Request thay vì 500 Internal Server Error. *(Đã xong)*
-6. **Sửa Bug B-41:** Bổ sung từ vựng mua sắm tiếng Việt tự nhiên và hỗ trợ trạng thái đơn hàng `COMPLETED`. *(Đã xong)*
-7. **Sửa Bug B-42:** Cân bằng quyền hiển thị menu Hội thoại theo chuẩn API. *(Đã xong)*
-
-### Giai đoạn 6: Tính giá theo Đề xuất Trực tiếp, Takeover Heartbeat Fallback, Parity Client & Database Error Mapping (B-43 đến B-46) (Đã hoàn thành trên nhánh `tai`)
-1. **Sửa Bug B-43:** Hỗ trợ tính giá và ký số quote token chuẩn xác theo `proposed_price` trực tiếp trong Sales Worker. *(Đã xong)*
-2. **Sửa Bug B-44:** Hỗ trợ giá trị mặc định `extend_seconds = 60` cho Takeover Heartbeat, chống lỗi 400 khi client gửi `{}`. *(Đã xong)*
-3. **Sửa Bug B-45:** Bổ sung các phương thức Campaign và Run Trace cho `TenantConsoleClient` đồng bộ với BFF proxy. *(Đã xong)*
-4. **Sửa Bug B-46:** Bổ sung ánh xạ toàn diện lỗi phân trang database repository (`CUSTOMER_EVENT`, `CONVERSATION`, `HANDOFF`, `APPROVAL`) sang 400 `VALIDATION_FAILED` và hoàn thiện Việt hóa nút bấm modal phê duyệt. *(Đã xong)*
-
----
-*Báo cáo được lưu trữ và cập nhật trực tiếp tại: `docs/demo/BUG_AUDIT_REPORT.md`.*
-h muốn mua chuột gaming", "bên bạn có bán bàn phím không" thì phân loại `product_search` chỉ có các từ "tìm", "xem", "danh mục" mà không hề có các động từ "mua", "cần mua", "muốn mua", "có bán". Hậu quả: Intent rơi vào `unknown` và từ chối hỗ trợ.
-  - Trong Care Worker, đơn hàng trạng thái `COMPLETED` từ ERP ném ngoại lệ `Unmappable provider order status` vì danh sách map chỉ có `DELIVERED`, `SHIPPED`, v.v.
-- **Giải pháp khắc phục:** Bổ sung các cụm từ hành vi mua sắm tiếng Việt vào `BUILTIN_SALES_LEXICON.product_search` (với unit test đầy đủ) và ánh xạ trạng thái `COMPLETED` sang `DELIVERED`.
-
-### B-42. Giới hạn sai quyền truy cập menu Hội thoại trên Console Navigation
-- **Mức độ nghiêm trọng:** LOW (Khó khăn phân quyền người dùng)
-- **File:** [apps/tenant-console/src/components/shell/CompanyShell.tsx](file:///d:/New%20folder/apps/tenant-console/src/components/shell/CompanyShell.tsx)
+### B-47. Khớp khách hàng và lịch sử đơn hàng linh hoạt theo customer_code, logical ref, phone, email trong Mock ERP
+- **Mức độ nghiêm trọng:** HIGH (Gãy truy vấn thông tin khách hàng và lịch sử mua sắm khi dùng mã khách hàng)
+- **File:** [services/mock-erp/src/server.mjs](file:///d:/New%20folder/services/mock-erp/src/server.mjs), [services/mock-erp/test/server.test.mjs](file:///d:/New%20folder/services/mock-erp/test/server.test.mjs)
 - **Nguyên nhân gốc rễ:**
-  - API endpoint `/conversations` cho phép nhân viên có quyền `customer:read` hoặc `conversation:takeover` đọc danh sách hội thoại.
-  - Tuy nhiên thanh điều hướng `CompanyShell.tsx` chỉ gán duy nhất `permission: 'conversation:takeover'`, khiến các tài khoản giám sát viên/nhân viên chỉ có quyền đọc khách hàng bị ẩn mất tab Hội thoại.
-- **Giải pháp khắc phục:** Cập nhật quyền của mục điều hướng sang `permissions: ['conversation:takeover', 'customer:read']`.
+  - Trong Mock ERP, endpoint `/api/v1/customers/lookup` và `/api/v1/customers/sales-history` chỉ so khớp bằng UUID `candidate.customer_id === customerId`. Khi caller truyền `customer_code: "C01"` hoặc `logical_customer_ref: "c01"`, hệ thống trả về 404.
+  - Ngay cả khi tìm thấy khách hàng, truy vấn lịch sử đơn hàng trong demo pack lại lọc theo chuỗi `order.customer_id === customerId`. Do `order.customer_id` lưu UUID nên khi tìm theo `"C01"` kết quả đơn hàng trả về rỗng `[]` và `customer_id` trả về bị sai lệch thành `"C01"` thay vì UUID chuẩn.
+  - Tương tự, tra cứu trạng thái đơn hàng (`/orders/status`) từ chối khi caller truyền `customer_id` dạng mã khách hàng (`C01`) dù đơn hàng thuộc về khách hàng đó.
+- **Giải pháp khắc phục:** Mở rộng cơ chế so khớp khách hàng chấp nhận cả `customer_id`, `customer_code`, `logical_customer_ref`, `email`, `phone`, và `channel_identifier`. Đảm bảo lọc đơn hàng theo canonical `customer.customer_id` (hoặc mã/ref tương ứng) và trả về canonical `customer_id`. Bổ sung unit test toàn diện cho luồng tra cứu này.
+
+### B-48. Bounded Memory Eviction chống rò rỉ bộ nhớ trong InMemoryTurnRateLimiter
+- **Mức độ nghiêm trọng:** HIGH (Rò rỉ bộ nhớ gateway khi vận hành lâu dài với hàng nghìn phiên người dùng)
+- **File:** [apps/api/src/routes/v1/care-turn.ts](file:///d:/New%20folder/apps/api/src/routes/v1/care-turn.ts), [apps/api/src/routes/v1/care-turn-limiter.test.ts](file:///d:/New%20folder/apps/api/src/routes/v1/care-turn-limiter.test.ts)
+- **Nguyên nhân gốc rễ:**
+  - `InMemoryTurnRateLimiter` lưu token bucket trong `Map<string, TokenBucket>` cho mỗi cặp `${tenant_id}:${session_id}` nhưng không có bất kỳ cơ chế dọn dẹp (eviction/pruning) nào.
+  - Với gateway chat trực tuyến có hàng nghìn lượt session webchat tạm thời mỗi ngày, Map sẽ phình to không giới hạn gây nguy cơ OOM (Out Of Memory).
+- **Giải pháp khắc phục:** Bổ sung cấu hình trần bộ nhớ `max_buckets` (mặc định 5,000) và ngưỡng hết hạn `stale_after_ms` (mặc định 1 giờ). Khi đạt trần, tự động quét và loại bỏ các bucket không hoạt động, nếu vẫn quá tải sẽ loại bỏ các bucket cũ nhất (FIFO). Thêm getter `size` và viết bộ 4 unit test kiểm tra cơ chế token và dọn dẹp bộ nhớ.
+
+### B-49. Ánh xạ toàn diện lỗi thời gian và tham số repository sang 400 VALIDATION_FAILED
+- **Mức độ nghiêm trọng:** MEDIUM (Tránh lỗi 500 khi client gửi tham số thời gian hoặc mã đối tượng không hợp lệ)
+- **File:** [apps/api/src/gateway/http.ts](file:///d:/New%20folder/apps/api/src/gateway/http.ts), [apps/api/src/gateway/http.test.ts](file:///d:/New%20folder/apps/api/src/gateway/http.test.ts)
+- **Nguyên nhân gốc rễ:**
+  - Khi client gửi tham số thời gian sai định dạng (`from="yesterday"`), hoặc thiếu ID, database repository ném các lỗi `CUSTOMER_EVENT_RANGE_INVALID`, `CUSTOMER_EVENT_CUSTOMER_ID_REQUIRED`, `CUSTOMER_EVENT_CUSTOMER_ID_INVALID`, `PLATFORM_USAGE_WINDOW_INVALID`, v.v.
+  - Các mã này chưa có trong `REPOSITORY_CODE_MAP` dẫn đến gateway trả về HTTP 500 `INTERNAL_ERROR` thay vì HTTP 400 `VALIDATION_FAILED`.
+- **Giải pháp khắc phục:** Bổ sung đầy đủ 12 mã lỗi kiểm định repository vào `REPOSITORY_CODE_MAP` và cập nhật unit test gateway.
+
+### B-50. Bổ sung phương thức getDemoCatalog trên TenantConsoleClient đồng bộ với BFF proxy
+- **Mức độ nghiêm trọng:** MEDIUM (Thiếu phương thức client cho route BFF allowlisted)
+- **File:** [apps/tenant-console/src/lib/tenant-console-client.ts](file:///d:/New%20folder/apps/tenant-console/src/lib/tenant-console-client.ts), [apps/tenant-console/src/lib/tenant-console-client.test.ts](file:///d:/New%20folder/apps/tenant-console/src/lib/tenant-console-client.test.ts)
+- **Nguyên nhân gốc rễ:**
+  - BFF Proxy đã allowlist endpoint `GET demo/catalog` và API gateway có route `/demo/catalog`, nhưng `TenantConsoleClient` thiếu phương thức `getDemoCatalog()`.
+- **Giải pháp khắc phục:** Bổ sung phương thức type-safe `getDemoCatalog(options?)` vào `TenantConsoleClient` kèm unit test kiểm tra gọi đúng route `GET /api/v1/demo/catalog`.
 
 ---
 
@@ -504,7 +482,13 @@ h muốn mua chuột gaming", "bên bạn có bán bàn phím không" thì phân
 1. **Sửa Bug B-43:** Hỗ trợ tính giá và ký số quote token chuẩn xác theo `proposed_price` trực tiếp trong Sales Worker. *(Đã xong)*
 2. **Sửa Bug B-44:** Hỗ trợ giá trị mặc định `extend_seconds = 60` cho Takeover Heartbeat, chống lỗi 400 khi client gửi `{}`. *(Đã xong)*
 3. **Sửa Bug B-45:** Bổ sung các phương thức Campaign và Run Trace cho `TenantConsoleClient` đồng bộ với BFF proxy. *(Đã xong)*
-4. **Sửa Bug B-46:** Bổ sung ánh xạ toàn diện lỗi phân trang database repository (`CUSTOMER_EVENT`, `CONVERSATION`, `HANDOFF`, `APPROVAL`) sang 400 `VALIDATION_FAILED` và hoàn thiện Việt hóa nút bấm modal phê duyệt. *(Đã xong)*
+4. **Sửa Bug B-46:** Bổ sung ánh xạ toàn diện lỗi phân trang database repository sang 400 `VALIDATION_FAILED` và hoàn thiện Việt hóa nút bấm modal phê duyệt. *(Đã xong)*
+
+### Giai đoạn 7: Khớp Đa Định Danh Mock ERP, Bounded Rate Limiter Memory, Hoàn Thiện Repository Error Mapping & Catalog Client Parity (B-47 đến B-50) (Đã hoàn thành trên nhánh `tai`)
+1. **Sửa Bug B-47:** Cho phép tra cứu khách hàng, lịch sử bán hàng và đơn hàng trong Mock ERP bằng `customer_code`, `logical_customer_ref`, `phone`, `email`; bảo toàn `customer.customer_id` chuẩn xác. *(Đã xong)*
+2. **Sửa Bug B-48:** Thêm cơ chế bounded pruning chống rò rỉ bộ nhớ vô hạn trong `InMemoryTurnRateLimiter`. *(Đã xong)*
+3. **Sửa Bug B-49:** Ánh xạ 12 mã lỗi thời gian/ID repository sang 400 `VALIDATION_FAILED` thay vì 500 `INTERNAL_ERROR`. *(Đã xong)*
+4. **Sửa Bug B-50:** Bổ sung `getDemoCatalog()` vào `TenantConsoleClient` đồng bộ với BFF allowlist proxy. *(Đã xong)*
 
 ---
 *Báo cáo được lưu trữ và cập nhật trực tiếp tại: `docs/demo/BUG_AUDIT_REPORT.md`.*

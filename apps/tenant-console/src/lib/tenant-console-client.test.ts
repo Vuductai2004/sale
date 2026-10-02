@@ -507,5 +507,20 @@ describe('Campaign & Run Contracts', () => {
     expect(spy.getLastInit()?.method).toBe('GET');
     expect(result).toEqual(mockTrace);
   });
+
+  it('calls GET /api/v1/demo/catalog to fetch product catalog', async () => {
+    const mockCatalog = {
+      items: [{ sku_id: 'SKU-001', name: 'Product 1', list_price: 100 }],
+      snapshot_at: '2026-09-23T12:00:00Z',
+    };
+    const spy = createFetchSpy(createMockJsonResponse(mockCatalog));
+    const client = new TenantConsoleClient({ baseUrl: 'http://localhost:4000', fetch: spy.mockFetch });
+
+    const result = await client.getDemoCatalog();
+
+    expect(spy.getLastUrl()).toBe('http://localhost:4000/api/v1/demo/catalog');
+    expect(spy.getLastInit()?.method).toBe('GET');
+    expect(result).toEqual(mockCatalog);
+  });
 });
 
