@@ -27,6 +27,13 @@ describe('shared data components', () => {
     expect(container.querySelectorAll('svg')).toHaveLength(2);
   });
 
+  it('renders default icon corresponding to tone when code is omitted', () => {
+    const { container } = render(<StatusBadge tone="success" label="Custom Active" />);
+    expect(screen.getByText('Custom Active')).toBeTruthy();
+    expect(container.querySelector('.ui-status--success')).toBeTruthy();
+    expect(container.querySelector('svg')).toBeTruthy();
+  });
+
   it('renders explicit no-data text when a metric value is undefined', () => {
     render(<MetricCard label="Requests" value={undefined} />);
 

@@ -73,6 +73,18 @@ describe('salesRequirementsFor', () => {
       category: 'printers',
     });
   });
+  it('maps may tinh to laptops and detects direct use cases in Vietnamese', () => {
+    expect(salesRequirementsFor('Tư vấn máy tính đồ họa dưới 20 triệu')).toEqual({
+      category: 'laptops',
+      use_case: 'graphic design',
+      budget: { amount: 20_000_000, currency: 'VND' },
+    });
+    expect(salesRequirementsFor('Tìm chuột văn phòng dưới 500k')).toEqual({
+      category: 'accessories',
+      use_case: 'office',
+      budget: { amount: 500_000, currency: 'VND' },
+    });
+  });
   it('keeps direct inventory and price questions out of advisor clarification', () => {
     expect(shouldUseSalesAdvisor('Is SKU-LOCAL-1 in stock?', salesRequirementsFor('Is SKU-LOCAL-1 in stock?'))).toBe(false);
     expect(shouldUseSalesAdvisor('What is the price of this laptop?', salesRequirementsFor('What is the price of this laptop?'))).toBe(false);

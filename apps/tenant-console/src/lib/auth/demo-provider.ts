@@ -102,7 +102,7 @@ function parseAuthSession(value: unknown): AuthSession | undefined {
   const permissions = permissionsField(record);
   if (
     !userId || !email || !displayName || !tenantId || tenantName === undefined || !role || scope !== 'company' ||
-    tenantId !== DEMO_TENANT_ID || !expiresAt || !permissions
+    !expiresAt || !permissions
   ) return undefined;
   const expiresAtMs = Date.parse(expiresAt);
   if (!Number.isFinite(expiresAtMs) || expiresAtMs <= Date.now()) return undefined;

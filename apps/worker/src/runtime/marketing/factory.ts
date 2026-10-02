@@ -285,10 +285,10 @@ function normalizedCampaignRequest(signal: SignalEnvelope, tenant_id: string): N
     );
   }
   const instruction = raw['instruction'];
-  if (instruction !== undefined && (typeof instruction !== 'string' || instruction.trim().length === 0 || instruction.length > 500)) {
+  if (instruction !== undefined && (typeof instruction !== 'string' || instruction.trim().length === 0 || instruction.length > 2000)) {
     throw new OrchestratorError(
       'MARKETING_CAMPAIGN_INVALID',
-      'campaign.requested instruction must be a bounded non-empty string when supplied',
+      'campaign.requested instruction must be a bounded non-empty string <= 2000 chars when supplied',
     );
   }
   const requestedSize = raw['max_segment_size'];

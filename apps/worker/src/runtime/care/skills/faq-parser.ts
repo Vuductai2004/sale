@@ -61,11 +61,16 @@ export function parseFaqMarkdown(content: string, source_file: string): ParsedFa
 
 /** Deterministic token-overlap scoring for query matching. */
 export function scoreFaqMatch(entry: FaqEntry, queryTokens: readonly string[], queryText: string): number {
+  const normalizedQuery = queryText.trim().toLowerCase();
+  if (normalizedQuery.length === 0 || queryTokens.length === 0) {
+    return 0;
+  }
+
   const qLower = entry.question.toLowerCase();
   const aLower = entry.approved_answer.toLowerCase();
 
   // Full phrase match in question gives maximum confidence
-  if (qLower.includes(queryText)) {
+  if (qLower.includes(normalizedQuery)) {
     return 1.0;
   }
 
@@ -73,11 +78,10 @@ export function scoreFaqMatch(entry: FaqEntry, queryTokens: readonly string[], q
   let qMatches = 0;
   let aMatches = 0;
   for (const token of queryTokens) {
-    if (qLower.includes(token)) qMatches++;
-    else if (aLower.includes(token)) aMatches++;
+    const tokenLower = token.toLowerCase();
+    if (qLower.includes(tokenLower)) qMatches++;
+    else if (aLower.includes(tokenLower)) aMatches++;
   }
-
-  if (queryTokens.length === 0) return 0;
 
   const qScore = qMatches / queryTokens.length;
   const aScore = (aMatches / queryTokens.length) * 0.4;

@@ -198,14 +198,13 @@ export function registerApprovalRoutes(
 
         let require_distinct_approver = false;
         const governance = runtime.governance;
-        try {
-          if (governance === undefined) {
-            throw new Error('GOVERNANCE_SETTINGS_UNBOUND');
+        if (governance !== undefined) {
+          try {
+            const settings = await governance.get(principal.tenant_id);
+            require_distinct_approver = settings.require_distinct_approver;
+          } catch {
+            fail('PROVIDER_TIMEOUT', 'governance settings could not be read; the decision was refused');
           }
-          const settings = await governance.get(principal.tenant_id);
-          require_distinct_approver = settings.require_distinct_approver;
-        } catch {
-          fail('PROVIDER_TIMEOUT', 'governance settings could not be read; the decision was refused');
         }
 
         if (require_distinct_approver) {

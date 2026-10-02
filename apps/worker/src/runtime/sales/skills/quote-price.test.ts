@@ -364,6 +364,32 @@ describe('SalesSkillServices - quote, price floor and payment-policy skills', ()
     expect(breachOutput).not.toHaveProperty('floor_source');
     expect(breachOutput).not.toHaveProperty('cogs');
 
+    // 1b. Out-of-bounds or negative requested discount yields discount_allowed = false and final_price = list_price
+    const invalidDiscountOutput = await services.tool_port.invoke({
+      skill_id: 'skill.sales.check_price',
+      tool_binding: 'API-001.PricingEngine',
+      input: {
+        tenant_id: TENANT_ID,
+        sku_id: 'SKU-1',
+        customer_id: CUSTOMER_ID,
+        requested_discount_percent: 120,
+      },
+      context: {
+        run_id: 'run-1',
+        tenant_id: TENANT_ID,
+        caller_agent: 'SAL-02' as const,
+        correlation_id: CORRELATION_ID,
+        granted_authority: 'AUTH-3' as const,
+        effect_key: 'effect-price-1b',
+      },
+    });
+    expect(invalidDiscountOutput).toMatchObject({
+      sku_id: 'SKU-1',
+      list_price: 100,
+      final_price: 100,
+      discount_allowed: false,
+    });
+
     // 2. Unapproved floor decision refuses with P_FLOOR_UNAVAILABLE
     const unapprovedServices = createServices({
       price_floor: {

@@ -224,7 +224,7 @@ async function runFlow(env, profile) {
       headers: { ...auth(companyToken), 'content-type': 'application/json', 'x-idempotency-key': idempotencyKey },
       body: JSON.stringify({
         idempotency_key: idempotencyKey,
-        segment_id: stableUuid('segment', 'inactive90'),
+        segment_id: 'inactive_90d',
         objective: 'winback',
         instruction: 'Create a tenant-scoped reactivation draft for the inactive segment.',
         content_constraints: { channel: 'EMAIL_HTML', locale: 'en-US', max_length: 600 },

@@ -91,6 +91,21 @@ describe('layout components', () => {
     expect(screen.getByRole('tabpanel').textContent).toContain('Second content');
   });
 
+  it('does not select tab 0 when controlled activeTabId is not in tabs list', () => {
+    render(
+      <Tabs
+        activeTabId="non-existent"
+        tabs={[
+          { id: 'first', label: 'First', content: <p>First content</p> },
+          { id: 'second', label: 'Second', content: <p>Second content</p> },
+        ]}
+      />,
+    );
+    expect(screen.queryByRole('tabpanel')).toBeNull();
+    const first = screen.getByRole('tab', { name: 'First' });
+    expect(first.getAttribute('aria-selected')).toBe('false');
+  });
+
   it('renders an audience subtitle without a role selector', () => {
     render(
       <AuthLayout audience="company">

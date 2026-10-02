@@ -417,4 +417,26 @@ describe('SCR-005 Conversation Console Contracts', () => {
     expect(spy.getBodyJson()).toEqual(messageReq);
     expect(result.status).toBe('accepted');
   });
+
+  it('calls postOperatorMessage and proxies to /operator-messages', async () => {
+    const spy = createFetchSpy(
+      createMockJsonResponse(
+        {
+          task_id: 'msg-task-556',
+          conversation_id: 'conv-102',
+          status: 'accepted',
+          task_version: 1,
+          correlation_id: 'corr-message-2',
+        },
+        202
+      )
+    );
+    const client = new TenantConsoleClient({ baseUrl: 'http://localhost:4000', fetch: spy.mockFetch });
+    const messageReq: PostMessageRequest = {
+      message: 'Operator message content',
+    };
+    const result = await client.postOperatorMessage('conv-102', messageReq);
+    expect(spy.getLastUrl()).toBe('http://localhost:4000/api/v1/conversations/conv-102/operator-messages');
+    expect(result.task_id).toBe('msg-task-556');
+  });
 });

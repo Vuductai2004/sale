@@ -21,8 +21,11 @@ export function Tabs({ tabs, defaultTabId, activeTabId, onTabChange, className =
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
   const [uncontrolledTabId, setUncontrolledTabId] = useState(defaultTabId ?? tabs[0]?.id ?? '');
   const selectedTabId = activeTabId ?? uncontrolledTabId;
-  const selectedIndex = Math.max(0, tabs.findIndex((tab) => tab.id === selectedTabId));
-  const selectedTab = tabs[selectedIndex];
+  const foundIndex = tabs.findIndex((tab) => tab.id === selectedTabId);
+  const selectedIndex = activeTabId !== undefined
+    ? foundIndex
+    : (foundIndex >= 0 ? foundIndex : 0);
+  const selectedTab = selectedIndex >= 0 ? tabs[selectedIndex] : undefined;
 
   function selectTab(tabId: string): void {
     if (activeTabId === undefined) setUncontrolledTabId(tabId);

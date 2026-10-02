@@ -436,4 +436,57 @@ describe('default Marketing context aggregation', () => {
     expect(firstPlan.steps[0]!.input_parameters.tenant_id).toBe(TENANT);
     expect(secondPlan.steps[0]!.input_parameters.tenant_id).toBe(OTHER_TENANT);
   });
+
+  it('accepts instructions up to 2000 characters and rejects instructions exceeding 2000 characters', async () => {
+    const orchestrator = await makeFactory()(TENANT);
+    const { contextAggregator, agentRuntime } = internals(orchestrator).dependencies;
+    const campaignSubject = {
+      session_id: 'demo-tenant-operator',
+      channel_type: 'MARKETING_CAMPAIGN',
+      channel_identifier: 'demo-tenant-operator',
+    };
+    const context = await contextAggregator.hydrateContext(TENANT, campaignSubject, 'correlation-campaign-long');
+    const longInstruction = 'A'.repeat(1500);
+    const validCampaign: SignalEnvelope = {
+      signal_id: 'signal-campaign-long',
+      tenant_id: TENANT,
+      correlation_id: 'correlation-campaign-long',
+      source_channel: 'MARKETING_CAMPAIGN',
+      event_type: 'campaign.requested',
+      subject: campaignSubject,
+      timestamp: '2026-01-01T00:00:00.000Z',
+      payload: {
+        module: 'marketing',
+        skill_id: 'skill.mkt.generate_content',
+        input: {
+          objective: 'winback',
+          segment_id: 'inactive_90d',
+          instruction: longInstruction,
+          content_constraints: { channel: 'EMAIL_HTML', locale: 'vi-VN' },
+        },
+      },
+    };
+
+    const hypothesis = await agentRuntime.deriveHypothesis(validCampaign, context);
+    const routing = await agentRuntime.resolveRouting(validCampaign, context, hypothesis);
+    const plan = await agentRuntime.formulatePlan(routing, context, hypothesis);
+    expect(plan.steps.length).toBe(4);
+
+    const tooLongCampaign: SignalEnvelope = {
+      ...validCampaign,
+      payload: {
+        ...validCampaign.payload,
+        input: {
+          ...(validCampaign.payload as Record<string, unknown>).input as Record<string, unknown>,
+          instruction: 'A'.repeat(2001),
+        },
+      },
+    };
+
+    const tooLongHypothesis = await agentRuntime.deriveHypothesis(tooLongCampaign, context);
+    const tooLongRouting = await agentRuntime.resolveRouting(tooLongCampaign, context, tooLongHypothesis);
+    await expect(agentRuntime.formulatePlan(tooLongRouting, context, tooLongHypothesis)).rejects.toThrow(
+      'campaign.requested instruction must be a bounded non-empty string <= 2000 chars when supplied',
+    );
+  });
 });

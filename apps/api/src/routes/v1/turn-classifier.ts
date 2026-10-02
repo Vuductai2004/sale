@@ -107,17 +107,16 @@ function textHint(value: string, maxLength: number): string | undefined {
 
 function categoryHint(normalized: string): string | undefined {
   const candidates: readonly [RegExp, string][] = [
-    [/\b(laptop|notebook)\b/, 'laptops'],
-    [/\b(phone|smartphone|mobile)\b/, 'phones'],
-    [/\b(computer|desktop|pc)\b|may tinh/, 'computers'],
-    [/\b(tablet)\b/, 'tablets'],
+    [/\b(laptop|notebook|computer|desktop|pc)\b|may tinh/, 'laptops'],
+    [/\b(phone|smartphone|mobile)\b|dien thoai/, 'phones'],
+    [/\b(tablet)\b|may tinh bang/, 'tablets'],
     [/\b(camera)\b|may anh/, 'cameras'],
     [/\b(monitor|screen)\b|man hinh/, 'monitors'],
     [/\b(printer)\b|may in/, 'printers'],
     [/\b(router)\b/, 'routers'],
     [/\b(headphone|earbuds|speaker)\b|tai nghe/, 'audio'],
-    [/\b(keyboard|mouse)\b|ban phim/, 'peripherals'],
-    [/\b(ssd|storage|drive)\b/, 'storage'],
+    [/\b(keyboard|mouse|dock|hub|cable|pen|stylus|bag|case|accessory|accessories)\b|ban phim|chuot|phu kien/, 'accessories'],
+    [/\b(ssd|storage|drive)\b|o cung/, 'storage'],
   ];
   for (const [pattern, category] of candidates) {
     if (pattern.test(normalized)) return category;
@@ -150,7 +149,7 @@ function currencyHint(normalized: string): string | undefined {
     return candidate;
   }
 
-  if (/(?:₫|đ|\bdong\b|đồng|\btrieu\b|triệu|\btr\b|\d+\s*tr\b)/iu.test(normalized)) {
+  if (/(?:₫|đ|\bdong\b|đồng|\btrieu\b|triệu|\btr\b|\d+\s*tr\b|\d+\s*k\b|\bnghin\b|nghìn|\d+\s*nghin\b|\d+\s*nghìn\b)/iu.test(normalized)) {
     return 'VND';
   }
 
@@ -184,7 +183,15 @@ function useCaseHint(normalized: string): string | undefined {
   const match = normalized.match(
     /\b(?:for|to use for|dung cho|dùng cho|cho|de|để)\s+([^.!?;,]{1,160}?)(?=\s+(?:under|below|up to|budget|duoi|dưới|ngan sach|ngân sách)\b|[.!?;,]|$)/iu,
   );
-  return match === null ? undefined : textHint(match[1] ?? '', 160);
+  if (match !== null) {
+    const hint = textHint(match[1] ?? '', 160);
+    if (hint) return hint;
+  }
+  if (/\b(graphic design|design|creator)\b|do hoa|thiet ke/.test(normalized)) return 'graphic design';
+  if (/\b(gaming|game)\b|choi game/.test(normalized)) return 'gaming';
+  if (/\b(office|work|business)\b|van phong|cong so|hoc tap|hoc sinh|sinh vien/.test(normalized)) return 'office';
+  if (/\b(travel|portable|lightweight)\b|du lich|di chuyen|mong nhe/.test(normalized)) return 'travel';
+  return undefined;
 }
 
 function skuHint(normalized: string): string | undefined {

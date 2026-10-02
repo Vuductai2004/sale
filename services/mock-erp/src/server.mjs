@@ -276,7 +276,7 @@ export function createServer(env = process.env, deps = {}) {
       return;
     }
     if (boot.latency > 0) await sleep(boot.latency);
-    if (req.method === 'GET' && url.pathname === '/api/v1/catalog/items') {
+    if (req.method === 'GET' && (url.pathname === '/catalog/items' || url.pathname === '/api/v1/catalog/items')) {
       if (demoPack) {
         if (scope !== demoPack.tenant_id) {
           unavailable(res);
@@ -550,10 +550,10 @@ export function createServer(env = process.env, deps = {}) {
       return;
     }
     if (req.method === 'POST' && url.pathname === '/api/v1/customers/lookup') {
+      const customerId = typeof body?.customer_id === 'string'
+        ? body.customer_id
+        : (typeof body?.key === 'string' ? body.key : null);
       if (demoPack) {
-        const customerId = typeof body.customer_id === 'string'
-          ? body.customer_id
-          : (typeof body.key === 'string' ? body.key : null);
         const customer = scope === demoPack.tenant_id
           ? demoPack.customers.find((candidate) => candidate.customer_id === customerId)
           : null;
@@ -564,7 +564,7 @@ export function createServer(env = process.env, deps = {}) {
         send(res, 200, customer);
         return;
       }
-      if (body.customer_id !== CUSTOMER.customer_id) {
+      if (!customerId || customerId !== CUSTOMER.customer_id) {
         send(res, 404, { code: 'AUTHORITATIVE_SOURCE_UNAVAILABLE' });
         return;
       }
@@ -572,10 +572,10 @@ export function createServer(env = process.env, deps = {}) {
       return;
     }
     if (req.method === 'POST' && url.pathname === '/api/v1/customers/sales-history') {
+      const customerId = typeof body?.customer_id === 'string'
+        ? body.customer_id
+        : (typeof body?.key === 'string' ? body.key : null);
       if (demoPack) {
-        const customerId = typeof body.customer_id === 'string'
-          ? body.customer_id
-          : (typeof body.key === 'string' ? body.key : null);
         const customer = scope === demoPack.tenant_id
           ? demoPack.customers.find((candidate) => candidate.customer_id === customerId)
           : null;
@@ -601,12 +601,12 @@ export function createServer(env = process.env, deps = {}) {
         });
         return;
       }
-      if (body.customer_id !== CUSTOMER.customer_id) {
+      if (!customerId || customerId !== CUSTOMER.customer_id) {
         send(res, 404, { code: 'AUTHORITATIVE_SOURCE_UNAVAILABLE' });
         return;
       }
       send(res, 200, {
-        tenant_id: body.tenant_id,
+        tenant_id: scope,
         customer_id: CUSTOMER.customer_id,
         currency: 'TWD',
         lifetime_spend: 0,

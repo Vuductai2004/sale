@@ -393,6 +393,14 @@ export class TenantConsoleClient extends HttpClient {
     );
   }
 
+  async postOperatorMessage(
+    conversationId: string,
+    body: PostMessageRequest,
+    options?: RequestOptions | undefined,
+  ): Promise<TaskAcceptedResponse> {
+    return this.postConversationMessage(conversationId, body, options);
+  }
+
   async postStorefrontStream(
     body: StorefrontStreamRequest,
     options?: RequestOptions | undefined,

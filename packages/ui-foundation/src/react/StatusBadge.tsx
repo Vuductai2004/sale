@@ -39,9 +39,29 @@ export interface StatusBadgeProps {
   readonly className?: string;
 }
 
+function toneDefaultIcon(tone?: Tone): StatusIcon {
+  switch (tone) {
+    case 'success':
+      return 'CheckCircle2';
+    case 'danger':
+      return 'XCircle';
+    case 'warning':
+      return 'AlertTriangle';
+    case 'info':
+      return 'Clock';
+    case 'demo':
+      return 'FlaskConical';
+    default:
+      return 'HelpCircle';
+  }
+}
+
 export function StatusBadge({ code, tone, label, className }: StatusBadgeProps) {
   const view = statusView(code ?? '');
-  const Icon = statusIcons[view.icon] ?? HelpCircle;
+  const resolvedIconKey = (code === undefined || code.trim().length === 0) && tone !== undefined
+    ? toneDefaultIcon(tone)
+    : view.icon;
+  const Icon = statusIcons[resolvedIconKey] ?? HelpCircle;
   const badgeLabel = label ?? t(view.label_key);
   const badgeTone = tone ?? view.tone;
 

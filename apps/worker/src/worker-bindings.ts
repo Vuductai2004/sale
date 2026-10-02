@@ -246,6 +246,7 @@ function createMarketingContentEngine(env: WorkerBindingEnv): MarketingContentEn
 interface WorkerBindingEnv extends WorkerConnectorEnv {
   readonly DEMO_MODE?: string;
   readonly KNOWLEDGE_ROOT?: string;
+  readonly CARE_KNOWLEDGE_ROOT?: string;
   readonly KNOWLEDGE_TENANT_IDS?: string;
   readonly OPENAI_API_KEY?: string;
   readonly OPENAI_BASE_URL?: string;
@@ -456,7 +457,8 @@ export function createWorkerDomainBindings(options: WorkerBindingOptions): Domai
             : createMarketingContentEngine(env);
         const knowledgeRoot = suppliedMarketingOptions.knowledge_root_dir
           ?? suppliedMarketingOptions.knowledge_root
-          ?? env.KNOWLEDGE_ROOT;
+          ?? env.KNOWLEDGE_ROOT
+          ?? env.CARE_KNOWLEDGE_ROOT;
         const knowledgeTenantIds = suppliedMarketingOptions.knowledge_tenant_ids
           ?? parseTenantAllowlist(env.KNOWLEDGE_TENANT_IDS);
         const audienceReader = createMarketingAudienceReader();

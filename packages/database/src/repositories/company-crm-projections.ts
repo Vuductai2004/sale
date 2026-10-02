@@ -286,9 +286,9 @@ export class CompanyCrmProjectionRepository {
                   'created_at', sc.created_at, 'updated_at', sc.updated_at
                 ) ORDER BY sc.updated_at DESC) FROM agentos.service_cases sc
                  WHERE sc.tenant_id = c.tenant_id AND sc.customer_id = c.id), '[]'::json) AS service_cases
-           FROM agentos.customer_360_profiles p
-           JOIN agentos.customers c ON c.tenant_id = p.tenant_id AND c.id = p.customer_id
-          WHERE p.tenant_id = $1 AND p.customer_id = $2
+           FROM agentos.customers c
+           LEFT JOIN agentos.customer_360_profiles p ON c.tenant_id = p.tenant_id AND c.id = p.customer_id
+          WHERE c.tenant_id = $1 AND c.id = $2
           GROUP BY c.id, c.tenant_id, c.display_name, c.customer_tier,
                    c.verification_status, c.created_at, p.verified_phone,
                    p.verified_email, p.total_spent, p.order_count,
