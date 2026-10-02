@@ -76,6 +76,13 @@ describe('parseStreamChunk', () => {
     expect(result.statusMarker).toBe('awaiting_human');
   });
 
+  it('extracts direct awaiting_human marker without pending prefix', () => {
+    const chunk = '[awaiting_human]\n';
+    const result = parseStreamChunk(chunk);
+    expect(result.statusMarker).toBe('awaiting_human');
+    expect(result.text).toBe('');
+  });
+
   it('parses SSE chunk with token deltas and [DONE] signal', () => {
     const chunk = 'data: {"token":"Help"}\ndata: {"token":" is on the way."}\ndata: [DONE]\n';
     const result = parseStreamChunk(chunk);

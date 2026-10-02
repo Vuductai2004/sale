@@ -274,11 +274,18 @@ async function handleCampaignList(
   try {
     const principal = requireCampaignReader(request);
     const rawLimit = queryString(request, 'limit');
+    let limit: number | undefined;
+    if (rawLimit !== undefined) {
+      if (!/^\d+$/.test(rawLimit) || rawLimit === '0') {
+        fail('VALIDATION_FAILED', 'limit must be a positive integer');
+      }
+      limit = Number.parseInt(rawLimit, 10);
+    }
     const cursor = queryString(request, 'cursor');
     const page = await campaignProjectionPort(runtime).listCampaigns({
       tenant_id: principal.tenant_id,
       ...(cursor === undefined ? {} : { cursor }),
-      ...(rawLimit === undefined ? {} : { limit: Number(rawLimit) }),
+      ...(limit === undefined ? {} : { limit }),
     });
     await runtime.audit.record({
       tenant_id: principal.tenant_id,

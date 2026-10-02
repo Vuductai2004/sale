@@ -111,6 +111,10 @@ export const BUILTIN_SALES_LEXICON: SalesLexicon = Object.freeze({
     'cho xem',
     'sản phẩm',
     'mặt hàng',
+    'cần mua',
+    'muốn mua',
+    'có bán',
+    'mua',
   ]),
   cart_recovery: Object.freeze([
     'abandoned cart',

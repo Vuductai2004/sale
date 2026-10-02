@@ -109,6 +109,7 @@ describe('SalesLexicon intent matching', () => {
     expect(isPriceInquiry('Tôi muốn biết GIÁ sản phẩm')).toBe(true);
     expect(isInventoryInquiry('sản phẩm còn hàng không?')).toBe(true);
     expect(isRecommendInquiry('gợi ý sản phẩm phù hợp')).toBe(true);
+    expect(isProductSearchInquiry('tôi cần mua laptop')).toBe(true);
   });
 
   it('uses tenant terms, replacing only the categories provided', async () => {

@@ -25,7 +25,7 @@ const NAV_ITEMS: readonly NavItem[] = [
   { href: '/', label: t('nav.overview'), description: t('nav.description.overview'), icon: LayoutDashboard, permission: 'telemetry:read' },
   { href: '/ai-team', label: t('nav.ai_team'), description: t('nav.description.ai_team'), icon: Bot, permission: 'telemetry:read' },
   { href: '/customers', label: t('nav.customers'), description: t('nav.description.customers'), icon: Users, permission: 'customer:read' },
-  { href: '/conversations', label: t('nav.conversations'), description: t('nav.description.conversations'), icon: MessagesSquare, permission: 'conversation:takeover' },
+  { href: '/conversations', label: t('nav.conversations'), description: t('nav.description.conversations'), icon: MessagesSquare, permissions: ['conversation:takeover', 'customer:read'] },
   { href: '/campaigns', label: t('nav.campaigns'), description: t('nav.description.campaigns'), icon: Megaphone, permissions: ['campaign:draft', 'approval:read'] },
   { href: '/approvals', label: t('nav.approvals'), description: t('nav.description.approvals'), icon: ShieldCheck, permission: 'approval:read' },
   { href: '/knowledge', label: t('nav.knowledge'), description: t('nav.description.knowledge'), icon: BookOpen, permission: 'telemetry:read' },

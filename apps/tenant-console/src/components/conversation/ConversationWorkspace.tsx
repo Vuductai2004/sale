@@ -111,7 +111,7 @@ export function ConversationWorkspace({ initialConversationId = '' }: Conversati
   const [selectedId, setSelectedId] = useState(initialConversationId);
   const [messages, setMessages] = useState<Message[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
-  const [lease, setLease] = useState<Lease | null>(null);
+  const [leases, setLeases] = useState<Record<string, Lease>>({});
   const [reason, setReason] = useState('Khách hàng cần nhân viên hỗ trợ');
   const [reply, setReply] = useState('');
   const [loading, setLoading] = useState(true);
@@ -131,7 +131,8 @@ export function ConversationWorkspace({ initialConversationId = '' }: Conversati
     state: 'ACTIVE',
     lastMessageAt: null,
   } : null), [conversations, selectedId]);
-  const holdsLease = Boolean(lease && lease.operatorId === session?.identity.user_id);
+  const currentLease = selectedId ? leases[selectedId] ?? null : null;
+  const holdsLease = Boolean(currentLease && currentLease.operatorId === session?.identity.user_id && Date.parse(currentLease.expiresAt) > Date.now());
 
   const loadConversations = useCallback(async (append = false) => {
     if (append) setLoadingMore(true); else setLoading(true);
@@ -169,7 +170,16 @@ export function ConversationWorkspace({ initialConversationId = '' }: Conversati
       const leaseSource: JsonRecord = Object.keys(leaseRecord).length ? leaseRecord : record(summaryPayload);
       const operatorId = text(leaseSource.operator_id);
       const expiresAt = text(leaseSource.lease_expires_at);
-      if (operatorId && expiresAt && Date.parse(expiresAt) > Date.now()) setLease({ operatorId, expiresAt }); else setLease(null);
+      if (operatorId && expiresAt && Date.parse(expiresAt) > Date.now()) {
+        setLeases((prev) => ({ ...prev, [id]: { operatorId, expiresAt } }));
+      } else {
+        setLeases((prev) => {
+          if (!prev[id]) return prev;
+          const next = { ...prev };
+          delete next[id];
+          return next;
+        });
+      }
     } catch (reasonValue: unknown) {
       setMessages([]);
       setSummary(null);
@@ -181,30 +191,47 @@ export function ConversationWorkspace({ initialConversationId = '' }: Conversati
 
   useEffect(() => { void loadConversations(); }, [loadConversations]);
   useEffect(() => {
-    setLease(null);
     setNotice(null);
     void loadConversation(selectedId);
   }, [loadConversation, selectedId]);
 
   useEffect(() => {
-    if (!holdsLease || !selectedId) return undefined;
+    const currentUserId = session?.identity.user_id;
+    if (!currentUserId) return undefined;
     const timer = window.setInterval(() => {
-      void tenantConsoleClient.heartbeatTakeover(selectedId, { extend_seconds: 60 })
-        .then((payload) => setLease({ operatorId: payload.operator_id, expiresAt: payload.lease_expires_at }))
-        .catch((reasonValue: unknown) => {
-          setLease(null);
-          setError(apiError(reasonValue, 'Phiên tiếp quản đã hết hạn.'));
-        });
+      const activeEntries = Object.entries(leases).filter(
+        ([_, l]) => l.operatorId === currentUserId && Date.parse(l.expiresAt) > Date.now()
+      );
+      for (const [convId] of activeEntries) {
+        void tenantConsoleClient.heartbeatTakeover(convId, { extend_seconds: 60 })
+          .then((payload) => {
+            setLeases((prev) => ({
+              ...prev,
+              [convId]: { operatorId: payload.operator_id, expiresAt: payload.lease_expires_at },
+            }));
+          })
+          .catch((reasonValue: unknown) => {
+            setLeases((prev) => {
+              if (!prev[convId]) return prev;
+              const next = { ...prev };
+              delete next[convId];
+              return next;
+            });
+            if (convId === selectedId) {
+              setError(apiError(reasonValue, 'Phiên tiếp quản đã hết hạn.'));
+            }
+          });
+      }
     }, 30_000);
     return () => window.clearInterval(timer);
-  }, [holdsLease, selectedId]);
+  }, [leases, selectedId, session?.identity.user_id]);
 
   async function takeOver(): Promise<void> {
     if (!selectedId || !reason.trim()) return;
     setMutating(true); setError(null); setNotice(null);
     try {
       const payload = await tenantConsoleClient.takeoverConversation(selectedId, { reason: reason.trim(), takeover_mode: 'FULL_CONTROL' });
-      setLease({ operatorId: payload.operator_id, expiresAt: payload.lease_expires_at });
+      setLeases((prev) => ({ ...prev, [selectedId]: { operatorId: payload.operator_id, expiresAt: payload.lease_expires_at } }));
       setNotice('Đã tiếp quản hội thoại.');
       await loadConversations();
     } catch (reasonValue: unknown) {
@@ -217,7 +244,12 @@ export function ConversationWorkspace({ initialConversationId = '' }: Conversati
     setMutating(true); setError(null); setNotice(null);
     try {
       await tenantConsoleClient.resumeConversation(selectedId, { handoff_summary: 'Nhân viên đã trả lại hội thoại cho AI.' });
-      setLease(null);
+      setLeases((prev) => {
+        if (!prev[selectedId]) return prev;
+        const next = { ...prev };
+        delete next[selectedId];
+        return next;
+      });
       setNotice('Đã trả lại hội thoại cho AI.');
       await loadConversations();
     } catch (reasonValue: unknown) {

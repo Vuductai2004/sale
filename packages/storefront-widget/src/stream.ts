@@ -114,9 +114,9 @@ export function parseStreamChunk(chunk: string): ParsedStreamChunk {
         continue;
       }
 
-      const statusMatch = payload.match(/^\[(?:status|pending):\s*(.+)\]$/);
+      const statusMatch = payload.match(/^\[(?:(?:status|pending):\s*(.+)|(awaiting_human))\]$/);
       if (statusMatch) {
-        statusMarker = statusMatch[1]?.trim() ?? null;
+        statusMarker = (statusMatch[1] ?? statusMatch[2])?.trim() ?? null;
         continue;
       }
 
@@ -165,9 +165,9 @@ export function parseStreamChunk(chunk: string): ParsedStreamChunk {
       continue;
     }
 
-    const statusMatch = trimmed.match(/^\[(?:status|pending):\s*(.+)\]$/);
+    const statusMatch = trimmed.match(/^\[(?:(?:status|pending):\s*(.+)|(awaiting_human))\]$/);
     if (statusMatch) {
-      statusMarker = statusMatch[1]?.trim() ?? null;
+      statusMarker = (statusMatch[1] ?? statusMatch[2])?.trim() ?? null;
       continue;
     }
 

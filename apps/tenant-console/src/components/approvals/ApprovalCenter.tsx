@@ -229,9 +229,9 @@ export function ApprovalCenter({ onSelectCustomer, initialApprovalId }: Approval
     [normalizeApprovalItem]
   );
   useEffect(() => {
-    if (!initialApprovalId || selectedItemId === initialApprovalId || !items[initialApprovalId]) return;
+    if (!initialApprovalId || selectedItemId === initialApprovalId) return;
     void handleSelectItem(initialApprovalId);
-  }, [handleSelectItem, initialApprovalId, items, selectedItemId]);
+  }, [handleSelectItem, initialApprovalId, selectedItemId]);
 
   // Submit decision to POST /api/v1/approvals/{id}/decision
   const handleSubmitDecision = useCallback(

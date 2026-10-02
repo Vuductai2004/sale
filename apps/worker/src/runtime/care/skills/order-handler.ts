@@ -106,7 +106,7 @@ export async function handleOrderConnector<TOutput>(
   const statusStr = typeof rawStatus === 'string' ? rawStatus.toUpperCase().trim() : '';
   let status: 'PENDING' | 'PROCESSING' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED' | 'RETURNED' | null = null;
   if (statusStr === 'SHIPPED' || statusStr === 'FULFILLED') status = 'SHIPPED';
-  else if (statusStr === 'DELIVERED') status = 'DELIVERED';
+  else if (statusStr === 'DELIVERED' || statusStr === 'COMPLETED') status = 'DELIVERED';
   else if (statusStr === 'PAID' || statusStr === 'CONFIRMED') status = 'PROCESSING';
   else if (statusStr === 'PENDING') status = 'PENDING';
   else if (statusStr === 'PROCESSING') status = 'PROCESSING';

@@ -323,6 +323,63 @@ Tính đến thời điểm hiện tại, remote `phong/feat/demo-live-3agent` (
   - Tuy nhiên, `TenantConsoleClient` hoàn toàn không có hàm `postOperatorMessage`. Component `ConversationConsole.tsx` gọi `postConversationMessage` (luồng `/messages` dành cho lượt nói của khách hàng vào bot/AI agent), dẫn đến tin nhắn bị từ chối hoặc agent AI hiểu nhầm và tự động kích hoạt workflow sai.
 - **Giải pháp khắc phục:** Bổ sung phương thức `postOperatorMessage` vào `TenantConsoleClient`, cập nhật `ConversationConsole.tsx` để điều hướng tin nhắn chính xác tới `/operator-messages` khi `isTakenOver` đang hoạt động, đồng thời thêm unit test bảo chứng hợp đồng.
 
+
+### B-36. Bất đồng bộ giao thức Stream SSE khi kích hoạt Human Takeover
+- **Mức độ nghiêm trọng:** HIGH (Phá vỡ UX luồng chat khi chuyển giao con người)
+- **File:** [apps/api/src/routes/v1/storefront.ts](file:///d:/New%20folder/apps/api/src/routes/v1/storefront.ts), [packages/storefront-widget/src/stream.ts](file:///d:/New%20folder/packages/storefront-widget/src/stream.ts)
+- **Nguyên nhân gốc rễ:**
+  - API Storefront stream gửi chunk `\n[awaiting_human]\n` khi task rơi vào trạng thái chờ nhân viên tiếp quản (`awaiting_human`).
+  - Trong khi đó, `parseStreamChunk` trong widget client yêu cầu định dạng `^[pending: ...]`, dẫn đến token stream bị bỏ qua hoặc hiển thị nguyên bản dạng text thô ra giao diện người dùng.
+- **Giải pháp khắc phục:** Chuẩn hóa luồng emit stream `\n[pending: awaiting_human]\n` từ API, đồng thời nâng cấp regex parser trong `storefront-widget` để tương thích ngược cả hai định dạng.
+
+### B-37. Lỗi Binding DTO và hiển thị "Mục dữ liệu" trên Customer 360 Profile
+- **Mức độ nghiêm trọng:** MEDIUM (Ảnh hưởng trực tiếp giao diện hiển thị dữ liệu khách hàng)
+- **File:** [apps/tenant-console/src/components/customer/Customer360Profile.tsx](file:///d:/New%20folder/apps/tenant-console/src/components/customer/Customer360Profile.tsx)
+- **Nguyên nhân gốc rễ:**
+  - DTO trả về từ API/DB dùng `display_name`, `customer_tier`, `total_spent`, `campaign_engagement`. Component console lại chỉ đọc `customer.name`, `customer.tier`, `customer.ltv` (fallback TWD) và `customer.marketing`, khiến tên luôn rơi về `"Khách hàng"`, tiền tệ sai và tab Marketing luôn rỗng.
+  - Component `ListItems` chỉ kiểm tra `item.title ?? item.name`, trong khi các bảng đơn hàng, hỗ trợ, gợi ý có các trường định danh riêng (`order_number`, `subject`, `reason`, `case_number`), khiến 100% dòng dữ liệu hiển thị thành nhãn vô nghĩa `"Mục dữ liệu"`.
+- **Giải pháp khắc phục:** Đồng bộ toàn bộ các trường dữ liệu DTO, hỗ trợ tiền tệ VND cho LTV/tổng chi tiêu, và bổ sung bộ phân giải nhãn thông minh `formatListItemText`.
+
+### B-38. Lỗi Catch-22 khi điều hướng trực tiếp bằng URL tới Approval ID
+- **Mức độ nghiêm trọng:** HIGH (Không thể mở link trực tiếp tới lượt phê duyệt)
+- **File:** [apps/tenant-console/src/components/approvals/ApprovalCenter.tsx](file:///d:/New%20folder/apps/tenant-console/src/components/approvals/ApprovalCenter.tsx#L232)
+- **Nguyên nhân gốc rễ:**
+  - `useEffect` kiểm tra `if (!initialApprovalId || selectedItemId === initialApprovalId || !items[initialApprovalId]) return;`.
+  - Khi người dùng bấm vào đường dẫn chia sẻ `/approvals/[id]`, danh sách `items` ban đầu chưa chứa item này (hoặc item đã qua trang khác), điều kiện `!items[initialApprovalId]` chặn không bao giờ gọi `handleSelectItem`, khiến màn hình trống trơn.
+- **Giải pháp khắc phục:** Bỏ ràng buộc `!items[initialApprovalId]` để cho phép hàm `handleSelectItem` tự động fetch trực tiếp chi tiết phê duyệt từ backend theo ID.
+
+### B-39. Mất Heartbeat Lease khi chuyển đổi qua lại giữa các hội thoại
+- **Mức độ nghiêm trọng:** CRITICAL (Mất quyền tiếp quản khách hàng ngầm sau 30-60 giây)
+- **File:** [apps/tenant-console/src/components/conversation/ConversationWorkspace.tsx](file:///d:/New%20folder/apps/tenant-console/src/components/conversation/ConversationWorkspace.tsx)
+- **Nguyên nhân gốc rễ:**
+  - `ConversationWorkspace` lưu `lease` dưới dạng state đơn lẻ. Khi operator chọn một hội thoại khác trong danh sách, `setLease(null)` được gọi ngay lập tức và timer heartbeat bị hủy cho hội thoại trước đó.
+  - Hậu quả: Hội thoại mà operator đã tiếp quản trước đó bị quá hạn lease trên server (thường sau 60s), tự động trả quyền lại cho AI hoặc khóa phiên khi operator quay lại.
+- **Giải pháp khắc phục:** Chuyển đổi cơ chế lưu lease thành dictionary `Record<string, Lease>`, duy trì timer định kỳ gia hạn tất cả các phiên tiếp quản hợp lệ của operator đang đăng nhập.
+
+### B-40. Lỗi 500 Unhandled khi phân trang Danh sách Chiến dịch & Khách hàng
+- **Mức độ nghiêm trọng:** MEDIUM (Sập 500 không mong muốn thay vì trả 400 Bad Request)
+- **File:** [apps/api/src/gateway/http.ts](file:///d:/New%20folder/apps/api/src/gateway/http.ts), [apps/api/src/routes/v1/campaigns.ts](file:///d:/New%20folder/apps/api/src/routes/v1/campaigns.ts)
+- **Nguyên nhân gốc rễ:**
+  - Database repository ném các lỗi mã hóa `CAMPAIGN_LIST_LIMIT_INVALID`, `CAMPAIGN_LIST_CURSOR_INVALID`, `CUSTOMER_LIST_LIMIT_INVALID`, `CUSTOMER_LIST_CURSOR_INVALID` khi tham số `limit` hoặc `cursor` sai.
+  - Tuy nhiên `REPOSITORY_CODE_MAP` trong `http.ts` bỏ sót các mã này, dẫn tới việc gateway chuyển thành lỗi 500 `INTERNAL_ERROR`. Đồng thời `campaigns.ts` không tiền kiểm tra định dạng số nguyên dương của `limit`.
+- **Giải pháp khắc phục:** Bổ sung ánh xạ vào `REPOSITORY_CODE_MAP` sang mã HTTP 400 `VALIDATION_FAILED`, đồng thời kiểm tra chặt chẽ `limit` trong `handleCampaignList`.
+
+### B-41. Khuyết từ vựng Tiếng Việt tự nhiên trong Sales Intent Classifier & Trạng thái Đơn hàng Care
+- **Mức độ nghiêm trọng:** HIGH (Agent bán hàng không nhận diện ý định mua sắm cơ bản của người Việt)
+- **File:** [apps/worker/src/runtime/sales/intent-classifier.ts](file:///d:/New%20folder/apps/worker/src/runtime/sales/intent-classifier.ts), [apps/worker/src/runtime/care/skills/order-handler.ts](file:///d:/New%20folder/apps/worker/src/runtime/care/skills/order-handler.ts)
+- **Nguyên nhân gốc rễ:**
+  - Khách hàng nói "tôi cần mua laptop", "mình muốn mua chuột gaming", "bên bạn có bán bàn phím không" thì phân loại `product_search` chỉ có các từ "tìm", "xem", "danh mục" mà không hề có các động từ "mua", "cần mua", "muốn mua", "có bán". Hậu quả: Intent rơi vào `unknown` và từ chối hỗ trợ.
+  - Trong Care Worker, đơn hàng trạng thái `COMPLETED` từ ERP ném ngoại lệ `Unmappable provider order status` vì danh sách map chỉ có `DELIVERED`, `SHIPPED`, v.v.
+- **Giải pháp khắc phục:** Bổ sung các cụm từ hành vi mua sắm tiếng Việt vào `BUILTIN_SALES_LEXICON.product_search` (với unit test đầy đủ) và ánh xạ trạng thái `COMPLETED` sang `DELIVERED`.
+
+### B-42. Giới hạn sai quyền truy cập menu Hội thoại trên Console Navigation
+- **Mức độ nghiêm trọng:** LOW (Khó khăn phân quyền người dùng)
+- **File:** [apps/tenant-console/src/components/shell/CompanyShell.tsx](file:///d:/New%20folder/apps/tenant-console/src/components/shell/CompanyShell.tsx)
+- **Nguyên nhân gốc rễ:**
+  - API endpoint `/conversations` cho phép nhân viên có quyền `customer:read` hoặc `conversation:takeover` đọc danh sách hội thoại.
+  - Tuy nhiên thanh điều hướng `CompanyShell.tsx` chỉ gán duy nhất `permission: 'conversation:takeover'`, khiến các tài khoản giám sát viên/nhân viên chỉ có quyền đọc khách hàng bị ẩn mất tab Hội thoại.
+- **Giải pháp khắc phục:** Cập nhật quyền của mục điều hướng sang `permissions: ['conversation:takeover', 'customer:read']`.
+
 ---
 
 ## IV. LỘ TRÌNH KHUYẾN NGHỊ TRIỂN KHAI SỬA LỖI
@@ -347,6 +404,15 @@ Tính đến thời điểm hiện tại, remote `phong/feat/demo-live-3agent` (
 ### Giai đoạn 4: Hoàn thiện tính năng tương tác Demo Catalog & Human Takeover Console (B-34 đến B-35) (Đã hoàn thành trên nhánh `tai`)
 1. **Sửa Bug B-34:** Đồng bộ route `/catalog/items`, làm giàu fixture và chuẩn hóa projection sản phẩm trong `demo-widget.ts`, bổ sung unit test Mock ERP. *(Đã xong)*
 2. **Sửa Bug B-35:** Tích hợp `postOperatorMessage` vào `TenantConsoleClient` và kết nối với `ConversationConsole.tsx` cho phiên tiếp quản con người, bổ sung unit test. *(Đã xong)*
+
+### Giai đoạn 5: Tối ưu hoá toàn diện giao thức Streaming, Customer 360 DTO, Lease Heartbeat & Tiếng Việt Tự Nhiên (B-36 đến B-42) (Đã hoàn thành trên nhánh `tai`)
+1. **Sửa Bug B-36:** Đồng bộ stream chunk `[pending: awaiting_human]` giữa API và storefront widget. *(Đã xong)*
+2. **Sửa Bug B-37:** Khắc phục triệt để lỗi hiển thị "Mục dữ liệu" và mapping các trường DTO Customer 360. *(Đã xong)*
+3. **Sửa Bug B-38:** Khắc phục lỗi trực kết nối URL trực tiếp của Approval Center. *(Đã xong)*
+4. **Sửa Bug B-39:** Triển khai quản lý lease đa hội thoại chống timeout ngầm cho operator. *(Đã xong)*
+5. **Sửa Bug B-40:** Ánh xạ lỗi phân trang thành 400 Bad Request thay vì 500 Internal Server Error. *(Đã xong)*
+6. **Sửa Bug B-41:** Bổ sung từ vựng mua sắm tiếng Việt tự nhiên và hỗ trợ trạng thái đơn hàng `COMPLETED`. *(Đã xong)*
+7. **Sửa Bug B-42:** Cân bằng quyền hiển thị menu Hội thoại theo chuẩn API. *(Đã xong)*
 
 ---
 *Báo cáo được lưu trữ và cập nhật trực tiếp tại: `docs/demo/BUG_AUDIT_REPORT.md`.*

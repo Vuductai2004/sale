@@ -65,13 +65,13 @@ export function Customer360Profile({ customerId }: Customer360ProfileProps) {
   }, [customerId]);
 
   const customer = useMemo(() => record(profile?.customer ?? profile), [profile]);
-  const name = stringValue(customer.name) ?? 'Khách hàng';
-  const email = stringValue(customer.email) ?? stringValue(customer.email_masked);
-  const phone = stringValue(customer.phone) ?? stringValue(customer.phone_masked);
-  const tier = stringValue(customer.tier);
+  const name = stringValue(customer.display_name) ?? stringValue(customer.name) ?? 'Khách hàng';
+  const email = stringValue(customer.email) ?? stringValue(customer.verified_email) ?? stringValue(customer.email_masked);
+  const phone = stringValue(customer.phone) ?? stringValue(customer.verified_phone) ?? stringValue(customer.phone_masked);
+  const tier = stringValue(customer.tier) ?? stringValue(customer.customer_tier);
   const classificationSource = customer.classifications ?? customer.classification;
   const classifications = (Array.isArray(classificationSource) ? classificationSource : classificationSource ? [classificationSource] : []).map((item) => String(item));
-  const ltv = money(customer.ltv ?? customer.ltv_amount, stringValue(customer.ltv_currency) ?? (typeof customer.ltv_twd === 'number' ? 'TWD' : null)) ?? (typeof customer.ltv_twd === 'number' ? { amount: customer.ltv_twd, currency: 'TWD' } : null);
+  const ltv = money(customer.total_spent ?? customer.ltv ?? customer.ltv_amount, stringValue(customer.currency) ?? stringValue(customer.ltv_currency) ?? 'VND') ?? (typeof customer.ltv_twd === 'number' ? { amount: customer.ltv_twd, currency: 'TWD' } : null);
   const aov = money(customer.aov ?? customer.aov_amount, stringValue(customer.aov_currency) ?? (typeof customer.aov_twd === 'number' ? 'TWD' : null)) ?? (typeof customer.aov_twd === 'number' ? { amount: customer.aov_twd, currency: 'TWD' } : null);
 
   if (loading) return <LoadingState label="Đang tải hồ sơ khách hàng…" />;
@@ -79,13 +79,14 @@ export function Customer360Profile({ customerId }: Customer360ProfileProps) {
   if (error) return <p role="alert" className="rounded-md border border-danger p-4 text-danger">{error}</p>;
 
   const emptyTab = <EmptyState title="Chưa có dữ liệu" />;
+  const marketingItems = list(customer.campaign_engagement).length ? list(customer.campaign_engagement) : list(customer.marketing);
   return (
     <div className="space-y-4 p-4 sm:p-6">
       <header className="ui-section-card p-5"><div className="flex flex-wrap items-start justify-between gap-4"><div><h1 className="text-2xl font-semibold text-ink">{name}</h1><p className="mt-1 text-sm text-muted">Hồ sơ khách hàng</p><div className="mt-3 flex flex-wrap gap-2 text-sm text-muted">{email ? <span>{email}</span> : null}{phone ? <span>{phone}</span> : null}{tier ? <span className="rounded-full border border-line px-2 py-0.5">{tier}</span> : null}</div>{classifications.length ? <div className="mt-3 flex flex-wrap gap-2">{classifications.map((classification) => <span key={classification} className="rounded-full border border-line px-2 py-0.5 text-xs">{classification === 'HYPOTHESIS' ? 'Dự đoán' : classification === 'FACT' ? 'Đã xác thực' : classification === 'SIGNAL' ? 'Tín hiệu' : 'Chưa phân loại'}</span>)}</div> : null}</div><div className="flex flex-wrap gap-4 text-sm">{ltv ? <span>LTV: <strong>{formatMoney(ltv)}</strong></span> : null}{aov ? <span>AOV: <strong>{formatMoney(aov)}</strong></span> : null}</div></div></header>
       <Tabs tabs={[
         { id: 'orders', label: 'Đơn hàng', content: list(customer.orders).length ? <ListItems values={list(customer.orders)} /> : emptyTab },
         { id: 'conversations', label: 'Hội thoại', content: list(customer.conversations).length ? <ListItems values={list(customer.conversations)} /> : emptyTab },
-        { id: 'marketing', label: 'Marketing', content: list(customer.marketing).length ? <ListItems values={list(customer.marketing)} /> : emptyTab },
+        { id: 'marketing', label: 'Marketing', content: marketingItems.length ? <ListItems values={marketingItems} /> : emptyTab },
         { id: 'suggestions', label: 'Gợi ý', content: list(customer.recommendations).length ? <ListItems values={list(customer.recommendations)} /> : emptyTab },
         { id: 'support', label: 'Hỗ trợ', content: list(customer.service_cases).length ? <ListItems values={list(customer.service_cases)} /> : emptyTab },
       ]} />
@@ -95,10 +96,40 @@ export function Customer360Profile({ customerId }: Customer360ProfileProps) {
   );
 }
 
+function formatListItemText(value: unknown): string {
+  if (typeof value === 'string') return value;
+  const item = record(value);
+  if (item.order_number) {
+    const amount = item.total_amount ? ` - ${Number(item.total_amount).toLocaleString()} ${item.currency ?? 'VND'}` : '';
+    const status = item.status ? ` (${item.status})` : '';
+    return `Đơn hàng #${item.order_number}${amount}${status}`;
+  }
+  if (item.conversation_id) {
+    const channel = item.channel ? `[${item.channel}]` : '';
+    const state = item.state ? ` (${item.state})` : '';
+    return `Hội thoại #${item.conversation_id} ${channel}${state}`;
+  }
+  if (item.subject || item.case_number) {
+    const caseNum = item.case_number ? `#${item.case_number} ` : '';
+    const subject = item.subject ? String(item.subject) : 'Yêu cầu hỗ trợ';
+    const state = item.state ? ` (${item.state})` : '';
+    return `${caseNum}${subject}${state}`;
+  }
+  if (item.reason || item.recommendation_type) {
+    return String(item.reason ?? item.recommendation_type);
+  }
+  if (item.conversion_type || item.campaign_id) {
+    const type = item.conversion_type ? String(item.conversion_type) : 'Chiến dịch';
+    const rev = item.gross_revenue ? ` (${Number(item.gross_revenue).toLocaleString()} VND)` : '';
+    return `${type}${rev}`;
+  }
+  return String(item.title ?? item.name ?? item.id ?? 'Mục dữ liệu');
+}
+
 function ListItems({ values }: { readonly values: readonly unknown[] }) {
   return <ul className="space-y-2">{values.map((value, index) => {
     const item = record(value);
     const classification = stringValue(item.classification);
-    return <li key={index} className="rounded border border-line p-3 text-sm">{classification === 'HYPOTHESIS' ? <span className="mr-2 rounded-full border border-line px-2 py-0.5 text-xs">Dự đoán</span> : null}{typeof value === 'string' ? value : String(item.title ?? item.name ?? 'Mục dữ liệu')}</li>;
+    return <li key={index} className="rounded border border-line p-3 text-sm">{classification === 'HYPOTHESIS' ? <span className="mr-2 rounded-full border border-line px-2 py-0.5 text-xs">Dự đoán</span> : null}{formatListItemText(value)}</li>;
   })}</ul>;
 }
