@@ -436,6 +436,8 @@ function structuredResponse(
     && file !== QUOTE_SOURCE_FILE
     && file !== 'API-001.CatalogConnector'
     && file !== 'API-003.CommunicationConnector'
+    && file !== RECOMMENDATION_SOURCE_FILE
+    && file !== INVENTORY_SOURCE_FILE
   ) return undefined;
   // A quote-labelled response must pass the signed, unexpired quote checks above; otherwise a
   // free-form reply could smuggle an expired or missing price into the customer channel.

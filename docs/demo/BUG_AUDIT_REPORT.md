@@ -490,7 +490,20 @@ Tính đến thời điểm hiện tại, remote `phong/feat/demo-live-3agent` (
 3. **Sửa Bug B-49:** Ánh xạ 12 mã lỗi thời gian/ID repository sang 400 `VALIDATION_FAILED` thay vì 500 `INTERNAL_ERROR`. *(Đã xong)*
 4. **Sửa Bug B-50:** Bổ sung `getDemoCatalog()` vào `TenantConsoleClient` đồng bộ với BFF allowlist proxy. *(Đã xong)*
 
+### Giai đoạn 8: Limit Validation, Structured Response Whitelist, Worker Race Condition & Cross-Domain Journey Resume (B-51 đến B-57) (Đã hoàn thành trên nhánh `tai`)
+
+1. **Sửa Bug B-51:** Validate `limit` query param bằng regex + `Number.parseInt` trong `approvals.ts` và `operations.ts` trước khi truyền vào repository — tránh `NaN`/`Infinity`/`0` silent. *(Đã xong)*
+2. **Sửa Bug B-53:** Thêm `RECOMMENDATION_SOURCE_FILE` và `INVENTORY_SOURCE_FILE` vào whitelist sales domain của `structuredResponse` trong `response.ts` — tránh `finalizerRefusal` sai cho phản hồi hợp lệ từ Recommendation/Inventory. *(Đã xong)*
+3. **Sửa Bug B-55:** Thêm `expected_task_version` vào 2 lệnh `recordFailure` thiếu CAS guard khi unbound orchestrator trong `worker.ts`. *(Đã xong)*
+4. **Sửa Bug B-57:** Thêm `handoff.marketing_to_sales`, `handoff.sales_to_care`, `handoff.care_to_retention` vào `RESUME_EVENT_TYPES` trong `worker.ts` — cross-domain journey resume không còn bị block với `RESUME_EVENT_INVALID`. *(Đã xong)*
+5. **Ghi nhận Bug B-52:** `DomainPolicyEngine.agentGrantCache` tích lũy vô hạn — cần bounded eviction cho production dài hạn. *(Ghi nhận)*
+6. **Ghi nhận Bug B-54:** `approval-expiry-sweeper` race condition `stop()+start()` — risk thấp với pattern autoStart hiện tại. *(Ghi nhận)*
+7. **Ghi nhận Bug B-56:** `erp-http-transport` phân loại sai `TIMEOUT` vs `UNKNOWN` khi dual-abort signal — edge case production cao tải. *(Ghi nhận)*
+
 ---
 *Báo cáo được lưu trữ và cập nhật trực tiếp tại: `docs/demo/BUG_AUDIT_REPORT.md`.*
+
+
+
 
 

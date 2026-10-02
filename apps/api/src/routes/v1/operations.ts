@@ -175,10 +175,18 @@ export function registerOperationRoutes(
         fail('VALIDATION_FAILED', 'state must be a stored task lifecycle value');
       }
 
+      const rawLimit = request.query.limit;
+      let parsedLimit: number | undefined;
+      if (rawLimit !== undefined) {
+        if (!/^\d+$/.test(rawLimit) || rawLimit === '0') {
+          fail('VALIDATION_FAILED', 'limit must be a positive integer');
+        }
+        parsedLimit = Number.parseInt(rawLimit, 10);
+      }
       const page = await runtime.runs.list({
         tenant_id: principal.tenant_id,
         ...(request.query.cursor === undefined ? {} : { cursor: request.query.cursor }),
-        ...(request.query.limit === undefined ? {} : { limit: Number(request.query.limit) }),
+        ...(parsedLimit === undefined ? {} : { limit: parsedLimit }),
         ...(request.query.agent_id === undefined ? {} : { agent_id: request.query.agent_id }),
         ...(state === undefined ? {} : { state }),
         ...(request.query.from === undefined ? {} : { from: request.query.from }),

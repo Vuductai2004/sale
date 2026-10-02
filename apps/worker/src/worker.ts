@@ -110,6 +110,12 @@ const RESUME_EVENT_TYPES = new Set([
   'timer.expired',
   'reconcile.completed',
   'human.handoff.evidence',
+  // Cross-domain journey resume events (implement/04 §8, plans/customer-lifecycle.md §3).
+  // A task resumed with a handoff event must be admitted here; without these entries the worker
+  // calls recordFailure(RESUME_EVENT_INVALID) and the entire cross-domain journey is blocked.
+  'handoff.marketing_to_sales',
+  'handoff.sales_to_care',
+  'handoff.care_to_retention',
 ]);
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -372,6 +378,7 @@ export async function processClaimedTask(params: {
           run_id: taskRecord.run_id,
           error_class: 'FATAL',
           error_details: { code: unboundCode },
+          expected_task_version: taskRecord.task_version,
           lease_owner: worker_id,
         });
         return;
@@ -438,6 +445,7 @@ export async function processClaimedTask(params: {
           run_id: taskRecord.run_id,
           error_class: 'FATAL',
           error_details: { code: unboundCode },
+          expected_task_version: taskRecord.task_version,
           lease_owner: worker_id,
         });
         return;

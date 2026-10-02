@@ -79,11 +79,19 @@ export function registerApprovalRoutes(
           fail('VALIDATION_FAILED', 'status must be PENDING: it is the only supported queue filter');
         }
 
+        const rawLimit = request.query.limit;
+        let parsedLimit: number | undefined;
+        if (rawLimit !== undefined) {
+          if (!/^\d+$/.test(rawLimit) || rawLimit === '0') {
+            fail('VALIDATION_FAILED', 'limit must be a positive integer');
+          }
+          parsedLimit = Number.parseInt(rawLimit, 10);
+        }
         const page = await runtime.approvals.list({
           tenant_id: principal.tenant_id,
           status: 'PENDING',
           ...(request.query.cursor === undefined ? {} : { cursor: request.query.cursor }),
-          ...(request.query.limit === undefined ? {} : { limit: Number(request.query.limit) }),
+          ...(parsedLimit === undefined ? {} : { limit: parsedLimit }),
         });
 
         await runtime.audit.record({
