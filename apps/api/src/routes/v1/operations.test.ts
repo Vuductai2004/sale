@@ -84,4 +84,31 @@ describe('R13 retry response', () => {
       await app.close();
     }
   });
+
+  it('rejects a retry request when reason exceeds MAX_REASON_LENGTH or is not a string', async () => {
+    const { app, retry } = buildHarness();
+    try {
+      const longResponse = await app.inject({
+        method: 'POST',
+        url: '/operations/runs/run-1/retry',
+        headers: { authorization: `Bearer ${OPERATOR_TOKEN}` },
+        payload: { reason: 'x'.repeat(1001) },
+      });
+      expect(longResponse.statusCode).toBe(400);
+      expect(longResponse.json().error_code).toBe('VALIDATION_FAILED');
+      expect(longResponse.json().message).toContain('1000 character limit');
+
+      const nonStringResponse = await app.inject({
+        method: 'POST',
+        url: '/operations/runs/run-1/retry',
+        headers: { authorization: `Bearer ${OPERATOR_TOKEN}` },
+        payload: { reason: 12345 },
+      });
+      expect(nonStringResponse.statusCode).toBe(400);
+      expect(nonStringResponse.json().error_code).toBe('VALIDATION_FAILED');
+      expect(retry).not.toHaveBeenCalled();
+    } finally {
+      await app.close();
+    }
+  });
 });

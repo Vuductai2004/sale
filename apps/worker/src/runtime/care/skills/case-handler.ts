@@ -22,6 +22,12 @@ export async function handleCaseManagement<TOutput>(
   caseRepository: Pick<ServiceCaseRepository, 'manage' | 'reconcile'>,
   resolveSlaTargetHours: CareCaseSlaTargetHoursResolver | undefined,
 ): Promise<TOutput> {
+  if (typeof invocation.input !== 'object' || invocation.input === null) {
+    throw new CareSkillToolError(
+      'VALIDATION_FAILED',
+      'tool invocation input must be an object',
+    );
+  }
   const input = invocation.input as CaseManagementToolInput;
   const { effect_key: callerEffectKey, ...businessInput } = input;
   const trustedTenantId = invocation.context.tenant_id;

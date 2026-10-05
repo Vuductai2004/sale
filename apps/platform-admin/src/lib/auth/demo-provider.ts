@@ -280,7 +280,7 @@ export function isAllowedProxyPath(method: string, rawPath: string): boolean {
 
 function forwardedHeaders(request: Request, token: string): Headers {
   const headers = new Headers({ accept: request.headers.get('accept') ?? 'application/json', authorization: `Bearer ${token}` });
-  for (const name of ['content-type', 'idempotency-key', 'x-correlation-id']) {
+  for (const name of ['content-type', 'idempotency-key', 'x-idempotency-key', 'x-correlation-id', 'x-request-id', 'if-match', 'if-none-match']) {
     const value = request.headers.get(name);
     if (value) headers.set(name, value);
   }
@@ -289,7 +289,7 @@ function forwardedHeaders(request: Request, token: string): Headers {
 
 function proxyResponse(upstream: Response): Response {
   const headers = new Headers();
-  for (const name of ['content-type', 'cache-control', 'x-correlation-id', 'retry-after']) {
+  for (const name of ['content-type', 'cache-control', 'x-correlation-id', 'x-request-id', 'retry-after', 'etag']) {
     const value = upstream.headers.get(name);
     if (value) headers.set(name, value);
   }

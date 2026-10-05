@@ -109,10 +109,12 @@ export function parseStreamChunk(chunk: string): ParsedStreamChunk {
         continue;
       }
 
-      const r = parseReceipt(payload);
-      if (r !== null) {
-        receipt = r;
-        continue;
+      if (receipt === null) {
+        const r = parseReceipt(payload);
+        if (r !== null) {
+          receipt = r;
+          continue;
+        }
       }
 
       const statusMatch = payload.match(/^\[(?:(?:status|pending):\s*(.+)|(awaiting_human))\]$/);
@@ -160,10 +162,12 @@ export function parseStreamChunk(chunk: string): ParsedStreamChunk {
     const trimmed = line.trim();
     if (!trimmed) continue;
 
-    const r = parseReceipt(trimmed);
-    if (r !== null) {
-      receipt = r;
-      continue;
+    if (receipt === null) {
+      const r = parseReceipt(trimmed);
+      if (r !== null) {
+        receipt = r;
+        continue;
+      }
     }
 
     const statusMatch = trimmed.match(/^\[(?:(?:status|pending):\s*(.+)|(awaiting_human))\]$/);

@@ -89,6 +89,40 @@ describe('parseStreamChunk', () => {
     expect(result.text).toBe('Help is on the way.');
     expect(result.isDone).toBe(true);
   });
+
+  it('does not overwrite stream receipt or drop assistant text if assistant mentions conversation_id in SSE', () => {
+    const receiptLine = JSON.stringify({ task_id: 't-1', conversation_id: 'c-1', status: 'accepted' });
+    const assistantPayload = JSON.stringify({ conversation_id: 'c-1', other_info: 'details' });
+    const chunk = `data: ${receiptLine}\ndata: Here is your info: \ndata: ${assistantPayload}\ndata: [DONE]\n`;
+    const result = parseStreamChunk(chunk);
+    expect(result.receipt).toEqual({
+      task_id: 't-1',
+      conversation_id: 'c-1',
+      status: 'accepted',
+      correlation_id: undefined,
+      task_version: undefined,
+    });
+    expect(result.text).toContain('Here is your info:');
+    expect(result.text).toContain(assistantPayload);
+    expect(result.isDone).toBe(true);
+  });
+
+  it('does not overwrite stream receipt or drop assistant text in plain chunk stream', () => {
+    const receiptLine = JSON.stringify({ task_id: 't-1', conversation_id: 'c-1', status: 'accepted' });
+    const assistantPayload = JSON.stringify({ task_id: 't-99', conversation_id: 'c-99' });
+    const chunk = `${receiptLine}\nAssistant output:\n${assistantPayload}\n[DONE]`;
+    const result = parseStreamChunk(chunk);
+    expect(result.receipt).toEqual({
+      task_id: 't-1',
+      conversation_id: 'c-1',
+      status: 'accepted',
+      correlation_id: undefined,
+      task_version: undefined,
+    });
+    expect(result.text).toContain('Assistant output:');
+    expect(result.text).toContain(assistantPayload);
+    expect(result.isDone).toBe(true);
+  });
 });
 
 describe('buildStorefrontStreamRequestBody (R11 contract)', () => {

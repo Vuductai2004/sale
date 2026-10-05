@@ -194,5 +194,17 @@ describe('handleOrderConnector ERP status mapping', () => {
       code: 'AUTHORITATIVE_SOURCE_UNAVAILABLE',
     });
   });
+
+  it('rejects an invocation where input is null or not an object with VALIDATION_FAILED', async () => {
+    const invalidInvocation = {
+      ...invocation('SHIPPED'),
+      input: null,
+    };
+    await expect(
+      handleOrderConnector(invalidInvocation as unknown as SkillToolInvocation<unknown>, erpRead('SHIPPED'), async () => IDENTITY),
+    ).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+    });
+  });
 });
 

@@ -44,6 +44,8 @@ const RESOLUTIONS: readonly ReconciliationResolution[] = [
   'ESCALATE_MANUALLY',
 ];
 
+const MAX_REASON_LENGTH = 1000;
+
 function isStoredState(value: string): value is TaskStoredState {
   return (STORED_STATES as readonly string[]).includes(value);
 }
@@ -88,10 +90,17 @@ export function registerOperationRoutes(
         }
 
         const body: unknown = request.body;
-        const reason =
-          typeof body === 'object' && body !== null && typeof (body as Record<string, unknown>)['reason'] === 'string'
-            ? ((body as Record<string, unknown>)['reason'] as string)
-            : '';
+        let reason = '';
+        if (typeof body === 'object' && body !== null && 'reason' in (body as Record<string, unknown>)) {
+          const rawReason = (body as Record<string, unknown>)['reason'];
+          if (typeof rawReason !== 'string') {
+            fail('VALIDATION_FAILED', 'reason must be a string when supplied');
+          }
+          if (rawReason.length > MAX_REASON_LENGTH) {
+            fail('VALIDATION_FAILED', `reason exceeds the ${MAX_REASON_LENGTH} character limit`);
+          }
+          reason = rawReason.trim();
+        }
 
         const run_id = request.params.run_id;
         const classification = await runtime.runs.classifyRetry(principal.tenant_id, run_id);
@@ -244,6 +253,9 @@ export function registerOperationRoutes(
         }
         if (typeof reason !== 'string' || reason.trim().length === 0) {
           fail('VALIDATION_FAILED', 'reason is mandatory for a reconciliation resolution');
+        }
+        if (reason.length > MAX_REASON_LENGTH) {
+          fail('VALIDATION_FAILED', `reason exceeds the ${MAX_REASON_LENGTH} character limit`);
         }
 
         const receipt = candidate['receipt'];

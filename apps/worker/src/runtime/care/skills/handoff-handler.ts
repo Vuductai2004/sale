@@ -28,6 +28,12 @@ export async function handleHandoff<TOutput>(
   invocation: SkillToolInvocation<unknown>,
   handoffRepository: Pick<CareHandoffRepository, 'enqueue' | 'reconcile'>,
 ): Promise<TOutput> {
+  if (typeof invocation.input !== 'object' || invocation.input === null) {
+    throw new CareSkillToolError(
+      'VALIDATION_FAILED',
+      'tool invocation input must be an object',
+    );
+  }
   const input = invocation.input as {
     readonly tenant_id: string;
     readonly session_id: string;

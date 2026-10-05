@@ -11,6 +11,12 @@ export async function handleOrderConnector<TOutput>(
   erpRead: ErpReadPort,
   findVerifiedIdentity: (tenant_id: string, id: string) => Promise<VerifiedCustomerIdentity | null>,
 ): Promise<TOutput> {
+  if (typeof invocation.input !== 'object' || invocation.input === null) {
+    throw new CareSkillToolError(
+      'VALIDATION_FAILED',
+      'tool invocation input must be an object',
+    );
+  }
   const input = invocation.input as {
     readonly tenant_id: string;
     readonly order_identifier: string;

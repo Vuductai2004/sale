@@ -36,6 +36,8 @@ import {
 /** The five baseline SCR-003 decisions. */
 const DECISIONS: readonly ApprovalDecision[] = ['APPROVE', 'REJECT', 'MODIFY', 'PAUSE', 'CANCEL'];
 
+const MAX_REASON_LENGTH = 1000;
+
 function isDecision(value: unknown): value is ApprovalDecision {
   return typeof value === 'string' && (DECISIONS as readonly string[]).includes(value);
 }
@@ -180,6 +182,9 @@ export function registerApprovalRoutes(
         }
         if (typeof candidate.reason !== 'string' || candidate.reason.trim().length === 0) {
           fail('VALIDATION_FAILED', 'reason is mandatory for every decision');
+        }
+        if (candidate.reason.length > MAX_REASON_LENGTH) {
+          fail('VALIDATION_FAILED', `reason exceeds the ${MAX_REASON_LENGTH} character limit`);
         }
         if (typeof candidate.expected_payload_sha256 !== 'string' || candidate.expected_payload_sha256.length === 0) {
           fail(

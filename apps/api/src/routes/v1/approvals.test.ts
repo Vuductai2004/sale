@@ -496,6 +496,32 @@ describe('POST /approvals/:approval_id/decision (R05 approvals.decide)', () => {
       }
     });
 
+    it('rejects a reason that exceeds MAX_REASON_LENGTH with HTTP 400 and VALIDATION_FAILED', async () => {
+      const { app, decide } = buildHarness();
+
+      try {
+        const response = await app.inject({
+          method: 'POST',
+          url: `/approvals/${APPROVAL_ID}/decision`,
+          headers: { authorization: `Bearer ${OPERATOR_TOKEN}` },
+          payload: {
+            decision: 'APPROVE',
+            reason: 'a'.repeat(1001),
+            expected_payload_sha256: PAYLOAD_SHA256,
+          },
+        });
+
+        expect(response.statusCode).toBe(400);
+        expect(response.json()).toMatchObject({
+          error_code: 'VALIDATION_FAILED',
+        });
+        expect(response.json().message).toContain('1000 character limit');
+        expect(decide).not.toHaveBeenCalled();
+      } finally {
+        await app.close();
+      }
+    });
+
     it('rejects missing or empty expected_payload_sha256 with HTTP 400 and VALIDATION_FAILED without queueing', async () => {
       const { app, decide } = buildHarness();
 

@@ -527,6 +527,27 @@ Tính đến thời điểm hiện tại, remote `phong/feat/demo-live-3agent` (
 6. **Sửa Bug B-74:** API Gateway Turn Classifier (`apps/api/src/routes/v1/turn-classifier.ts`) hàm `salesRequirementsFor` chuẩn hóa thông điệp bằng `.replace(/[đĐ]/g, 'd')`, nhưng regex `SYMBOL_CURRENCY_PATTERNS` và `currencyHint` chỉ so sánh `đ`/`₫`, khiến các cú pháp phổ biến tiếng Việt như `"15.000.000đ"`, `"dưới 20 triệu đ"`, `"dưới 20 triệu đồng"` bị rớt nhận diện tiền tệ VND và làm mất yêu cầu ngân sách khách hàng. Đã bổ sung nhận diện hậu tố `d\b`, `dong`, `đ` chuẩn xác, bổ sung unit test. *(Đã xong)*
 7. **Sửa Bug B-75:** Worker Sales Skill (`apps/worker/src/runtime/sales/skills/mutation-handlers.ts`) trong `handleSendMessage` thiếu validation chuỗi không rỗng cho `recipient_id`, `channel`, và `content`, có thể dẫn đến gửi tin nhắn trống hoặc sai kênh. Đã bổ sung validation chặt chẽ với mã lỗi `INVALID_INPUT`, bổ sung unit test. *(Đã xong)*
 
+### Giai đoạn 12: Payload Bound, Stream Receipt Guard, Platform Admin BFF Proxy & Worker Skill Object Guard (B-76 đến B-79) (Đã hoàn thành trên nhánh `tai`)
+
+1. **Sửa Bug B-76:** API Gateway (`operations.ts` & `approvals.ts`) không giới hạn độ dài payload trường `reason` trên các endpoint vận hành và phê duyệt:
+   - `POST /api/v1/operations/runs/:run_id/retry`: cho phép gửi `reason` không phải string hoặc chuỗi dài tùy ý.
+   - `POST /api/v1/operations/runs/:run_id/reconciliation`: không kiểm tra giới hạn độ dài của `reason`.
+   - `POST /api/v1/approvals/:approval_id/decision`: không kiểm tra giới hạn độ dài của `candidate.reason`.
+   Thiếu giới hạn độ dài tiềm ẩn nguy cơ cạn kiệt bộ nhớ và phình to bản ghi audit trail/database. Đã áp đặt `MAX_REASON_LENGTH = 1000` trên cả 3 endpoint, trả về `400 VALIDATION_FAILED` khi vượt quá giới hạn và bổ sung đầy đủ unit tests. *(Đã xong)*
+
+2. **Sửa Bug B-77:** Storefront Widget Stream Parser (`packages/storefront-widget/src/stream.ts`) hàm `parseStreamChunk`:
+   Hàm `parseReceipt(payload)` và `parseReceipt(trimmed)` được gọi vô điều kiện trên mọi chunk SSE và chunk plain text stream. Khi assistant phản hồi tin nhắn có chứa JSON đề cập tới thông tin phiên/hội thoại (ví dụ: `{"conversation_id": "...", "task_id": "..."}`), hàm `parseReceipt` nhận diện nhầm khối JSON này là `StreamReceipt`, ghi đè lên receipt ban đầu của luồng và thực hiện lệnh `continue;`, dẫn đến việc nuốt chửng và làm mất hoàn toàn nội dung phản hồi của trợ lý ảo. Đã bổ sung điều kiện bảo vệ `if (receipt === null)` trước khi parse receipt, bổ sung unit tests kiểm tra cả SSE và plain text stream. *(Đã xong)*
+
+3. **Sửa Bug B-78:** Platform Admin BFF Proxy (`apps/platform-admin/src/lib/auth/demo-provider.ts`) hàm `forwardedHeaders` và `proxyResponse`:
+   Danh sách header chuyển tiếp bị thiếu `'x-idempotency-key'`, `'x-request-id'`, `'if-match'`, `'if-none-match'`, và response header thiếu `'x-request-id'`, `'etag'`. Điều này làm mất tính bất biến của các request mang header `x-idempotency-key` từ platform admin console khi gửi tới API Gateway. Đã đồng bộ đầy đủ các header chuyển tiếp tương thích với tenant console proxy. *(Đã xong)*
+
+4. **Sửa Bug B-79:** Worker Care Skills Handlers (`case-handler.ts`, `handoff-handler.ts`, `order-handler.ts`):
+   Cả 3 handler đều ép kiểu trực tiếp `invocation.input as ...` và truy cập thuộc tính hoặc destructuring ngay lập tức:
+   - `case-handler.ts`: `const { effect_key: callerEffectKey, ...businessInput } = input;` văng uncaught `TypeError: Cannot destructure property 'effect_key' of 'input' as it is null/undefined`.
+   - `handoff-handler.ts`: `input.tenant_id !== trustedTenantId` văng uncaught `TypeError: Cannot read properties of null/undefined`.
+   - `order-handler.ts`: `input.tenant_id !== contextTenantId` văng uncaught `TypeError: Cannot read properties of null/undefined`.
+   Khi LLM invocation tool phát sinh payload null hoặc không phải object, runtime crash với lỗi không được kiểm soát. Đã bổ sung validation an toàn `typeof invocation.input !== 'object' || invocation.input === null` và ném `CareSkillToolError('VALIDATION_FAILED', 'tool invocation input must be an object')`, bổ sung unit test. *(Đã xong)*
+
 ---
 *Báo cáo được lưu trữ và cập nhật trực tiếp tại: `docs/demo/BUG_AUDIT_REPORT.md`.*
 
