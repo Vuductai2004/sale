@@ -79,6 +79,17 @@ function requiredString(body: unknown, field: string, max_length?: number): stri
   return value;
 }
 
+/** Reads `attachments`: an array of strings, or absent. Anything else fails validation. */
+function attachmentsOf(body: unknown): readonly string[] | undefined {
+  if (typeof body !== 'object' || body === null || Array.isArray(body)) return undefined;
+  const raw: unknown = (body as Record<string, unknown>)['attachments'];
+  if (raw === undefined || raw === null) return undefined;
+  if (!Array.isArray(raw) || raw.some((item) => typeof item !== 'string')) {
+    fail('VALIDATION_FAILED', 'attachments must be an array of strings');
+  }
+  return raw as readonly string[];
+}
+
 /** A refusal that carries the code and nothing else: no value from the request is echoed back. */
 function refuse(reply: FastifyReply, request: FastifyRequest, runtime: GatewayRuntime, error: unknown): FastifyReply {
   return replyFailure(reply, error, correlationIdOf(request, runtime));
@@ -275,6 +286,8 @@ export function registerConversationRoutes(
           fail('CAPABILITY_NOT_ENABLED', 'only WEB_CHAT Customer Care turns are enabled');
         }
 
+        const attachments = attachmentsOf(body);
+
         const admission = await admitCareTurn({
           runtime,
           principal,
@@ -284,7 +297,7 @@ export function registerConversationRoutes(
           message,
           module: normalizedModule as AgentModule,
           event_type,
-          ...(body?.attachments === undefined ? {} : { attachments: body.attachments }),
+          ...(attachments === undefined ? {} : { attachments }),
           ...(deps.intentProposer === undefined ? {} : { intentProposer: deps.intentProposer }),
           rateLimiter: turnRateLimiter,
           operation: 'conversations.messages',

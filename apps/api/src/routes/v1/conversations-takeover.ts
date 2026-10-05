@@ -16,6 +16,9 @@ type ConversationPreHandler = (request: FastifyRequest, reply: FastifyReply) => 
 type RequiredString = (body: unknown, field: string, max_length?: number) => string;
 type Refuse = (reply: FastifyReply, request: FastifyRequest, runtime: GatewayRuntime, error: unknown) => FastifyReply;
 
+const MAX_REASON_LENGTH = 1000;
+const MAX_HANDOFF_SUMMARY_LENGTH = 2000;
+
 interface ConversationTakeoverRouteHelpers {
   readonly requiredString: RequiredString;
   readonly refuse: Refuse;
@@ -53,7 +56,7 @@ export function registerConversationTakeoverRoutes(
         const conversation_id = request.params.conversation_id;
 
         const body = request.body as Record<string, unknown> | undefined;
-        const reason = requiredString(body, 'reason');
+        const reason = requiredString(body, 'reason', MAX_REASON_LENGTH);
         const takeover_mode = requiredString(body, 'takeover_mode');
 
         // The enum is `FULL_CONTROL`/`CO_PILOT`; `HUMAN_ACTIVE` is display wording and any other
@@ -218,7 +221,16 @@ export function registerConversationTakeoverRoutes(
         const conversation_id = request.params.conversation_id;
 
         const body = request.body as Record<string, unknown> | undefined;
-        const handoff_summary = typeof body?.['handoff_summary'] === 'string' ? body['handoff_summary'] : null;
+        let handoff_summary: string | null = null;
+        if (body?.['handoff_summary'] !== undefined && body?.['handoff_summary'] !== null) {
+          if (typeof body['handoff_summary'] !== 'string') {
+            fail('VALIDATION_FAILED', 'handoff_summary must be a string');
+          }
+          if (body['handoff_summary'].length > MAX_HANDOFF_SUMMARY_LENGTH) {
+            fail('VALIDATION_FAILED', `handoff_summary exceeds the ${MAX_HANDOFF_SUMMARY_LENGTH} character limit`);
+          }
+          handoff_summary = body['handoff_summary'];
+        }
 
         const conversation = await runtime.conversations.get(principal.tenant_id, conversation_id);
         if (conversation === null) {

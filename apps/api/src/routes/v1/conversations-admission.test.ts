@@ -61,7 +61,7 @@ function buildHarness(options: {
   });
   // The real `runs.start` port carries the server-resolved channel, so the fixture names it too:
   // a case can then assert what the admission path actually passed.
-  const start = vi.fn(async (input: { correlation_id: string; source_channel?: string }) => ({
+  const start = vi.fn(async (input: { correlation_id: string; source_channel?: string; payload?: Record<string, unknown>; [key: string]: unknown }) => ({
     run_id: 'run-a',
     task_version: 1,
     correlation_id: input.correlation_id,
@@ -824,4 +824,65 @@ describe('POST /conversations/:conversation_id/messages shared Care admission', 
       await app.close();
     }
   });
+
+  it('validates attachments: rejects non-array or non-string attachments with 400 VALIDATION_FAILED', async () => {
+    const { app } = buildHarness();
+    const url = `/conversations/${CONVERSATION_ID}/messages`;
+    const headers = { authorization: `Bearer ${SESSION_TOKEN}` };
+
+    // String instead of array
+    const stringRes = await app.inject({
+      method: 'POST',
+      url,
+      headers,
+      payload: {
+        message: 'Here is my receipt',
+        idempotency_key: 'turn-attachments-invalid-1',
+        attachments: 'https://example.com/receipt.pdf',
+      },
+    });
+    expect(stringRes.statusCode).toBe(400);
+    expect(stringRes.json()).toMatchObject({ error_code: 'VALIDATION_FAILED' });
+
+    // Array containing non-string
+    const numberRes = await app.inject({
+      method: 'POST',
+      url,
+      headers,
+      payload: {
+        message: 'Here is my receipt',
+        idempotency_key: 'turn-attachments-invalid-2',
+        attachments: [123],
+      },
+    });
+    expect(numberRes.statusCode).toBe(400);
+    expect(numberRes.json()).toMatchObject({ error_code: 'VALIDATION_FAILED' });
+
+    await app.close();
+  });
+
+  it('accepts valid string array attachments', async () => {
+    const { app, start } = buildHarness();
+    const url = `/conversations/${CONVERSATION_ID}/messages`;
+    const headers = { authorization: `Bearer ${SESSION_TOKEN}` };
+
+    const validRes = await app.inject({
+      method: 'POST',
+      url,
+      headers,
+      payload: {
+        message: 'Here is my receipt',
+        idempotency_key: 'turn-attachments-valid',
+        attachments: ['https://example.com/receipt.pdf'],
+      },
+    });
+    expect(validRes.statusCode).toBe(202);
+    expect(start).toHaveBeenCalledTimes(1);
+    expect(start.mock.calls[0]?.[0].payload).toMatchObject({
+      attachments: ['https://example.com/receipt.pdf'],
+    });
+
+    await app.close();
+  });
 });
+

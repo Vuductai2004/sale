@@ -302,5 +302,37 @@ describe('conversation takeover durable handoff coordination', () => {
     expect(response.json().error_code).toBe('VALIDATION_FAILED');
     await app.close();
   });
+
+  it('rejects takeover when reason exceeds 1000 characters', async () => {
+    const { app } = buildTakeoverHarness();
+    const response = await app.inject({
+      method: 'POST',
+      url: '/conversations/' + CONVERSATION_ID + '/takeover',
+      headers: { authorization: 'Bearer operator-token' },
+      payload: {
+        reason: 'x'.repeat(1001),
+        takeover_mode: 'FULL_CONTROL',
+      },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ error_code: 'VALIDATION_FAILED' });
+    await app.close();
+  });
+
+  it('rejects resume when handoff_summary exceeds 2000 characters', async () => {
+    const { app } = buildTakeoverHarness();
+    const response = await app.inject({
+      method: 'POST',
+      url: '/conversations/' + CONVERSATION_ID + '/resume',
+      headers: { authorization: 'Bearer operator-token' },
+      payload: {
+        handoff_summary: 'x'.repeat(2001),
+      },
+    });
+    expect(response.statusCode).toBe(400);
+    expect(response.json()).toMatchObject({ error_code: 'VALIDATION_FAILED' });
+    await app.close();
+  });
 });
+
 

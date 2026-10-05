@@ -503,8 +503,15 @@ Tính đến thời điểm hiện tại, remote `phong/feat/demo-live-3agent` (
 9. **Sửa Bug B-59:** API Gateway (`campaigns.ts`) không validate format `segment_id` — worker yêu cầu khớp pattern `^inactive_[1-9][0-9]*d$` (ví dụ `inactive_90d`). Giá trị sai như UUID hay `all_customers` qua được gateway nhưng bị worker từ chối. Thêm `SEGMENT_ID_PATTERN` regex validation tại gateway. *(Đã xong)*
 10. **Sửa Bug B-60:** Kiểm tra ranh giới demo (`pnpm check:demo-boundary`) thất bại do chuỗi `'NovaMart'` bị gán cứng làm fallback brand trong hàm chiếu catalog `demo-widget.ts` (thuộc production root `apps/api/src/routes`). Thay thế bằng `'general'` chuẩn hóa theo category/use_case để vượt qua hoàn toàn bộ kiểm tra ranh giới bản dựng. *(Đã xong)*
 
+### Giai đoạn 9: API Gateway Attachments Validation, Worker ERP Price/Quantity Guard & Takeover Reason Bound (B-61 đến B-63) (Đã hoàn thành trên nhánh `tai`)
+
+1. **Sửa Bug B-61:** API Gateway (`conversations.ts`) thiếu validation `attachments` ở endpoint `POST /api/v1/conversations/:id/messages`. Khi client gửi `attachments` không phải array (chuỗi string, object, number, null) hoặc array chứa kiểu không phải string, toán tử spread `[...input.attachments]` trong `care-turn.ts` ném uncaught `TypeError`, gây crash HTTP 500 `INTERNAL_ERROR` thay vì HTTP 400 `VALIDATION_FAILED`. Đã bổ sung helper `attachmentsOf(body)` để reject dữ liệu không hợp lệ và hoàn thiện bộ unit test. *(Đã xong)*
+2. **Sửa Bug B-62:** Worker Care Skill (`order-handler.ts`) thiếu validation `quantity <= 0`, `NaN` / negative `unit_price`, và `NaN` / negative `total_price` khi map đơn hàng từ ERP. Dữ liệu bẩn từ ERP có thể lọt qua ranh giới thẩm định của Care Agent và làm sai lệch tính toán tài chính downstream trong refund/warranty. Đã siết chặt kiểm tra `Number.isInteger(quantity) && quantity > 0`, `Number.isFinite(unit_price) && unit_price >= 0`, và `Number.isFinite(total_price) && total_price >= 0` với mã lỗi `AUTHORITATIVE_SOURCE_UNAVAILABLE`, bổ sung unit test. *(Đã xong)*
+3. **Sửa Bug B-63:** API Gateway (`conversations-takeover.ts`) unbounded payload trường `reason` (tại endpoint Takeover) và `handoff_summary` (tại endpoint Resume). Thiếu giới hạn độ dài tiềm ẩn nguy cơ DoS và làm tràn bộ nhớ audit storage. Đã áp đặt `MAX_REASON_LENGTH = 1000` và `MAX_HANDOFF_SUMMARY_LENGTH = 2000`, bổ sung unit test. *(Đã xong)*
+
 ---
 *Báo cáo được lưu trữ và cập nhật trực tiếp tại: `docs/demo/BUG_AUDIT_REPORT.md`.*
+
 
 
 

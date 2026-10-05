@@ -135,7 +135,10 @@ export async function handleOrderConnector<TOutput>(
         || typeof item?.product_name !== 'string'
         || typeof item?.quantity !== 'number'
         || !Number.isInteger(item.quantity)
+        || item.quantity <= 0
         || typeof item?.unit_price !== 'number'
+        || !Number.isFinite(item.unit_price)
+        || item.unit_price < 0
         || typeof item?.currency !== 'string'
       ) {
         throw new CareSkillToolError(
@@ -156,7 +159,10 @@ export async function handleOrderConnector<TOutput>(
     && typeof order.product_name === 'string'
     && typeof order.quantity === 'number'
     && Number.isInteger(order.quantity)
+    && order.quantity > 0
     && typeof order.unit_price === 'number'
+    && Number.isFinite(order.unit_price)
+    && order.unit_price >= 0
     && typeof order.currency === 'string'
   ) {
     line_items = [
@@ -178,7 +184,7 @@ export async function handleOrderConnector<TOutput>(
   const total_price = typeof order.total_price === 'number'
     ? order.total_price
     : (typeof order.total_amount === 'number' ? order.total_amount : null);
-  if (total_price === null) {
+  if (total_price === null || !Number.isFinite(total_price) || total_price < 0) {
     throw new CareSkillToolError(
       'AUTHORITATIVE_SOURCE_UNAVAILABLE',
       'Provider order missing authoritative total price',
