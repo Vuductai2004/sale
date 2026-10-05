@@ -509,8 +509,17 @@ Tính đến thời điểm hiện tại, remote `phong/feat/demo-live-3agent` (
 2. **Sửa Bug B-62:** Worker Care Skill (`order-handler.ts`) thiếu validation `quantity <= 0`, `NaN` / negative `unit_price`, và `NaN` / negative `total_price` khi map đơn hàng từ ERP. Dữ liệu bẩn từ ERP có thể lọt qua ranh giới thẩm định của Care Agent và làm sai lệch tính toán tài chính downstream trong refund/warranty. Đã siết chặt kiểm tra `Number.isInteger(quantity) && quantity > 0`, `Number.isFinite(unit_price) && unit_price >= 0`, và `Number.isFinite(total_price) && total_price >= 0` với mã lỗi `AUTHORITATIVE_SOURCE_UNAVAILABLE`, bổ sung unit test. *(Đã xong)*
 3. **Sửa Bug B-63:** API Gateway (`conversations-takeover.ts`) unbounded payload trường `reason` (tại endpoint Takeover) và `handoff_summary` (tại endpoint Resume). Thiếu giới hạn độ dài tiềm ẩn nguy cơ DoS và làm tràn bộ nhớ audit storage. Đã áp đặt `MAX_REASON_LENGTH = 1000` và `MAX_HANDOFF_SUMMARY_LENGTH = 2000`, bổ sung unit test. *(Đã xong)*
 
+### Giai đoạn 10: Sales Cart/Order Input Boundary, Storefront Widget Attachments, Operator Port Typing & Demo Auth Email Boundary (B-64 đến B-68) (Đã hoàn thành trên nhánh `tai`)
+
+1. **Sửa Bug B-64:** Worker Sales Skill (`mutation-handlers.ts`) trong `executeCreateCart` thiếu validation kiểu dữ liệu cho `sku_id` và số lượng `quantity`. Khi client gửi `quantity` âm hoặc bằng 0 (ví dụ: `-1`), phép so sánh tồn kho `available < item.quantity` trả về `false` (bỏ qua bước kiểm tra tồn kho SoR), đồng thời tạo giỏ hàng có số lượng âm. Đã bổ sung kiểm tra nghiêm ngặt `sku_id` non-empty string và `quantity` là số nguyên dương (`Number.isInteger(quantity) && quantity > 0`), ném mã lỗi `INVALID_INPUT`, bổ sung unit test. *(Đã xong)*
+2. **Sửa Bug B-65:** Worker Sales Skill (`mutation-handlers.ts`) trong `executeCreateOrder` chỉ kiểm tra falsy của `cart_id` và `payment_method`, dẫn đến chuỗi chỉ chứa khoảng trắng (`"   "`) vẫn vượt qua được validation và gây lỗi không nhất quán downstream. Đã siết chặt kiểm tra `typeof === 'string' && trim().length > 0`, ném mã lỗi `INVALID_INPUT`, bổ sung unit test. *(Đã xong)*
+3. **Sửa Bug B-66:** Storefront Widget SDK (`packages/storefront-widget/src/stream.ts`) hàm `buildStorefrontStreamRequestBody` thiếu hỗ trợ trường `attachments`. Trong khi API Gateway đã hỗ trợ nhận `attachments`, widget SDK client không thể gửi tệp đính kèm khi gọi streaming API. Đã cập nhật kiểu `StorefrontStreamRequestBody` và hàm `buildStorefrontStreamRequestBody` hỗ trợ `attachments`, bổ sung unit test. *(Đã xong)*
+4. **Sửa Bug B-67:** API Gateway (`apps/api/src/routes/v1/operator-conversations.ts`) interface `OperatorConversationPort.appendMessage` thiếu trường `request_id`, mặc dù implementation truyền `request_id: operator-reply:...`. Đã bổ sung `readonly request_id?: string;` vào interface để đảm bảo tính toàn vẹn type safety của port contract. *(Đã xong)*
+5. **Sửa Bug B-68:** Tenant Console BFF Auth Provider (`apps/tenant-console/src/lib/auth/demo-provider.ts`) hàm `signIn` chỉ kiểm tra `!email` thay vì gọi helper `isValidLoginEmail(email)`, cho phép chuỗi khoảng trắng hoặc email vượt quá 320 ký tự lọt vào gateway upstream. Đã chuyển sang sử dụng `isValidLoginEmail(email)`, bổ sung unit test cho auth provider. *(Đã xong)*
+
 ---
 *Báo cáo được lưu trữ và cập nhật trực tiếp tại: `docs/demo/BUG_AUDIT_REPORT.md`.*
+
 
 
 

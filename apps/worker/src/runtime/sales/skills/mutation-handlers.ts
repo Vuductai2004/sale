@@ -75,6 +75,16 @@ export async function handleCreateCart(
 
   // Stock must be verified before a cart add
   for (const item of input.items) {
+    if (
+      !item
+      || typeof item.sku_id !== 'string'
+      || item.sku_id.trim().length === 0
+      || typeof item.quantity !== 'number'
+      || !Number.isInteger(item.quantity)
+      || item.quantity <= 0
+    ) {
+      throw new SalesSkillToolError('INVALID_INPUT', 'Cart items must have a valid sku_id and positive integer quantity');
+    }
     const inventory = await readInventoryFromSor(options, tenant_id, item.sku_id);
     const available = inventory.item.total_available_to_promise ?? 0;
     if (available < item.quantity) {
@@ -189,6 +199,13 @@ export async function handleCreateOrder(
       'IDENTITY_UNVERIFIED',
       'Order request tenant does not match the server-bound tenant',
     );
+  }
+
+  if (typeof input.cart_id !== 'string' || input.cart_id.trim().length === 0) {
+    throw new SalesSkillToolError('INVALID_INPUT', 'Order request cart_id must be a non-empty string');
+  }
+  if (typeof input.payment_method !== 'string' || input.payment_method.trim().length === 0) {
+    throw new SalesSkillToolError('INVALID_INPUT', 'Order request payment_method must be a non-empty string');
   }
 
   const orderPort = options.order;

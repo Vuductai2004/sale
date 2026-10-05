@@ -157,7 +157,7 @@ class DemoAuthProvider implements AuthProvider {
   }
 
   async signIn(email: string, password: string): Promise<SignInResult> {
-    if (!email || !password || password.length > MAX_PASSWORD_LENGTH) throw new ProviderHttpError(400, undefined);
+    if (!isValidLoginEmail(email) || !password || password.length > MAX_PASSWORD_LENGTH) throw new ProviderHttpError(400, undefined);
     const { response, payload } = await fetchJson(this.fetch(), apiV1Url('/demo/login'), {
       method: 'POST',
       headers: { Accept: 'application/json', 'Content-Type': 'application/json' },

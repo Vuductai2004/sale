@@ -109,6 +109,21 @@ describe('buildStorefrontStreamRequestBody (R11 contract)', () => {
     });
     expect('session_id' in body).toBe(false);
   });
+
+  it('includes attachments when provided', () => {
+    const body = buildStorefrontStreamRequestBody(
+      'Turn with attachment',
+      'idemp-key-attach',
+      'sess-456',
+      ['https://example.com/receipt.pdf'],
+    );
+    expect(body).toEqual({
+      message: 'Turn with attachment',
+      idempotency_key: 'idemp-key-attach',
+      session_id: 'sess-456',
+      attachments: ['https://example.com/receipt.pdf'],
+    });
+  });
 });
 
 describe('buildStorefrontEventRequestBody (R12 platform event contract)', () => {
