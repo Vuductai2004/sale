@@ -101,7 +101,8 @@ export async function handleFaqEngine<TOutput>(
     } as TOutput;
   }
 
-  const topK = Math.max(1, typeof input['top_k'] === 'number' ? input['top_k'] : 5);
+  const rawTopK = input['top_k'];
+  const topK = typeof rawTopK === 'number' && Number.isInteger(rawTopK) && rawTopK > 0 ? rawTopK : 5;
   const topMatches = matching.slice(0, topK);
   const highestConfidence = Number(topMatches[0]!.score.toFixed(2));
 

@@ -37,16 +37,20 @@ const STATUS_DEFINITIONS: Readonly<Record<string, StatusDefinition>> = {
   EMPTY: { label_key: 'status.no_data', tone: 'neutral', icon: 'Inbox' },
   PAUSED: { label_key: 'status.paused', tone: 'neutral', icon: 'PauseCircle' },
   paused_takeover: { label_key: 'status.paused', tone: 'neutral', icon: 'PauseCircle' },
+  CLOSED: { label_key: 'status.paused', tone: 'neutral', icon: 'PauseCircle' },
+  OPEN: { label_key: 'status.active', tone: 'success', icon: 'CheckCircle2' },
   FAILED: { label_key: 'status.failed', tone: 'danger', icon: 'XCircle' },
   ERROR: { label_key: 'status.failed', tone: 'danger', icon: 'XCircle' },
   HUMAN_HANDOFF: { label_key: 'status.human_handoff', tone: 'warning', icon: 'LifeBuoy' },
+  HUMAN_TAKEOVER: { label_key: 'status.human_handoff', tone: 'warning', icon: 'LifeBuoy' },
   PROVIDER_UNAVAILABLE: { label_key: 'status.provider_unavailable', tone: 'danger', icon: 'CloudOff' },
   DEMO_MOCK: { label_key: 'status.demo', tone: 'demo', icon: 'FlaskConical' },
   SYNTHETIC: { label_key: 'status.demo', tone: 'demo', icon: 'FlaskConical' },
 };
 
 export function statusView(code: string): StatusView {
-  const definition = STATUS_DEFINITIONS[code];
+  const normalized = (code ?? '').trim().toUpperCase();
+  const definition = STATUS_DEFINITIONS[code] ?? STATUS_DEFINITIONS[normalized];
   return definition === undefined
     ? { code, label_key: 'status.unknown', tone: 'neutral', icon: 'HelpCircle' }
     : { code, ...definition };

@@ -138,6 +138,28 @@ describe('tenant auth BFF', () => {
     expect(response.status).toBe(200);
   });
 
+  it('forwards standard idempotency-key header to upstream (B-70)', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(jsonResponse(upstreamLogin()))
+      .mockResolvedValueOnce(jsonResponse(upstreamSession()))
+      .mockResolvedValueOnce(jsonResponse({ widget_token: 'safe' }));
+    const auth = await login();
+    const response = await proxyPost(request('/api/v1/demo/widget-session', {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json',
+        Cookie: `${auth.sessionCookie}; ${auth.csrfCookie}`,
+        'X-CSRF-Token': auth.csrfCookie.split('=')[1]!,
+        'Idempotency-Key': 'idem-test-key-123',
+      },
+      body: '{}',
+    }), { params: { path: ['demo', 'widget-session'] } });
+    expect(response.status).toBe(200);
+    const upstreamCall = fetchSpy.mock.calls[2];
+    const upstreamHeaders = upstreamCall?.[1]?.headers as Headers;
+    expect(upstreamHeaders.get('idempotency-key')).toBe('idem-test-key-123');
+  });
+
   it('keeps a session on proxy 403 but destroys it on proxy 401', async () => {
     vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(jsonResponse(upstreamLogin()))

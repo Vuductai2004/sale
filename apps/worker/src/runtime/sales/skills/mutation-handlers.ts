@@ -405,6 +405,22 @@ export async function handleSendMessage(
     );
   }
 
+  if (
+    typeof input.recipient_id !== 'string'
+    || input.recipient_id.trim().length === 0
+    || typeof input.channel !== 'string'
+    || input.channel.trim().length === 0
+    || !input.message_content
+    || typeof input.message_content !== 'object'
+    || typeof input.message_content.text !== 'string'
+    || input.message_content.text.trim().length === 0
+  ) {
+    throw new SalesSkillToolError(
+      'INVALID_INPUT',
+      'Message recipient, channel, and non-empty content are required',
+    );
+  }
+
   const commPort = options.communication;
   if (!commPort) {
     throw new SalesSkillToolError(

@@ -906,4 +906,54 @@ describe('SalesSkillServices - message, consent and registry exports', () => {
       message: expect.stringContaining('active session lock'),
     });
   });
+
+  it('rejects message with missing or empty recipient, channel, or content (B-75)', async () => {
+    const services = createServices();
+    const effectKey = 'effect-msg-val';
+    const invoke = (input: Record<string, unknown>) =>
+      services.tool_port.invoke({
+        skill_id: 'skill.sales.send_message',
+        tool_binding: 'API-003.CommunicationConnector',
+        input: input as any,
+        context: {
+          run_id: 'run-val',
+          tenant_id: TENANT_ID,
+          correlation_id: CORRELATION_ID,
+          caller_agent: 'SAL-01',
+          granted_authority: 'AUTH-3',
+          effect_key: effectKey,
+        },
+      });
+
+    await expect(
+      invoke({
+        tenant_id: TENANT_ID,
+        recipient_id: '',
+        channel: 'LINE',
+        message_content: { text: 'hello' },
+        effect_key: effectKey,
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_INPUT' });
+
+    await expect(
+      invoke({
+        tenant_id: TENANT_ID,
+        recipient_id: CUSTOMER_ID,
+        channel: '',
+        message_content: { text: 'hello' },
+        effect_key: effectKey,
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_INPUT' });
+
+    await expect(
+      invoke({
+        tenant_id: TENANT_ID,
+        recipient_id: CUSTOMER_ID,
+        channel: 'LINE',
+        message_content: { text: '   ' },
+        effect_key: effectKey,
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_INPUT' });
+  });
 });
+

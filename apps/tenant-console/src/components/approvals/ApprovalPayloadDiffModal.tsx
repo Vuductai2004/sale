@@ -201,9 +201,9 @@ export function ApprovalPayloadDiffModal({
 
   const extractedCustomerId =
     item.customerId ||
-    (typeof item.payload.customer_id === 'string'
+    (typeof item.payload?.customer_id === 'string'
       ? item.payload.customer_id
-      : typeof item.payload.customerId === 'string'
+      : typeof item.payload?.customerId === 'string'
       ? item.payload.customerId
       : undefined);
 

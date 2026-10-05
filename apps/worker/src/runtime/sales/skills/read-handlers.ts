@@ -114,22 +114,22 @@ export async function handleSearchProduct(
 ): Promise<Record<string, unknown>> {
   const { tenant_id } = invocation.context;
   const input = invocation.input;
-  const query = input.query.trim().toLocaleLowerCase();
-  const limit = input.limit ?? 5;
 
   if (
     input.tenant_id !== tenant_id
-    || query.length === 0
+    || typeof input.query !== 'string'
+    || input.query.trim().length === 0
     || INJECTION_MARKERS.test(input.query)
-    || !Number.isSafeInteger(limit)
-    || limit < 1
-    || limit > 20
+    || (input.limit !== undefined && (!Number.isSafeInteger(input.limit) || input.limit < 1 || input.limit > 20))
   ) {
     throw new SalesSkillToolError(
       'MALFORMED_QUERY',
       'Catalog search query or tenant scope is invalid',
     );
   }
+
+  const query = input.query.trim().toLocaleLowerCase();
+  const limit = input.limit ?? 5;
 
   const catalog = await readCatalogFromSor(options, tenant_id);
   const advisorRequirements = options.advisor_state?.requirementsFor(tenant_id, invocation.context.correlation_id);
@@ -253,7 +253,11 @@ export async function handleCheckStock(
 ): Promise<Record<string, unknown>> {
   const { tenant_id } = invocation.context;
   const input = invocation.input;
-  if (input.tenant_id !== tenant_id || input.sku_id.trim().length === 0) {
+  if (
+    input.tenant_id !== tenant_id
+    || typeof input.sku_id !== 'string'
+    || input.sku_id.trim().length === 0
+  ) {
     throw new SalesSkillToolError(
       'AUTHORITATIVE_SOURCE_UNAVAILABLE',
       'Inventory request tenant or SKU is invalid',

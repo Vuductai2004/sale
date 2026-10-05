@@ -27,6 +27,7 @@ export const dynamic = 'force-dynamic';
 const FORWARDED_REQUEST_HEADERS = [
   'accept',
   'content-type',
+  'idempotency-key',
   'if-none-match',
   'if-match',
   'x-correlation-id',

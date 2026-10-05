@@ -13,6 +13,8 @@ describe('faq-parser', () => {
     expect(scoreFaqMatch(sampleFaq, [], '')).toBe(0);
     expect(scoreFaqMatch(sampleFaq, ['   '], '   ')).toBe(0);
     expect(scoreFaqMatch(sampleFaq, [], '   ')).toBe(0);
+    expect(scoreFaqMatch(sampleFaq, [''], 'unrelated question')).toBe(0);
+    expect(scoreFaqMatch(sampleFaq, ['   '], 'unrelated question')).toBe(0);
   });
 
   it('scores 1.0 for full phrase match in question regardless of case', () => {

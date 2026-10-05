@@ -1196,5 +1196,33 @@ describe('CareSkillServices', () => {
       expect(undefinedTargetResult).toEqual({ outcome: 'SUCCEEDED' });
       expect(erp_reconcile).toHaveBeenCalledTimes(2);
     });
+
+    it('handles top_k as NaN safely without crashing (B-69)', async () => {
+      const services = createCareSkillServices(createMockOptions({
+        env: {
+          KNOWLEDGE_TENANT_IDS: `${TENANT_ID},${NOVAMART_TENANT_ID}`,
+          KNOWLEDGE_ROOT: NOVAMART_KNOWLEDGE_ROOT,
+        },
+      }));
+      const result = await services.tool_port.invoke({
+        skill_id: 'skill.care.faq_lookup',
+        tool_binding: 'SecondBrain.FAQEngine',
+        input: {
+          tenant_id: NOVAMART_TENANT_ID,
+          query_text: 'Chính sách đổi trả',
+          top_k: Number.NaN,
+        },
+        context: {
+          run_id: 'run-faq-nan',
+          tenant_id: NOVAMART_TENANT_ID,
+          caller_agent: 'CAR-01',
+          correlation_id: 'corr-faq',
+          granted_authority: 'AUTH-1',
+          effect_key: 'effect-faq-nan',
+        },
+      });
+      expect(result).toHaveProperty('answers');
+      expect(result).toHaveProperty('match_confidence');
+    });
   });
 });

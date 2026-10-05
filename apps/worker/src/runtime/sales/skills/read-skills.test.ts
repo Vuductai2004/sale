@@ -1211,4 +1211,52 @@ describe('SalesSkillServices - read, recommendation and customer skills', () => 
     const recommendationPayload = recommendation as unknown as Record<string, unknown>;
     expect(recommendationPayload['product']).toMatchObject({ sku: 'SKU-1', price: 100 });
   });
+
+  it('search_product and check_stock reject invalid inputs safely without throwing TypeError (B-71)', async () => {
+    const services = createServices();
+    const context = {
+      run_id: 'run-test-b71',
+      tenant_id: TENANT_ID,
+      caller_agent: 'SAL-02' as const,
+      correlation_id: CORRELATION_ID,
+      granted_authority: 'AUTH-1' as const,
+      effect_key: 'effect-test-b71',
+    };
+
+    await expect(
+      services.tool_port.invoke({
+        skill_id: 'skill.sales.search_product',
+        tool_binding: 'API-001.CatalogConnector',
+        input: { tenant_id: TENANT_ID, query: undefined as any },
+        context,
+      }),
+    ).rejects.toMatchObject({ code: 'MALFORMED_QUERY' });
+
+    await expect(
+      services.tool_port.invoke({
+        skill_id: 'skill.sales.search_product',
+        tool_binding: 'API-001.CatalogConnector',
+        input: { tenant_id: TENANT_ID, query: '   ' },
+        context,
+      }),
+    ).rejects.toMatchObject({ code: 'MALFORMED_QUERY' });
+
+    await expect(
+      services.tool_port.invoke({
+        skill_id: 'skill.sales.check_stock',
+        tool_binding: 'API-001.InventoryConnector',
+        input: { tenant_id: TENANT_ID, sku_id: undefined as any },
+        context,
+      }),
+    ).rejects.toMatchObject({ code: 'AUTHORITATIVE_SOURCE_UNAVAILABLE' });
+
+    await expect(
+      services.tool_port.invoke({
+        skill_id: 'skill.sales.check_stock',
+        tool_binding: 'API-001.InventoryConnector',
+        input: { tenant_id: TENANT_ID, sku_id: '   ' },
+        context,
+      }),
+    ).rejects.toMatchObject({ code: 'AUTHORITATIVE_SOURCE_UNAVAILABLE' });
+  });
 });

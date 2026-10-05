@@ -15,12 +15,11 @@ const SUPPORT_INTENT =
  */
 const SALES_INTENT =
   /\b(recommend|suggest|looking for|in stock|available|availability|price|pricing|buy|purchase|shop|product|item|catalog|order(?:ing)?|size|color|laptop|notebook|computer|desktop|monitor|screen|keyboard|mouse|headphone|speaker|phone|smartphone|tablet|camera|printer|router|ssd|storage|drive|accessor(?:y|ies)|budget|under|below|less than|up to|maximum|at most|usd|eur|gbp|vnd|dollar|euro|pound)\b|tư vấn|gợi ý|còn hàng|giá|mua|sản phẩm|mặt hàng|danh mục|màu nào|kích cỡ|máy tính|điện thoại|màn hình|bàn phím|tai nghe|máy ảnh|ngân sách|triệu|đồng/iu;
-/** Currency symbols are unambiguous only when they introduce a numeric amount. */
 const SYMBOL_CURRENCY_PATTERNS: readonly [RegExp, string][] = [
   [/\$\s*[0-9]/, 'USD'],
   [/€\s*[0-9]/, 'EUR'],
   [/£\s*[0-9]/, 'GBP'],
-  [/(?:₫|đ)\s*[0-9]|[0-9][0-9.,]*\s*(?:₫|đ|\bvnd\b)/iu, 'VND'],
+  [/(?:₫|đ)\s*[0-9]|[0-9][0-9.,]*\s*(?:₫|đ|\bvnd\b|d\b)/iu, 'VND'],
 ];
 
 /** Explicit ISO-4217 allowlist: prose words are never inferred as currency codes. */
@@ -149,7 +148,7 @@ function currencyHint(normalized: string): string | undefined {
     return candidate;
   }
 
-  if (/(?:₫|đ|\bdong\b|đồng|\btrieu\b|triệu|\btr\b|\d+\s*tr\b|\d+\s*k\b|\bnghin\b|nghìn|\d+\s*nghin\b|\d+\s*nghìn\b)/iu.test(normalized)) {
+  if (/(?:₫|đ|\bdong\b|đồng|\btrieu\b|triệu|\btr\b|\d+\s*tr\b|\d+\s*k\b|\bnghin\b|nghìn|\d+\s*nghin\b|\d+\s*nghìn\b|\d+\s*d\b)/iu.test(normalized)) {
     return 'VND';
   }
 
@@ -160,7 +159,7 @@ function budgetHint(normalized: string): SalesBudget | undefined {
   const currency = currencyHint(normalized);
   if (currency === undefined) return undefined;
   const match = normalized.match(
-    /(?:under|below|less than|up to|maximum|at most|budget|duoi|dưới|ngan sach|ngân sách)\s*(?:[$€£₫]\s*)?(?:([0-9]+(?:[.,][0-9]+)*)\s*(million|m|billion|b|thousand|k|trieu|triệu|nghin|nghìn|tr)?|(?:[a-z]{3})\s*([0-9]+(?:[.,][0-9]+)*))/iu,
+    /(?:under|below|less than|up to|maximum|at most|budget|duoi|dưới|ngan sach|ngân sách)\s*(?:[$€£₫]\s*)?(?:([0-9]+(?:[.,][0-9]+)*)\s*(million|m|billion|b|thousand|k|trieu|triệu|nghin|nghìn|tr|d)?(?:\s*(?:d|dong|vnd))?|(?:[a-z]{3})\s*([0-9]+(?:[.,][0-9]+)*))/iu,
   );
   if (match === null) return undefined;
   const raw = match[1] ?? match[3];

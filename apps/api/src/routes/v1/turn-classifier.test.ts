@@ -50,6 +50,18 @@ describe('salesRequirementsFor', () => {
       category: 'laptops',
       budget: { amount: 20_000_000, currency: 'VND' },
     });
+    expect(salesRequirementsFor('Tư vấn laptop dưới 20.000.000đ')).toEqual({
+      category: 'laptops',
+      budget: { amount: 20_000_000, currency: 'VND' },
+    });
+    expect(salesRequirementsFor('Tư vấn laptop dưới 20 triệu đ')).toEqual({
+      category: 'laptops',
+      budget: { amount: 20_000_000, currency: 'VND' },
+    });
+    expect(salesRequirementsFor('Tư vấn laptop dưới 20 triệu đồng')).toEqual({
+      category: 'laptops',
+      budget: { amount: 20_000_000, currency: 'VND' },
+    });
   });
 
   it('does not treat an English connector as a currency code', () => {

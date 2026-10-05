@@ -62,7 +62,10 @@ export function parseFaqMarkdown(content: string, source_file: string): ParsedFa
 /** Deterministic token-overlap scoring for query matching. */
 export function scoreFaqMatch(entry: FaqEntry, queryTokens: readonly string[], queryText: string): number {
   const normalizedQuery = queryText.trim().toLowerCase();
-  if (normalizedQuery.length === 0 || queryTokens.length === 0) {
+  const validTokens = queryTokens
+    .map((t) => (typeof t === 'string' ? t.trim().toLowerCase() : ''))
+    .filter((t) => t.length > 0);
+  if (normalizedQuery.length === 0 || validTokens.length === 0) {
     return 0;
   }
 
@@ -77,14 +80,13 @@ export function scoreFaqMatch(entry: FaqEntry, queryTokens: readonly string[], q
   // Count token matches
   let qMatches = 0;
   let aMatches = 0;
-  for (const token of queryTokens) {
-    const tokenLower = token.toLowerCase();
+  for (const tokenLower of validTokens) {
     if (qLower.includes(tokenLower)) qMatches++;
     else if (aLower.includes(tokenLower)) aMatches++;
   }
 
-  const qScore = qMatches / queryTokens.length;
-  const aScore = (aMatches / queryTokens.length) * 0.4;
+  const qScore = qMatches / validTokens.length;
+  const aScore = (aMatches / validTokens.length) * 0.4;
   const total = Math.min(1.0, qScore + aScore);
 
   return total;
