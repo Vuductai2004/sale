@@ -76,7 +76,7 @@ function projectCatalogItem(value: unknown): CatalogItem | null {
   if (!sku_id || !name || !currency || list_price === null || list_price < 0 || item['is_active'] !== true) {
     return null;
   }
-  const brand = typeof item['brand'] === 'string' && item['brand'].trim().length > 0 ? item['brand'].trim() : 'NovaMart';
+  const brand = typeof item['brand'] === 'string' && item['brand'].trim().length > 0 ? item['brand'].trim() : 'general';
   const category = typeof item['category'] === 'string' && item['category'].trim().length > 0 ? item['category'].trim() : 'general';
   const use_case = typeof item['use_case'] === 'string' && item['use_case'].trim().length > 0 ? item['use_case'].trim() : 'general';
   const description = typeof item['description'] === 'string' && item['description'].trim().length > 0 ? item['description'].trim() : name;

@@ -136,6 +136,9 @@ export function createErpHttpTransport(options: ErpHttpTransportOptions): ErpTra
       } catch {
         // An aborted host deadline proves nothing about the provider. A caller cancellation also
         // proves nothing, but must remain UNKNOWN rather than being mislabeled as a provider timeout.
+        if (input.signal?.aborted) {
+          return failure('UNKNOWN', null);
+        }
         return failure(deadline.aborted ? 'TIMEOUT' : 'UNKNOWN', null);
       }
     },

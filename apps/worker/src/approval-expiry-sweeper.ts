@@ -86,6 +86,7 @@ export function createApprovalExpirySweeper(
 
   let timer: NodeJS.Timeout | null = null;
   let activeRun: Promise<void> | null = null;
+  let isStopping = false;
 
   const runTenants = async (): Promise<void> => {
     for (const tenant_id of tenantIds) {
@@ -117,18 +118,23 @@ export function createApprovalExpirySweeper(
   };
 
   const start = (): void => {
-    if (timer !== null) return;
+    if (timer !== null || isStopping) return;
     timer = schedule(() => {
       void runOnce().catch(() => undefined);
     }, intervalMs);
   };
 
   const stop = async (): Promise<void> => {
-    if (timer !== null) {
-      cancel(timer);
-      timer = null;
+    isStopping = true;
+    try {
+      if (timer !== null) {
+        cancel(timer);
+        timer = null;
+      }
+      if (activeRun !== null) await activeRun;
+    } finally {
+      isStopping = false;
     }
-    if (activeRun !== null) await activeRun;
   };
 
   const handle: ApprovalExpirySweeperHandle = {

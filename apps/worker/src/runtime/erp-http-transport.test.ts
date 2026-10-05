@@ -211,6 +211,32 @@ describe('createErpHttpTransport', () => {
     expect(aborting).toHaveBeenCalledTimes(1);
   });
 
+  it('classifies dual abort (caller cancelled when deadline timed out) as UNKNOWN', async () => {
+    const controller = new AbortController();
+    const aborting = vi.fn(async (_url: string, init: ErpHttpRequestInit): Promise<ErpHttpResponseLike> => {
+      // simulate caller cancellation occurring during execution
+      controller.abort();
+      await delay(100, undefined, { signal: init.signal });
+      return json(200, { ok: true });
+    });
+    const built = createErpHttpTransport({
+      base_url: BASE_URL,
+      hmac_secret: SECRET,
+      hmac,
+      timeout_ms: 10, // short timeout
+      fetch: aborting,
+    });
+
+    const result = await built.request({
+      method: 'GET',
+      path: CATALOG_PATH,
+      tenant_id: 'tenant-a',
+      signal: controller.signal,
+    });
+
+    expect(result).toEqual({ ok: false, failure_class: 'UNKNOWN', status: null });
+  });
+
 
   it('classifies a transport error with no deadline as indeterminate', async () => {
     const { request } = transport([new Error('ECONNRESET')]);

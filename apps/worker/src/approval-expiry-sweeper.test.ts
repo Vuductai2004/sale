@@ -72,4 +72,28 @@ describe('createApprovalExpirySweeper', () => {
       autoStart: false,
     })).toThrow('APPROVAL_EXPIRY_SWEEP_INTERVAL_MS_INVALID');
   });
+
+  it('ignores start() calls while stop() is actively waiting for in-flight run', async () => {
+    let resolveInFlight!: () => void;
+    const inFlightPromise = new Promise<readonly string[]>((resolve) => {
+      resolveInFlight = () => resolve([]);
+    });
+    const expireOverdueApprovals = vi.fn().mockImplementation(() => inFlightPromise);
+    const sweeper = createApprovalExpirySweeper({
+      tenantIds: ['tenant-a'],
+      intervalMs: 1000,
+      repository: { expireOverdueApprovals },
+      autoStart: false,
+    });
+
+    void sweeper.runOnce();
+    const stopPromise = sweeper.stop();
+    // try to call start() while stop() is awaiting activeRun
+    sweeper.start();
+    expect(sweeper.isRunning).toBe(false);
+
+    resolveInFlight();
+    await stopPromise;
+    expect(sweeper.isRunning).toBe(false);
+  });
 });

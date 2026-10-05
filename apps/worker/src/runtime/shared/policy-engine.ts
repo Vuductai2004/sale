@@ -208,7 +208,14 @@ export class DomainPolicyEngine implements IPolicyEngine {
         reason: `UNKNOWN_AGENT: no authority grant resolved for agent '${action.agent_id}'.`,
       };
     }
-    this.agentGrantCache.set(`${context.tenant_id}\u0000${action.agent_id}`, freshGrant);
+    const cacheKey = `${context.tenant_id}\u0000${action.agent_id}`;
+    if (this.agentGrantCache.size >= 1000 && !this.agentGrantCache.has(cacheKey)) {
+      const oldestKey = this.agentGrantCache.keys().next().value;
+      if (oldestKey !== undefined) {
+        this.agentGrantCache.delete(oldestKey);
+      }
+    }
+    this.agentGrantCache.set(cacheKey, freshGrant);
 
     // 4. Delegate to PolicyEnforcementPoint
     const secContext: PolicySecurityContext = {

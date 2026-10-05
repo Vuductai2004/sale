@@ -496,11 +496,12 @@ Tính đến thời điểm hiện tại, remote `phong/feat/demo-live-3agent` (
 2. **Sửa Bug B-53:** Thêm `RECOMMENDATION_SOURCE_FILE` và `INVENTORY_SOURCE_FILE` vào whitelist sales domain của `structuredResponse` trong `response.ts` — tránh `finalizerRefusal` sai cho phản hồi hợp lệ từ Recommendation/Inventory. *(Đã xong)*
 3. **Sửa Bug B-55:** Thêm `expected_task_version` vào 2 lệnh `recordFailure` thiếu CAS guard khi unbound orchestrator trong `worker.ts`. *(Đã xong)*
 4. **Sửa Bug B-57:** Thêm `handoff.marketing_to_sales`, `handoff.sales_to_care`, `handoff.care_to_retention` vào `RESUME_EVENT_TYPES` trong `worker.ts` — cross-domain journey resume không còn bị block với `RESUME_EVENT_INVALID`. *(Đã xong)*
-5. **Ghi nhận Bug B-52:** `DomainPolicyEngine.agentGrantCache` tích lũy vô hạn — cần bounded eviction cho production dài hạn. *(Ghi nhận)*
-6. **Ghi nhận Bug B-54:** `approval-expiry-sweeper` race condition `stop()+start()` — risk thấp với pattern autoStart hiện tại. *(Ghi nhận)*
-7. **Ghi nhận Bug B-56:** `erp-http-transport` phân loại sai `TIMEOUT` vs `UNKNOWN` khi dual-abort signal — edge case production cao tải. *(Ghi nhận)*
+5. **Sửa Bug B-52:** `DomainPolicyEngine.agentGrantCache` tích lũy vô hạn — bổ sung bounded FIFO eviction (giới hạn 1000 mục) ngăn ngừa rò rỉ bộ nhớ dài hạn. *(Đã xong)*
+6. **Sửa Bug B-54:** `approval-expiry-sweeper` race condition `stop()+start()` — thêm cờ `isStopping` ngăn việc schedule timer mới trong khi sweeper đang đợi tác vụ in-flight kết thúc, bổ sung unit test. *(Đã xong)*
+7. **Sửa Bug B-56:** `erp-http-transport` phân loại sai `TIMEOUT` vs `UNKNOWN` khi dual-abort signal — ưu tiên kiểm tra `input.signal?.aborted` trước để đảm bảo hủy từ caller luôn trả về `UNKNOWN`, bổ sung unit test. *(Đã xong)*
 8. **Sửa Bug B-58:** API Gateway (`campaigns.ts`) không validate `objective` trước khi tạo task — bất kỳ chuỗi nào đều được chấp nhận, nhưng worker từ chối nếu không phải `reactivation`/`winback`. Hệ quả: task được cấp phát (202) nhưng ngay lập tức thất bại. Thêm `CAMPAIGN_OBJECTIVES` whitelist + check tại gateway. *(Đã xong)*
 9. **Sửa Bug B-59:** API Gateway (`campaigns.ts`) không validate format `segment_id` — worker yêu cầu khớp pattern `^inactive_[1-9][0-9]*d$` (ví dụ `inactive_90d`). Giá trị sai như UUID hay `all_customers` qua được gateway nhưng bị worker từ chối. Thêm `SEGMENT_ID_PATTERN` regex validation tại gateway. *(Đã xong)*
+10. **Sửa Bug B-60:** Kiểm tra ranh giới demo (`pnpm check:demo-boundary`) thất bại do chuỗi `'NovaMart'` bị gán cứng làm fallback brand trong hàm chiếu catalog `demo-widget.ts` (thuộc production root `apps/api/src/routes`). Thay thế bằng `'general'` chuẩn hóa theo category/use_case để vượt qua hoàn toàn bộ kiểm tra ranh giới bản dựng. *(Đã xong)*
 
 ---
 *Báo cáo được lưu trữ và cập nhật trực tiếp tại: `docs/demo/BUG_AUDIT_REPORT.md`.*
