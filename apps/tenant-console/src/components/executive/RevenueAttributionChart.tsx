@@ -106,7 +106,7 @@ export function RevenueAttributionChart({
     cleanupStream();
 
     const streamUrl = tenantConsoleClient.getTelemetryStreamUrl({ metric: 'revenue_attribution' });
-    const es = new EventSource(streamUrl);
+    const es = new EventSource(streamUrl, { withCredentials: true });
     eventSourceRef.current = es;
     setConnectionStatus(retryCountRef.current > 0 ? 'RECONNECTING' : 'CONNECTING');
     setStreamErrorMessage(null);

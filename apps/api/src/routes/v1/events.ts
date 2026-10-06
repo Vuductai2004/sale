@@ -69,14 +69,14 @@ function requireEnvelope(body: unknown): PlatformEventEnvelope {
   const occurred_at = candidate['occurred_at'];
   const payload = candidate['payload'];
 
-  if (typeof event_id !== 'string' || event_id.length === 0) {
-    fail('VALIDATION_FAILED', 'event_id is required and must be a non-empty string');
+  if (typeof event_id !== 'string' || event_id.trim().length === 0 || event_id.length > 128) {
+    fail('VALIDATION_FAILED', 'event_id is required and must be a non-empty string up to 128 characters');
   }
-  if (typeof event_type !== 'string' || event_type.length === 0) {
-    fail('VALIDATION_FAILED', 'event_type is required and must be a non-empty string');
+  if (typeof event_type !== 'string' || event_type.trim().length === 0 || event_type.length > 64) {
+    fail('VALIDATION_FAILED', 'event_type is required and must be a non-empty string up to 64 characters');
   }
-  if (typeof source !== 'string' || source.length === 0) {
-    fail('VALIDATION_FAILED', 'source is required and must be a non-empty string');
+  if (typeof source !== 'string' || source.trim().length === 0 || source.length > 128) {
+    fail('VALIDATION_FAILED', 'source is required and must be a non-empty string up to 128 characters');
   }
   if (typeof occurred_at !== 'string' || Number.isNaN(Date.parse(occurred_at))) {
     fail('VALIDATION_FAILED', 'occurred_at is required and must be an ISO-8601 instant');

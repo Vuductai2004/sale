@@ -55,7 +55,6 @@ function SalesTryContent() {
   const composingRef = useRef(false);
   const sendingRef = useRef(false);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const apiUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
 
   useEffect(() => {
     let active = true;
@@ -84,7 +83,6 @@ function SalesTryContent() {
   async function send(event?: FormEvent<HTMLFormElement>): Promise<void> {
     event?.preventDefault();
     if (sendingRef.current || !session || !message.trim()) return;
-    if (!apiUrl) { setError('Thiếu cấu hình API: NEXT_PUBLIC_API_URL chưa được thiết lập.'); return; }
     sendingRef.current = true; setSending(true); setError(null);
     const text = message.trim(); setMessage('');
     const userId = `user-${Date.now()}`; const assistantId = `assistant-${Date.now()}`;

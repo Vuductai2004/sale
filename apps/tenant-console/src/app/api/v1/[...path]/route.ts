@@ -50,7 +50,10 @@ type RouteContext = { params: { path?: string[] } | Promise<{ path?: string[] }>
 
 
 function requestHeaders(request: Request, token: string, path: string): Headers {
-  const headers = new Headers({ Authorization: `Bearer ${token}` });
+  const incomingAuth = request.headers.get('authorization');
+  const headers = new Headers({
+    Authorization: path.startsWith('storefront/') && incomingAuth ? incomingAuth : `Bearer ${token}`,
+  });
   for (const name of FORWARDED_REQUEST_HEADERS) {
     const value = request.headers.get(name);
     if (value) headers.set(name, value);
@@ -134,10 +137,12 @@ async function proxy(request: Request, context: RouteContext): Promise<Response>
   }
 
   if (upstream.status === 401) {
-    destroySession(request);
-    const response = unauthorizedResponse('expired');
-    appendClearedCookies(response, request);
-    return response;
+    if (!path.startsWith('storefront/')) {
+      destroySession(request);
+      const response = unauthorizedResponse('expired');
+      appendClearedCookies(response, request);
+      return response;
+    }
   }
 
   return new Response(upstream.body, {

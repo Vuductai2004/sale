@@ -38,7 +38,7 @@ export function ExecutiveDashboard({
   const [windowVal, setWindowVal] = useState<string>(initialWindow);
   const [timezone] = useState<string>(initialTimezone);
   const [metrics, setMetrics] = useState<readonly KpiMetricItem[]>([]);
-  const [alerts] = useState<readonly AnomalyAlert[]>([]);
+  const [alerts, setAlerts] = useState<readonly AnomalyAlert[]>([]);
   const [uiState, setUiState] = useState<SharedUiState>('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [observedAt, setObservedAt] = useState<string | null>(null);
@@ -48,10 +48,13 @@ export function ExecutiveDashboard({
     setErrorMessage(null);
 
     try {
-      const response = await tenantConsoleClient.getKpiSnapshot({
-        window: windowVal,
-        timezone,
-      });
+      const [response, attentionResult] = await Promise.all([
+        tenantConsoleClient.getKpiSnapshot({
+          window: windowVal,
+          timezone,
+        }),
+        tenantConsoleClient.getCompanyAttention().catch(() => ({ items: [] })),
+      ]);
 
       const rawMetrics: unknown = response.metrics;
       let items: KpiMetricItem[] = [];
@@ -115,6 +118,18 @@ export function ExecutiveDashboard({
       setMetrics(items);
       setObservedAt(response.observed_at || null);
 
+      if (attentionResult && Array.isArray(attentionResult.items)) {
+        const mappedAlerts: AnomalyAlert[] = attentionResult.items.map((item, idx) => ({
+          id: `${item.type}-${item.source_ref}-${idx}`,
+          message: item.title_key,
+          severity: item.severity === 'danger' ? 'CRITICAL' : item.severity === 'warning' ? 'WARN' : 'INFO',
+          timestamp: new Date().toISOString(),
+          source: item.domain,
+          evidence_reference: item.source_ref,
+        }));
+        setAlerts(mappedAlerts);
+      }
+
       if (items.length === 0) {
         setUiState('empty');
       } else if (items.some((i) => i.source_status === 'STALE')) {
@@ -128,6 +143,7 @@ export function ExecutiveDashboard({
       }
     } catch (err: unknown) {
       setMetrics([]);
+      setAlerts([]);
       setObservedAt(null);
       if (err instanceof ApiError) {
         if (err.status === 401 || err.status === 403) {

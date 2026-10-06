@@ -1,11 +1,15 @@
 import { RequirePermission } from '../../../components/auth/RequirePermission';
-import { AnalyticsPage } from '../../../components/company/AnalyticsPage';
+import { ExecutiveDashboard } from '../../../components/executive/ExecutiveDashboard';
 
 export const metadata = {
-  title: 'Analytics | AgentOS',
-  description: 'Tenant-scoped observed metrics.',
+  title: 'Executive Telemetry & Indicators | AgentOS',
+  description: 'Tenant-scoped real-time indicators, revenue attribution streaming, and operational anomaly feed.',
 };
 
 export default function AnalyticsRoute() {
-  return <RequirePermission permission="telemetry:read"><AnalyticsPage /></RequirePermission>;
+  return (
+    <RequirePermission permission="telemetry:read">
+      <ExecutiveDashboard />
+    </RequirePermission>
+  );
 }

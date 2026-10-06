@@ -134,7 +134,7 @@ export function registerConversationRoutes(
       const principal = requirePrincipal(request);
       const body = request.body as Partial<CreateConversationRequest> | undefined;
       const rawChannel = body?.channel;
-      const customer_identifier = requiredString(body, 'customer_identifier');
+      const customer_identifier = requiredString(body, 'customer_identifier', 128);
 
       if (typeof rawChannel !== 'string' || !VALID_CHANNELS.includes(rawChannel as ChannelId)) {
         fail('VALIDATION_FAILED', 'channel is required and must name a supported channel');

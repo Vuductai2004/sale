@@ -189,11 +189,26 @@ export function ConversationWorkspace({ initialConversationId = '' }: Conversati
     }
   }, []);
 
+  useEffect(() => {
+    if (initialConversationId && initialConversationId !== selectedId) {
+      setSelectedId(initialConversationId);
+    }
+  }, [initialConversationId, selectedId]);
+
   useEffect(() => { void loadConversations(); }, [loadConversations]);
   useEffect(() => {
     setNotice(null);
     void loadConversation(selectedId);
   }, [loadConversation, selectedId]);
+
+  useEffect(() => {
+    if (!selectedId) return undefined;
+    const interval = window.setInterval(() => {
+      void loadConversation(selectedId);
+      void loadConversations();
+    }, 4000);
+    return () => window.clearInterval(interval);
+  }, [loadConversation, loadConversations, selectedId]);
 
   useEffect(() => {
     const currentUserId = session?.identity.user_id;

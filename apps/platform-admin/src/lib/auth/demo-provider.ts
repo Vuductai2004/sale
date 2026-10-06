@@ -273,7 +273,7 @@ export function isAllowedProxyPath(method: string, rawPath: string): boolean {
       || /^runs\/[A-Za-z0-9._:-]+\/trace$/.test(path);
   }
   if (upperMethod === 'POST') {
-    return path === 'admin/autonomy/pause' || path === 'admin/autonomy/resume' || path === 'admin/autonomy/demote' || /^operations\/runs\/[A-Za-z0-9._:-]+\/retry$/.test(path);
+    return path === 'admin/autonomy/pause' || path === 'admin/autonomy/resume' || path === 'admin/autonomy/demote' || /^operations\/runs\/[A-Za-z0-9._:-]+\/(?:retry|reconciliation)$/.test(path);
   }
   return false;
 }
