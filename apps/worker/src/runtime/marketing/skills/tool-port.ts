@@ -64,6 +64,9 @@ export function createMarketingSkillToolPort(
   const brandGuard = options.brand_guard ?? knowledgeBackedBrandGuard;
   return {
     async invoke<TInput, TOutput>(invocation: SkillToolInvocation<TInput>): Promise<TOutput> {
+      if (typeof invocation.input !== 'object' || invocation.input === null) {
+        throw new MarketingSkillToolError('VALIDATION_FAILED', 'Marketing tool invocation input must be an object');
+      }
       const { skill_id, tool_binding, input, context } = invocation;
 
       // 1. skill.mkt.analyze_market_signal -> API-002.EventIngestion

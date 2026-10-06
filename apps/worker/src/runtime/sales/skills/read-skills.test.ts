@@ -1258,5 +1258,14 @@ describe('SalesSkillServices - read, recommendation and customer skills', () => 
         context,
       }),
     ).rejects.toMatchObject({ code: 'AUTHORITATIVE_SOURCE_UNAVAILABLE' });
+
+    await expect(
+      services.tool_port.invoke({
+        skill_id: 'skill.sales.check_stock',
+        tool_binding: 'API-001.InventoryConnector',
+        input: null as any,
+        context,
+      }),
+    ).rejects.toMatchObject({ code: 'INVALID_INPUT' });
   });
 });

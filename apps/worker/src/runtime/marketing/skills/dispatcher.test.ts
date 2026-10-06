@@ -1309,5 +1309,21 @@ describe('Marketing Skill Services and Dispatcher', () => {
 
       expect(normalized).not.toHaveProperty('recipients');
     });
+
+    it('rejects null or non-object tool invocation input with VALIDATION_FAILED', async () => {
+      const services = createServices();
+      await expect(
+        services.tool_port.invoke({
+          skill_id: 'skill.mkt.dispatch_campaign',
+          tool_binding: 'API-003.CommunicationConnector',
+          input: null as any,
+          context: dummyContext,
+        }),
+      ).rejects.toMatchObject({
+        code: 'VALIDATION_FAILED',
+        message: expect.stringContaining('must be an object'),
+      });
+    });
   });
 });
+

@@ -154,6 +154,9 @@ interface CheckPriceInput {
 export function createSalesSkillToolPort(options: SalesSkillToolPortOptions): SkillToolPort {
   return {
     async invoke<TInput, TOutput>(invocation: SkillToolInvocation<TInput>): Promise<TOutput> {
+      if (typeof invocation.input !== 'object' || invocation.input === null) {
+        throw new SalesSkillToolError('INVALID_INPUT', 'tool invocation input must be an object');
+      }
       if (
         invocation.skill_id === 'skill.sales.search_product'
         && invocation.tool_binding === 'API-001.CatalogConnector'
