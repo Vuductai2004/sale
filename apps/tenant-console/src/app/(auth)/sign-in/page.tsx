@@ -40,12 +40,33 @@ function AuthPageContent() {
     }
   }
 
+  function handleFillDemo() {
+    setEmail('admin@novamart.demo');
+    setPassword('DemoAdmin@2026');
+  }
+
   return (
     <AuthLayout audience="company" demo>
-      <div className="mb-8">
+      <div className="mb-6">
         <h1 className="text-2xl font-semibold tracking-tight text-ink">{t('auth.sign_in')}</h1>
         <p className="mt-2 text-sm leading-6 text-muted">Sử dụng email và mật khẩu tài khoản của bạn.</p>
         {expired && <p role="status" className="mt-3 text-sm text-warning">{t('auth.session_expired')}</p>}
+      </div>
+
+      <div className="mb-5 p-3 rounded-lg border border-border bg-subtle text-xs">
+        <div className="flex items-center justify-between mb-1">
+          <span className="font-medium text-ink">Tài khoản Demo có sẵn:</span>
+          <button
+            type="button"
+            onClick={handleFillDemo}
+            className="text-primary hover:underline font-medium cursor-pointer"
+          >
+            Điền nhanh
+          </button>
+        </div>
+        <div className="text-muted font-mono">
+          admin@novamart.demo / DemoAdmin@2026
+        </div>
       </div>
 
       {error && (

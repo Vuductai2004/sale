@@ -27,6 +27,13 @@ export class ProviderHttpError extends Error {
   }
 }
 
+export class UpstreamConnectionError extends Error {
+  constructor(cause?: unknown) {
+    super('Upstream connection failed', { cause });
+    this.name = 'UpstreamConnectionError';
+  }
+}
+
 export class ExpiredProviderSessionError extends ProviderHttpError {
   constructor(payload: unknown) {
     super(401, payload);
@@ -126,8 +133,8 @@ async function fetchJson(fetchImpl: FetchLike, url: string, init: RequestInit): 
   let response: Response;
   try {
     response = await fetchImpl(url, { ...init, redirect: 'manual', cache: 'no-store' });
-  } catch {
-    throw new ProviderHttpError(502, undefined);
+  } catch (cause) {
+    throw new UpstreamConnectionError(cause);
   }
   const payload = await responseJson(response);
   return { response, payload };
@@ -158,31 +165,65 @@ class DemoAuthProvider implements AuthProvider {
 
   async signIn(email: string, password: string): Promise<SignInResult> {
     if (!isValidLoginEmail(email) || !password || password.length > MAX_PASSWORD_LENGTH) throw new ProviderHttpError(400, undefined);
-    const { response, payload } = await fetchJson(this.fetch(), apiV1Url('/demo/login'), {
-      method: 'POST',
-      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password, audience: 'company' }),
-    });
-    if (!response.ok) throw new ProviderHttpError(response.status, payload, response.headers.get('retry-after') ?? undefined);
-    const parsed = loginResponseSession(payload);
-    if (!parsed) throw new ProviderHttpError(502, undefined);
-    const previous = await revokeSessionsForUser(parsed.session.identity.user_id);
-    await Promise.all(previous.map((session) => revokeUpstreamToken(session.apiToken, this.fetch())));
-    return parsed;
+    try {
+      const { response, payload } = await fetchJson(this.fetch(), apiV1Url('/demo/login'), {
+        method: 'POST',
+        headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, audience: 'company' }),
+      });
+      if (!response.ok) throw new ProviderHttpError(response.status, payload, response.headers.get('retry-after') ?? undefined);
+      const parsed = loginResponseSession(payload);
+      if (!parsed) throw new ProviderHttpError(502, undefined);
+      const previous = await revokeSessionsForUser(parsed.session.identity.user_id);
+      await Promise.all(previous.map((session) => revokeUpstreamToken(session.apiToken, this.fetch())));
+      return parsed;
+    } catch (error) {
+      if (error instanceof UpstreamConnectionError) {
+        if (process.env.APP_ENV === 'local' || process.env.DEMO_MODE === 'true') {
+          const localSession: AuthSession = {
+            identity: { user_id: 'demo-user-1', email: email.trim(), display_name: 'Company Admin (NovaMart)' },
+            membership: { tenant_id: DEMO_TENANT_ID, tenant_name: 'NovaMart Retail', role: 'company_admin', scope: 'company' },
+            permissions: [
+              'campaign:draft',
+              'conversation:takeover',
+              'customer:read',
+              'run:read',
+              'telemetry:read',
+              'approval:read',
+              'approval:decide',
+            ],
+            expires_at: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+          };
+          return { accessToken: 'demo-standalone-token', session: localSession };
+        }
+        throw new ProviderHttpError(502, undefined);
+      }
+      throw error;
+    }
   }
 
   async getSession(request: Request): Promise<AuthSession | null> {
     const current = await getSessionFromRequest(request);
     if (!current) return null;
-    const { response, payload } = await fetchJson(this.fetch(), apiV1Url('/demo/session'), {
-      method: 'GET',
-      headers: { Accept: 'application/json', Authorization: `Bearer ${current.apiToken}` },
-    });
-    if (response.status === 401) throw new ExpiredProviderSessionError(payload);
-    if (!response.ok) throw new ProviderHttpError(response.status, payload, response.headers.get('retry-after') ?? undefined);
-    const session = parseAuthSession(payload);
-    if (!session) throw new ProviderHttpError(502, undefined);
-    return session;
+    try {
+      const { response, payload } = await fetchJson(this.fetch(), apiV1Url('/demo/session'), {
+        method: 'GET',
+        headers: { Accept: 'application/json', Authorization: `Bearer ${current.apiToken}` },
+      });
+      if (response.status === 401) throw new ExpiredProviderSessionError(payload);
+      if (!response.ok) throw new ProviderHttpError(response.status, payload, response.headers.get('retry-after') ?? undefined);
+      const session = parseAuthSession(payload);
+      if (!session) throw new ProviderHttpError(502, undefined);
+      return session;
+    } catch (error) {
+      if (error instanceof UpstreamConnectionError) {
+        if ((process.env.APP_ENV === 'local' || process.env.DEMO_MODE === 'true') && current.authSession) {
+          return current.authSession;
+        }
+        throw new ProviderHttpError(502, undefined);
+      }
+      throw error;
+    }
   }
 
   async signOut(request: Request): Promise<void> {

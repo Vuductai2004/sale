@@ -21,6 +21,7 @@ import {
   ProviderHttpError,
 } from '../../../../lib/auth/demo-provider';
 import { isAllowedPath, routePath } from '../../../../lib/bff-allowlist';
+import { getDemoMockResponse } from '../../../../lib/demo-mock-fallback';
 export const dynamic = 'force-dynamic';
 
 
@@ -133,6 +134,10 @@ async function proxy(request: Request, context: RouteContext): Promise<Response>
       cache: 'no-store',
     });
   } catch {
+    if (process.env.APP_ENV === 'local' || process.env.DEMO_MODE === 'true') {
+      const mock = getDemoMockResponse(path, request.method);
+      if (mock) return mock;
+    }
     return jsonResponse({ error: 'API_UNAVAILABLE' }, 502);
   }
 
