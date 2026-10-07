@@ -32,6 +32,17 @@ export async function handleOrderConnector<TOutput>(
     );
   }
 
+  if (
+    typeof input.order_identifier !== 'string' || input.order_identifier.trim().length === 0
+    || typeof input.customer_id !== 'string' || input.customer_id.trim().length === 0
+    || typeof input.verification_reference !== 'string' || input.verification_reference.trim().length === 0
+  ) {
+    throw new CareSkillToolError(
+      'VALIDATION_FAILED',
+      'order_identifier, customer_id, and verification_reference are required non-empty strings',
+    );
+  }
+
   // 1. Server-side verification FIRST (ZERO connector calls made if this fails)
   if (input.verification_status !== 'VERIFIED') {
     throw new CareSkillToolError(

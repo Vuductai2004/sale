@@ -15,6 +15,7 @@ const ALLOWED_REQUEST_HEADERS = [
   'accept',
   'authorization',
   'content-type',
+  'idempotency-key',
   'x-correlation-id',
   'x-idempotency-key',
   'x-csrf-token',

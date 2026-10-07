@@ -1091,5 +1091,43 @@ describe('SalesSkillServices - cart and order skills', () => {
       code: 'INVALID_INPUT',
     });
   });
+
+  it('rejects cart creation when input is null or non-object (B-86)', async () => {
+    const services = createServices({ cart: createCartPort() });
+    await expect(services.tool_port.invoke({
+      skill_id: 'skill.sales.create_cart',
+      tool_binding: 'API-002.CommerceCartAPI',
+      input: null as unknown as Record<string, unknown>,
+      context: {
+        run_id: 'run-null-cart',
+        tenant_id: TENANT_ID,
+        caller_agent: 'SAL-02',
+        correlation_id: CORRELATION_ID,
+        granted_authority: 'AUTH-3',
+        effect_key: 'effect-cart-null',
+      },
+    })).rejects.toMatchObject({
+      code: 'INVALID_INPUT',
+    });
+  });
+
+  it('rejects order creation when input is null or non-object (B-86)', async () => {
+    const services = createServices({ order: createOrderPort() });
+    await expect(services.tool_port.invoke({
+      skill_id: 'skill.sales.create_order',
+      tool_binding: 'API-001.OrderConnector',
+      input: null as unknown as Record<string, unknown>,
+      context: {
+        run_id: 'run-null-order',
+        tenant_id: TENANT_ID,
+        caller_agent: 'SAL-02',
+        correlation_id: CORRELATION_ID,
+        granted_authority: 'AUTH-3',
+        effect_key: 'effect-order-null',
+      },
+    })).rejects.toMatchObject({
+      code: 'INVALID_INPUT',
+    });
+  });
 });
 

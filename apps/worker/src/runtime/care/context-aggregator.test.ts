@@ -350,4 +350,39 @@ describe('CareContextAggregator', () => {
     expect(context.working_memory.turn_count).toBe(1);
     expect(historyReads).toBe(0);
   });
+
+  it('hydrates takeover when subject carries conversation_id without channel_identifier (B-88)', async () => {
+    const pausedConversation: ConversationRecord = {
+      conversation_id: '33333333-3333-4333-8333-333333333333',
+      tenant_id,
+      customer_id: null,
+      channel: 'web',
+      external_thread_id: 'thread-internal',
+      active_agent: 'CS-01',
+      state: 'paused_takeover',
+      takeover_operator_id: 'operator-1',
+      last_message_at: '2026-09-01T12:00:00Z',
+      created_at: '2026-09-01T10:00:00Z',
+    };
+
+    const aggregator = new CareContextAggregator({
+      repositories: {
+        findIdentity: async () => null,
+        getProfile: async () => null,
+        getConversation: async () => pausedConversation,
+      },
+    });
+
+    const subject: SignalSubject = {
+      session_id: 'sess-internal',
+      conversation_id: pausedConversation.conversation_id,
+      channel_type: 'web',
+    };
+
+    const context = await aggregator.hydrateContext(tenant_id, subject, correlation_id);
+
+    expect(context.working_memory.conversation_id).toBe(pausedConversation.conversation_id);
+    expect(context.working_memory.takeover_active).toBe(true);
+  });
 });
+

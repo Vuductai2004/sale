@@ -494,7 +494,7 @@ export async function admitCareTurn(input: {
     correlation_id: input.correlation_id,
     request_id: input.request_id,
     source_channel: conversation.channel,
-    event_type: input.event_type ?? DEFAULT_ADMISSION_EVENT_TYPE,
+    event_type: input.event_type ?? (input.module === 'marketing' ? MARKETING_EVENT_TYPES[0]! : DEFAULT_ADMISSION_EVENT_TYPE),
     session_id,
     channel_type: conversation.channel,
     channel_identifier: conversation.external_thread_id,

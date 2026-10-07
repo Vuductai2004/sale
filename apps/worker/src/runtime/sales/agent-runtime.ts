@@ -428,6 +428,13 @@ export class SalesAgentRuntime implements IAgentRuntime {
     const cached = this.lexiconByRun.get(key);
     if (cached) return cached;
 
+    if (this.lexiconByRun.size >= 2000) {
+      const oldest = this.lexiconByRun.keys().next().value;
+      if (oldest !== undefined) {
+        this.lexiconByRun.delete(oldest);
+      }
+    }
+
     const resolution = (async () => {
       if (!this.lexicon) {
         return { lexicon: BUILTIN_SALES_LEXICON, metadata: { lexicon_source: 'builtin' as const } };

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ApiError } from '@agentos/ui-foundation';
 import { AdvancedDetails, Drawer, EmptyState, LoadingState, StatusBadge } from '@agentos/ui-foundation/react';
@@ -122,6 +122,9 @@ export function ConversationWorkspace({ initialConversationId = '' }: Conversati
   const [notice, setNotice] = useState<string | null>(null);
   const [summaryOpen, setSummaryOpen] = useState(false);
 
+  const leasesRef = useRef(leases);
+  leasesRef.current = leases;
+
   const selected = useMemo(() => conversations.find((item) => item.id === selectedId) ?? (selectedId ? {
     id: selectedId,
     customerId: null,
@@ -134,8 +137,11 @@ export function ConversationWorkspace({ initialConversationId = '' }: Conversati
   const currentLease = selectedId ? leases[selectedId] ?? null : null;
   const holdsLease = Boolean(currentLease && currentLease.operatorId === session?.identity.user_id && Date.parse(currentLease.expiresAt) > Date.now());
 
-  const loadConversations = useCallback(async (append = false) => {
-    if (append) setLoadingMore(true); else setLoading(true);
+  const loadConversations = useCallback(async (options: { append?: boolean; silent?: boolean } = {}) => {
+    const append = options.append ?? false;
+    const silent = options.silent ?? false;
+    if (append) setLoadingMore(true);
+    else if (!silent) setLoading(true);
     setError(null);
     try {
       const payload = await tenantConsoleClient.getConversations({ limit: 50, ...(append && nextCursor ? { cursor: nextCursor } : {}) });
@@ -146,8 +152,8 @@ export function ConversationWorkspace({ initialConversationId = '' }: Conversati
     } catch (reasonValue: unknown) {
       setError(apiError(reasonValue, 'Không thể tải danh sách hội thoại.'));
     } finally {
-      setLoading(false);
-      setLoadingMore(false);
+      if (append) setLoadingMore(false);
+      else if (!silent) setLoading(false);
     }
   }, [nextCursor, selectedId]);
 
@@ -171,7 +177,12 @@ export function ConversationWorkspace({ initialConversationId = '' }: Conversati
       const operatorId = text(leaseSource.operator_id);
       const expiresAt = text(leaseSource.lease_expires_at);
       if (operatorId && expiresAt && Date.parse(expiresAt) > Date.now()) {
-        setLeases((prev) => ({ ...prev, [id]: { operatorId, expiresAt } }));
+        setLeases((prev) => {
+          if (prev[id]?.operatorId === operatorId && prev[id]?.expiresAt === expiresAt) {
+            return prev;
+          }
+          return { ...prev, [id]: { operatorId, expiresAt } };
+        });
       } else {
         setLeases((prev) => {
           if (!prev[id]) return prev;
@@ -205,7 +216,7 @@ export function ConversationWorkspace({ initialConversationId = '' }: Conversati
     if (!selectedId) return undefined;
     const interval = window.setInterval(() => {
       void loadConversation(selectedId);
-      void loadConversations();
+      void loadConversations({ silent: true });
     }, 4000);
     return () => window.clearInterval(interval);
   }, [loadConversation, loadConversations, selectedId]);
@@ -214,7 +225,7 @@ export function ConversationWorkspace({ initialConversationId = '' }: Conversati
     const currentUserId = session?.identity.user_id;
     if (!currentUserId) return undefined;
     const timer = window.setInterval(() => {
-      const activeEntries = Object.entries(leases).filter(
+      const activeEntries = Object.entries(leasesRef.current).filter(
         ([_, l]) => l.operatorId === currentUserId && Date.parse(l.expiresAt) > Date.now()
       );
       for (const [convId] of activeEntries) {
@@ -239,7 +250,7 @@ export function ConversationWorkspace({ initialConversationId = '' }: Conversati
       }
     }, 30_000);
     return () => window.clearInterval(timer);
-  }, [leases, selectedId, session?.identity.user_id]);
+  }, [selectedId, session?.identity.user_id]);
 
   async function takeOver(): Promise<void> {
     if (!selectedId || !reason.trim()) return;
@@ -312,7 +323,7 @@ export function ConversationWorkspace({ initialConversationId = '' }: Conversati
       {notice ? <p role="status" className="rounded-md border border-success bg-surface p-3 text-sm text-success">{notice}</p> : null}
       <div className="grid gap-4 md:grid-cols-[16rem_minmax(0,1fr)] xl:grid-cols-[16rem_minmax(0,1fr)_18rem]">
         <aside className="ui-section-card overflow-hidden" aria-label="Danh sách hội thoại">
-          <div className="flex items-center justify-between border-b border-line p-3"><h2 className="font-semibold">Danh sách</h2>{nextCursor ? <button type="button" className="text-xs text-primary" onClick={() => void loadConversations(true)} disabled={loadingMore}>{loadingMore ? 'Đang tải…' : 'Xem thêm'}</button> : null}</div>
+          <div className="flex items-center justify-between border-b border-line p-3"><h2 className="font-semibold">Danh sách</h2>{nextCursor ? <button type="button" className="text-xs text-primary" onClick={() => void loadConversations({ append: true })} disabled={loadingMore}>{loadingMore ? 'Đang tải…' : 'Xem thêm'}</button> : null}</div>
           {conversations.length === 0 ? <EmptyState title="Chưa có dữ liệu" /> : <ul className="max-h-[36rem] divide-y divide-line overflow-auto">{conversations.map((item) => <li key={item.id}><button type="button" className={`w-full p-3 text-left hover:bg-canvas ${selectedId === item.id ? 'bg-canvas' : ''}`} onClick={() => { setSelectedId(item.id); router.push(`/conversations/${encodeURIComponent(item.id)}`); }}><div className="flex items-center justify-between gap-2"><span className="truncate font-medium">{item.customerName ?? 'Khách hàng'}</span><span className="shrink-0 text-xs text-muted">{item.owner === 'HUMAN' ? 'Nhân viên' : 'AI'}</span></div><p className="mt-1 truncate text-xs text-muted">{item.channel ?? 'Hội thoại'} · {formatTime(item.lastMessageAt)}</p></button></li>)}</ul>}
         </aside>
 

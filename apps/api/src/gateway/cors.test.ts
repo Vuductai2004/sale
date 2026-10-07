@@ -45,6 +45,8 @@ describe('browser origin policy', () => {
     expect(response.headers['access-control-allow-origin']).toBe(ORIGIN);
     expect(response.headers['access-control-allow-methods']).toContain('POST');
     expect(response.headers['access-control-allow-headers']).toContain('authorization');
+    expect(response.headers['access-control-allow-headers']).toContain('idempotency-key');
+    expect(response.headers['access-control-allow-headers']).toContain('x-idempotency-key');
     expect(response.headers['access-control-max-age']).toBe('600');
 
     await app.close();

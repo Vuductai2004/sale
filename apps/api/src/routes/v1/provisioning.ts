@@ -102,7 +102,8 @@ export function registerProvisioningRoutes(
         && bodyRecord['idempotency_key'].trim().length > 0
         ? bodyRecord['idempotency_key']
         : undefined;
-      const headerKey = stringHeader(request.headers['idempotency-key']);
+      const headerKey = stringHeader(request.headers['idempotency-key'])
+        ?? stringHeader(request.headers['x-idempotency-key']);
       const idempotency_key = bodyKey ?? headerKey;
       if (idempotency_key === undefined) {
         fail('VALIDATION_FAILED', 'an Idempotency-Key header or idempotency_key body field is required');

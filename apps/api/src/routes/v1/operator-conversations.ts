@@ -89,8 +89,13 @@ function requiredMessage(body: unknown): string {
  * returns the message the first one produced instead of appending a duplicate; the key carries no
  * authority and is never derived from the message text.
  */
-function optionalIdempotencyKey(body: unknown): string | undefined {
-  const value = (body as Record<string, unknown>)['idempotency_key'];
+function optionalIdempotencyKey(body: unknown, headers?: FastifyRequest['headers']): string | undefined {
+  const bodyRecord = typeof body === 'object' && body !== null && !Array.isArray(body)
+    ? body as Record<string, unknown>
+    : undefined;
+  const bodyValue = bodyRecord?.['idempotency_key'];
+  const headerValue = headers ? (headers['idempotency-key'] ?? headers['x-idempotency-key']) : undefined;
+  const value = bodyValue !== undefined ? bodyValue : headerValue;
   if (value === undefined) return undefined;
   if (typeof value !== 'string' || value.trim().length === 0 || value.length > IDEMPOTENCY_KEY_MAX_LENGTH) {
     fail('VALIDATION_FAILED', `idempotency_key must be a non-empty string of at most ${IDEMPOTENCY_KEY_MAX_LENGTH} characters`);
@@ -246,7 +251,7 @@ export function registerOperatorConversationRoutes(
         const operator_id = requireOperatorId(principal);
         const conversation_id = request.params.conversation_id;
         const message = requiredMessage(request.body);
-        const idempotency_key = optionalIdempotencyKey(request.body);
+        const idempotency_key = optionalIdempotencyKey(request.body, request.headers);
         const conversation = await runtime.conversations.get(principal.tenant_id, conversation_id);
         if (conversation === null) {
           fail('CONVERSATION_NOT_FOUND', 'this tenant holds no conversation with that identifier');

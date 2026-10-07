@@ -234,7 +234,7 @@ export async function evaluateReplenishmentRefusal(
   }
 
   // 2. Owner-approved replenishment policy port (SAL-05)
-  const policyPort = options?.replenishment_policy;
+  const policyPort = options?.replenishment_policy ?? options?.replenishment_policy_port;
   if (!policyPort && !options?.replenishment_policy_read) {
     return 'no owner-approved replenishment interval';
   }
@@ -338,7 +338,8 @@ export async function evaluateReplenishmentRefusal(
 
   for (const purchase of purchases) {
     if (purchase.order_id === matchedEvidence.order_id) continue;
-    if (purchase.items && !purchase.items.includes(querySku)) continue;
+    const pSkus = getEvidenceSkus(purchase);
+    if (pSkus.length > 0 && !pSkus.includes(querySku)) continue;
     const pDate = new Date(purchase.order_date);
     const pMs = pDate.getTime();
     if (!Number.isFinite(pMs)) {

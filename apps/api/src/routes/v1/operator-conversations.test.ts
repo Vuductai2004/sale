@@ -256,6 +256,21 @@ describe('operator conversation routes', () => {
       payload: { message: 'Human response', idempotency_key: '' },
     });
     expect(invalid.statusCode).toBe(400);
+
+    const withHeader = await app.inject({
+      method: 'POST',
+      url: `/conversations/${CONVERSATION_ID}/operator-messages`,
+      headers: {
+        authorization: 'Bearer operator-token',
+        'idempotency-key': 'reply-header-key',
+      },
+      payload: { message: 'Human response with header' },
+    });
+    expect(withHeader.statusCode).toBe(201);
+    expect(appendMessage).toHaveBeenCalledWith(expect.objectContaining({
+      request_id: 'operator-reply:reply-header-key',
+      content: 'Human response with header',
+    }));
   });
 
   it('requires the conversation to be paused under the authenticated operator before replying', async () => {

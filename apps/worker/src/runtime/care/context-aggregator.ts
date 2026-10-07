@@ -170,15 +170,17 @@ export class CareContextAggregator implements IContextAggregator {
     let takeover_active = false;
     let conversation_id: string | undefined;
 
-    if (subject.conversation_id && subject.channel_identifier) {
+    if (subject.conversation_id) {
       try {
         const conversation = await this.getConversationFn(tenant_id, subject.conversation_id);
+        const matchesChannel = !subject.channel_type || conversation?.channel === subject.channel_type;
+        const matchesThread = !subject.channel_identifier || conversation?.external_thread_id === subject.channel_identifier;
         if (
           conversation !== null &&
           conversation.tenant_id === tenant_id &&
           conversation.conversation_id === subject.conversation_id &&
-          conversation.channel === subject.channel_type &&
-          conversation.external_thread_id === subject.channel_identifier
+          matchesChannel &&
+          matchesThread
         ) {
           conversation_id = conversation.conversation_id;
           takeover_active = conversation.state === 'paused_takeover';

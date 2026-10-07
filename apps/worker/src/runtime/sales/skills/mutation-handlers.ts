@@ -52,6 +52,10 @@ export async function handleCreateCart(
   const { tenant_id } = invocation.context;
   const input = invocation.input;
 
+  if (typeof input !== 'object' || input === null) {
+    throw new SalesSkillToolError('INVALID_INPUT', 'Cart creation input must be an object');
+  }
+
   resolveServerEffectKey(input, invocation.context.effect_key, 'cart creation');
 
   if (input.tenant_id !== tenant_id) {
@@ -191,6 +195,10 @@ export async function handleCreateOrder(
 ): Promise<Record<string, unknown>> {
   const { tenant_id } = invocation.context;
   const input = invocation.input;
+
+  if (typeof input !== 'object' || input === null) {
+    throw new SalesSkillToolError('INVALID_INPUT', 'Order creation input must be an object');
+  }
 
   const effect_key = resolveServerEffectKey(input, invocation.context.effect_key, 'order creation');
 
@@ -395,6 +403,10 @@ export async function handleSendMessage(
 ): Promise<Record<string, unknown>> {
   const { tenant_id, correlation_id } = invocation.context;
   const input = invocation.input;
+
+  if (typeof input !== 'object' || input === null) {
+    throw new SalesSkillToolError('INVALID_INPUT', 'Message sending input must be an object');
+  }
 
   const effect_key = resolveServerEffectKey(input, invocation.context.effect_key, 'sending outbound messages');
 

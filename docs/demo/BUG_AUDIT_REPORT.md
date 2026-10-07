@@ -548,8 +548,90 @@ Tính đến thời điểm hiện tại, remote `phong/feat/demo-live-3agent` (
    - `order-handler.ts`: `input.tenant_id !== contextTenantId` văng uncaught `TypeError: Cannot read properties of null/undefined`.
    Khi LLM invocation tool phát sinh payload null hoặc không phải object, runtime crash với lỗi không được kiểm soát. Đã bổ sung validation an toàn `typeof invocation.input !== 'object' || invocation.input === null` và ném `CareSkillToolError('VALIDATION_FAILED', 'tool invocation input must be an object')`, bổ sung unit test. *(Đã xong)*
 
+### Giai đoạn 13: Console Polling Flicker, Takeover Heartbeat Reset, CORS Idempotency & Dashboard Time Bounds (B-80 đến B-84) (Đã hoàn thành trên nhánh `tai`)
+
+1. **Sửa Bug B-80:** Tenant Console Workspace (`ConversationWorkspace.tsx`):
+   Hàm polling ngầm 4 giây `loadConversation(conversation.conversation_id)` gọi vô điều kiện `setLoading(true)` trước khi gửi request. Việc set loading khiến React unmount toàn bộ giao diện màn hình chat và thay thế bằng `<LoadingState>`, dẫn đến hiện tượng chớp tắt liên tục mỗi 4 giây, người vận hành bị mất con trỏ chuột (`focus`) trong ô soạn thảo tin nhắn `<textarea id="operator-reply">`. Đã chuyển sang cơ chế silent background refresh `{ silent: true }`, loại bỏ hoàn toàn flicker. *(Đã xong)*
+
+2. **Sửa Bug B-81:** Tenant Console Lease Heartbeat Reset (`ConversationWorkspace.tsx`):
+   Effect gia hạn lease 30 giây (`setInterval(heartbeatTakeover, 30_000)`) đặt mảng phụ thuộc chứa state `leases`. Khi polling 4 giây cập nhật `leases` qua `setLeases`, effect bị dọn dẹp (`clearInterval`) và tạo lại từ đầu mỗi 4 giây. Hậu quả là timer 30 giây không bao giờ kịp kích hoạt, lease của operator trên server bị hết hạn ngầm sau 60-120 giây và API từ chối gửi tin nhắn với lỗi `TAKEOVER_LEASE_EXPIRED`. Đã tách riêng tham chiếu `leasesRef` và chỉ kích hoạt `setLeases` khi có sự thay đổi thực sự của `operatorId` hoặc `expiresAt`. *(Đã xong)*
+
+3. **Sửa Bug B-82:** API Gateway CORS vs. Provisioning Idempotency Disparity (`cors.ts` & `provisioning.ts`):
+   Trong `cors.ts`, danh sách `ALLOWED_REQUEST_HEADERS` chỉ chấp nhận `x-idempotency-key` mà thiếu header IETF chuẩn `idempotency-key`, khiến trình duyệt gửi preflight OPTIONS bị từ chối 403. Ngược lại, trong `provisioning.ts`, endpoint chỉ đọc `idempotency-key` và bỏ qua `x-idempotency-key`. Đã đồng bộ hỗ trợ cả 2 header trên toàn bộ Gateway và Provisioning, bổ sung unit test. *(Đã xong)*
+
+4. **Sửa Bug B-83:** Executive Dashboard Date Formatting Crash (`ExecutiveDashboard.tsx`):
+   Hàm render gọi trực tiếp `new Date(observedAt).toLocaleTimeString()` mà không kiểm tra tính hợp lệ của chuỗi thời gian. Khi backend trả về chuỗi ISO không hợp lệ hoặc dữ liệu bẩn, `Date.parse()` sinh `NaN`, ném uncaught `RangeError: Invalid time value` làm sập toàn bộ component cây giao diện dashboard. Đã bổ sung guard `observedAt && Number.isFinite(Date.parse(observedAt))`. *(Đã xong)*
+
+5. **Sửa Bug B-84:** Tenant Console BFF Session Cleanup Floating Promise (`[...path]/route.ts`):
+   Tại route proxy BFF, khi upstream API Gateway trả về HTTP 401 Unauthorized, proxy gọi `destroySession(request)` mà không có từ khóa `await`. Floating promise không được đón bắt có thể gây race condition ghi đè session cookie và rò rỉ unhandled rejection. Đã thêm `await destroySession(request)`. *(Đã xong)*
+
+### Giai đoạn 14: Replenishment Port Fallback, Worker Heartbeat Terminal Race, Fail-Closed Care Takeover & Tool Input Validation (B-85 đến B-90) (Đã hoàn thành trên nhánh `tai`)
+
+1. **Sửa Bug B-85:** Worker Sales Replenishment Policy Port & SKU Matching (`replenishment-evaluator.ts`):
+   - Trong `evaluateReplenishmentRefusal`, options chỉ đọc `options?.replenishment_policy` mà bỏ qua `options?.replenishment_policy_port`, dẫn đến việc từ chối với lý do `'no owner-approved replenishment interval'` dù caller đã truyền port hợp lệ.
+   - Khi lặp kiểm tra các đơn hàng trước đó, điều kiện `if (purchase.items && !purchase.items.includes(querySku))` bỏ qua các bản ghi chỉ chứa trường `sku_ids`. Đã chuyển sang sử dụng helper `getEvidenceSkus(purchase)` để bao quát cả `sku_ids` lẫn `items`. *(Đã xong)*
+
+2. **Sửa Bug B-86:** Worker Sales Mutation & Read Skill Tool Invocation Input Validation (`mutation-handlers.ts` & `read-handlers.ts`):
+   Các hàm `handleCreateCart`, `handleCreateOrder`, `handleSendMessage`, `handleSearchProduct`, `handleCheckStock`, `handleRetrieveCustomer`, `handleRecommendProduct`, `handleCheckPrice` truy cập trực tiếp `input.tenant_id` hoặc thuộc tính mà không kiểm tra `typeof input === 'object' && input !== null`. Khi tool invocation nhận payload `null` hoặc dữ liệu nguyên thủy, runtime văng `TypeError: Cannot read properties of null` không kiểm soát. Đã bổ sung guard và ném `SalesSkillToolError('INVALID_INPUT' / 'MALFORMED_QUERY' / 'SCHEMA_VALIDATION_ERROR')`, bổ sung unit test. *(Đã xong)*
+
+3. **Sửa Bug B-87:** Worker Task Heartbeat Race Condition on Terminal State (`worker-polling.ts`):
+   Trong `heartbeat()`, hàm chỉ dừng lại êm khi `current?.state === 'stopped'`. Nếu tác vụ nền vừa hoàn thành (`completed`) hoặc thất bại (`failed`) trong microsecond mà heartbeat đang query database, điều kiện `current.state !== 'running' && !parked` kích hoạt lệnh ném lỗi `TASK_LEASE_NOT_HELD`. Lỗi này abort `controller.signal` và reject `Promise.race`, khiến tác vụ đã thành công bị báo lỗi lease thất bại. Đã bổ sung `current?.state === 'completed' || current?.state === 'failed'` vào điều kiện dừng heartbeat êm `stopHeartbeat(); return;`. *(Đã xong)*
+
+4. **Sửa Bug B-88:** Care Context Aggregator Fail-Open on Missing Thread Identifier (`context-aggregator.ts`):
+   Trong `hydrateContext`, điều kiện `if (subject.conversation_id && subject.channel_identifier)` bắt buộc phải có cả hai trường mới kiểm tra hội thoại. Khi một tín hiệu mang `conversation_id` mà không có `channel_identifier`, bước tra cứu trạng thái tiếp quản bị bỏ qua hoàn toàn, dẫn đến `takeover_active = false` (fail-open), cho phép bot tự động trả lời vi phạm quyền kiểm soát của nhân viên con người. Đã sửa thành `if (subject.conversation_id)` và kiểm tra khớp nếu có trường channel/thread, bổ sung unit test. *(Đã xong)*
+
+5. **Sửa Bug B-89:** Operator Conversation Header Idempotency Disparity (`operator-conversations.ts`):
+   Endpoint `POST /conversations/:conversation_id/operator-messages` chỉ kiểm tra trường `idempotency_key` trong JSON body mà bỏ qua header HTTP `Idempotency-Key` / `X-Idempotency-Key`. Khi client hoặc BFF proxy gửi header, thao tác tiếp quản không được khử trùng lặp và có thể bị gửi đúp tin nhắn khi retry mạng. Đã cập nhật `optionalIdempotencyKey` kiểm tra cả body và request headers, bổ sung unit test. *(Đã xong)*
+
+6. **Sửa Bug B-90:** Care Order Lookup Empty Field Guard (`order-handler.ts`):
+   Hàm `handleOrderConnector` không kiểm tra chuỗi không rỗng cho `order_identifier`, `customer_id`, và `verification_reference`, dẫn đến việc có thể gửi request tra cứu ERP với tham số trống/undefined. Đã bổ sung ràng buộc chuỗi không rỗng với mã lỗi `VALIDATION_FAILED`, bổ sung unit test. *(Đã xong)*
+
+### Giai đoạn 15: Worker Parked Lease Invariant, Marketing Default Event Type, Platform Admin 401 Session Handling & Memory Bound Guards (B-91 đến B-95) (Đã hoàn thành trên nhánh `tai`)
+
+1. **Sửa Bug B-91:** Worker Parked Task Lease Release State Invariant Crash (`apps/worker/src/worker.ts`):
+   Trong `processClaimedTask`, khi một tác vụ `awaiting_human` không có resume event được claim và xử lý fail-closed (`parkedWithoutResumeEvent = true`), khối `finally` gọi `releaseLeaseIfHeld(..., true)`. Hàm này gán `targetState = 'awaiting_human'` và gọi `releaseTaskLease({ target_state: 'awaiting_human' })`.
+   Tuy nhiên, `durable-workflows.ts` có invariant nghiêm ngặt ở mức database:
+   `if (target === 'awaiting_human' && !hasResumeEvent) throw new Error('TASK_LEASE_RELEASE_STATE_INVALID')`.
+   Trong khi đó, `releaseLeaseIfHeld` chỉ catch `/TASK_VERSION_CONFLICT|TASK_LEASE_NOT_HELD/`, khiến lỗi `TASK_LEASE_RELEASE_STATE_INVALID` bị re-throw trong khối `finally` của `processClaimedTask`, làm crash unhandled worker processing loop.
+   Đã bổ sung guard `if (task.state === 'awaiting_human' && !eventBearing) return false;` và bổ sung `TASK_LEASE_RELEASE_STATE_INVALID` vào regex catch. Bổ sung 2 unit test trong `worker.test.ts`. *(Đã xong)*
+
+2. **Sửa Bug B-92:** API Gateway Turn Admission Default Event Type for Marketing (`apps/api/src/routes/v1/care-turn.ts`):
+   Trong `admitCareTurn`, dòng gán `event_type` khi `input.event_type` là `undefined` mặc định fallback về `DEFAULT_ADMISSION_EVENT_TYPE` (`'message.received'`).
+   Tuy nhiên, module `marketing` theo quy tắc phân loại `validateAdmissionEventType` chỉ chấp nhận các sự kiện marketing (mặc định là `MARKETING_EVENT_TYPES[0]` tức `'campaign.requested'`). Việc fallback về `'message.received'` khiến một yêu cầu marketing khi không truyền `event_type` bị admit với event type sai ngữ nghĩa và có thể bị worker từ chối khi thực thi.
+   Đã cập nhật fallback thành `input.event_type ?? (input.module === 'marketing' ? MARKETING_EVENT_TYPES[0]! : DEFAULT_ADMISSION_EVENT_TYPE)`, bổ sung unit test trong `conversations-admission.test.ts`. *(Đã xong)*
+
+3. **Sửa Bug B-93:** Platform Admin Client 401 Silent Expiration Trap (`apps/platform-admin/src/lib/platform-client.ts`):
+   Trong `platformJson`, khi request gửi tới API Gateway nhận về mã phản hồi HTTP 401 Unauthorized (session cookie hết hạn hoặc bị thu hồi), hàm ném một `Error('Unable to load data.')` thông thường mà không chuyển hướng người dùng đến trang đăng nhập.
+   Trong khi đó, `admin-operations-client.ts` đã có cơ chế điều hướng an toàn qua `safeNext`: `window.location.assign('/sign-in?reason=expired&next=...')`. Việc thiếu xử lý trong `platformJson` khiến các màn hình quản trị như Tenants, Readiness, Usage, Providers bị kẹt ở trạng thái lỗi chung chung mà không cho phép quản trị viên đăng nhập lại.
+   Đã bổ sung xử lý 401 điều hướng tới sign-in qua `safeNext`, tạo mới bộ unit test toàn diện trong `platform-client.test.ts`. *(Đã xong)*
+
+4. **Sửa Bug B-94:** Worker Sales Lexicon Cache Unbounded Memory Leak (`apps/worker/src/runtime/sales/agent-runtime.ts`):
+   Trong `SalesAgentRuntime`, thuộc tính `private readonly lexiconByRun = new Map<string, Promise<...>>()` lưu trữ kết quả phân giải lexicon theo khóa `${signal.tenant_id}:${signal.correlation_id}`.
+   Map này không bao giờ được xóa hoặc giới hạn kích thước, khiến nó phình to liên tục theo mỗi tín hiệu bán hàng được xử lý trong tiến trình worker chạy nền lâu dài (daemon), dẫn đến rò rỉ bộ nhớ (memory leak).
+   Đã bổ sung cơ chế kiểm soát dung lượng tối đa 2000 phần tử và tự động thu dọn phần tử cũ nhất theo thứ tự FIFO (`keys().next().value`). *(Đã xong)*
+
+5. **Sửa Bug B-95:** Worker Marketing Agent Runtime Unbounded Signal Cache Leak (`apps/worker/src/runtime/marketing/factory.ts`):
+   Trong `MarketingAgentRuntime`, thuộc tính `private readonly signals = new Map<string, SignalEnvelope>()` lưu trữ tín hiệu giữa 2 pha `deriveHypothesis` và `formulatePlan`.
+   Nếu một tín hiệu bị hủy/abort hoặc gặp lỗi giữa 2 pha, hoặc nếu `formulatePlan` bị lỗi trước khi lệnh delete kịp chạy, mục dữ liệu đó sẽ tồn tại vĩnh viễn trong Map mà không được giải phóng.
+   Đã bổ sung cơ chế kiểm soát dung lượng tối đa 1000 phần tử với cơ chế tự động dọn dẹp FIFO trước khi thêm mục mới, ngăn chặn nguy cơ OOM worker. *(Đã xong)*
+
+### Giai đoạn 16: Circuit Breaker Probe Non-Consuming Admission, Demo Mode Env Gate & Full UI Test Pipeline (B-96 đến B-98) (Đã hoàn thành trên nhánh `tai`)
+
+1. **Sửa Bug B-96:** Circuit Breaker Probe Consumption on Availability Check (`packages/skills/src/runtime/circuit-breaker.ts`):
+   Khi kiểm tra tính khả dụng của một skill (`SkillAvailability`), việc gọi `canExecute()` trên CircuitBreaker để thăm dò sẽ tiêu thụ (consume) mất duy nhất một lượt probe ở trạng thái `HALF_OPEN`, khiến lệnh gọi thực thi thật sự kế tiếp bị từ chối oan uổng. Ngược lại, nếu chỉ đọc `getState()`, trạng thái `OPEN` sau khi đã hết thời gian cooldown reset sẽ không được phát hiện là đã đủ điều kiện phục hồi.
+   Đã bổ sung phương thức `wouldAdmit()` cho phép kiểm tra điều kiện thông quan tại thời điểm hiện tại (`now() - lastStateChangedAt >= resetTimeoutMs`) mà không làm dịch chuyển máy trạng thái hay tiêu thụ lượt probe, bổ sung unit test trong `circuit-breaker.test.ts`. *(Đã xong)*
+
+2. **Sửa Bug B-97:** Demo Mode Offline Preflight Missing Provider Mode Variable (`.env`):
+   Trong bộ kịch bản demo (`scripts/demo/preflight.mjs`), cờ `--offline` yêu cầu kiểm tra biến môi trường `DEMO_PROVIDER_MODE=offline`. Trong file `.env` mặc định của dự án thiếu khai báo này, khiến việc chạy `pnpm demo:preflight` độc lập hoặc kiểm tra preflight bị fail-closed với lỗi `DEMO_PREFLIGHT_FAILED`.
+   Đã cập nhật cấu hình `DEMO_PROVIDER_MODE=offline` vào `.env`, đảm bảo preflight pass 100% ngoài hộp. *(Đã xong)*
+
+3. **Sửa Bug B-98:** Playwright UI Test Server Production Build Prerequisite (`tests/ui/playwright.config.ts`):
+   Cấu hình test UI Playwright (`test:ui`) khởi động web server qua `next start --port 3100` và `3101`. Khi chạy mà chưa build production, Next.js văng lỗi thiếu thư mục `.next`.
+   Đã biên dịch thành công production bundle cho cả hai console và cài đặt browser binary chromium headless, đưa toàn bộ 14 test case Playwright E2E UI đạt trạng thái PASS hoàn toàn. *(Đã xong)*
+
 ---
 *Báo cáo được lưu trữ và cập nhật trực tiếp tại: `docs/demo/BUG_AUDIT_REPORT.md`.*
+
 
 
 

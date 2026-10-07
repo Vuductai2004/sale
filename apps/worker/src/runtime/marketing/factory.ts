@@ -504,6 +504,12 @@ class MarketingAgentRuntime implements IAgentRuntime {
 
   async deriveHypothesis(signal: SignalEnvelope, _context: HydratedContext): Promise<HypothesisRecord> {
     const id = isCampaignRequest(signal) ? 'campaign.requested' : skillId(signal);
+    if (this.signals.size >= 1000) {
+      const oldest = this.signals.keys().next().value;
+      if (oldest !== undefined) {
+        this.signals.delete(oldest);
+      }
+    }
     this.signals.set(MarketingAgentRuntime.signalKey(signal.tenant_id, signal.signal_id), signal);
     return {
       classification: 'HYPOTHESIS',

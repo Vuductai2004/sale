@@ -154,7 +154,7 @@ export function createWorkerPoller(options: WorkerPollingOptions): WorkerPollerH
       if (settled || controller.signal.aborted) return;
       try {
         const current = await options.workflowRepository.getTask(tenant_id, taskRecord.run_id);
-        if (current?.state === 'stopped') {
+        if (current?.state === 'stopped' || current?.state === 'completed' || current?.state === 'failed') {
           stopHeartbeat();
           return;
         }

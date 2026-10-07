@@ -116,7 +116,9 @@ export async function handleSearchProduct(
   const input = invocation.input;
 
   if (
-    input.tenant_id !== tenant_id
+    typeof input !== 'object'
+    || input === null
+    || input.tenant_id !== tenant_id
     || typeof input.query !== 'string'
     || input.query.trim().length === 0
     || INJECTION_MARKERS.test(input.query)
@@ -254,7 +256,9 @@ export async function handleCheckStock(
   const { tenant_id } = invocation.context;
   const input = invocation.input;
   if (
-    input.tenant_id !== tenant_id
+    typeof input !== 'object'
+    || input === null
+    || input.tenant_id !== tenant_id
     || typeof input.sku_id !== 'string'
     || input.sku_id.trim().length === 0
   ) {
@@ -281,7 +285,11 @@ export async function handleRetrieveCustomer(
 ): Promise<Record<string, unknown>> {
   const { tenant_id, correlation_id } = invocation.context;
   const input = invocation.input;
-  if (input.tenant_id !== tenant_id) {
+  if (
+    typeof input !== 'object'
+    || input === null
+    || input.tenant_id !== tenant_id
+  ) {
     throw new SalesSkillToolError(
       'IDENTITY_UNVERIFIED',
       'Customer request tenant does not match the server-bound tenant',
@@ -336,6 +344,12 @@ export async function handleRecommendProduct(
 ): Promise<Record<string, unknown>> {
   const { tenant_id, correlation_id } = invocation.context;
   const input = invocation.input;
+  if (typeof input !== 'object' || input === null) {
+    throw new SalesSkillToolError(
+      'SCHEMA_VALIDATION_ERROR',
+      'Recommendation input must be an object',
+    );
+  }
   const recommendation_type = input.recommendation_type ?? 'CROSS_SELL';
 
   if (
@@ -551,7 +565,7 @@ export async function handleCheckPrice(
   const { tenant_id, correlation_id } = invocation.context;
   const input = invocation.input;
 
-  if (input.tenant_id !== tenant_id) {
+  if (typeof input !== 'object' || input === null || input.tenant_id !== tenant_id) {
     throw new SalesSkillToolError(
       'IDENTITY_UNVERIFIED',
       'Check price request tenant does not match the server-bound tenant',

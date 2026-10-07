@@ -1,4 +1,5 @@
 'use client';
+import { safeNext } from '@agentos/ui-foundation/auth';
 import type {
   PlatformProvider,
   PlatformProvidersResponse,
@@ -29,6 +30,10 @@ export async function platformJson<T>(path: string, init?: RequestInit): Promise
   let payload: unknown = null;
   try { payload = await response.json(); } catch { /* malformed/non-JSON errors are handled below */ }
   if (!response.ok) {
+    if (response.status === 401 && typeof window !== 'undefined' && window.location.pathname !== '/sign-in') {
+      const next = safeNext(`${window.location.pathname}${window.location.search}`);
+      window.location.assign(`/sign-in?reason=expired&next=${encodeURIComponent(next)}`);
+    }
     const message = typeof payload === 'object' && payload !== null && 'message' in payload && typeof payload.message === 'string'
       ? payload.message : 'Unable to load data.';
     throw new Error(message);

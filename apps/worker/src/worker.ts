@@ -235,6 +235,9 @@ export async function releaseLeaseIfHeld(
   if (task.state !== 'running' && !(eventBearing && parked) && !(releaseParkedWithoutEvent && parked)) {
     return false;
   }
+  if (task.state === 'awaiting_human' && !eventBearing) {
+    return false;
+  }
   const targetState = task.state === 'awaiting_human'
     ? 'awaiting_human'
     : task.state === 'waiting'
@@ -250,7 +253,7 @@ export async function releaseLeaseIfHeld(
     });
     return true;
   } catch (error) {
-    if (error instanceof Error && /TASK_VERSION_CONFLICT|TASK_LEASE_NOT_HELD/.test(error.message)) {
+    if (error instanceof Error && /TASK_VERSION_CONFLICT|TASK_LEASE_NOT_HELD|TASK_LEASE_RELEASE_STATE_INVALID/.test(error.message)) {
       return false;
     }
     throw error;

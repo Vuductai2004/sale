@@ -206,5 +206,23 @@ describe('handleOrderConnector ERP status mapping', () => {
       code: 'VALIDATION_FAILED',
     });
   });
+
+  it('rejects an invocation where order_identifier or customer_id is empty with VALIDATION_FAILED (B-90)', async () => {
+    const emptyOrderInvocation = {
+      ...invocation('SHIPPED'),
+      input: {
+        tenant_id: TENANT_ID,
+        order_identifier: '   ',
+        customer_id: 'cust-1',
+        verification_reference: 'ident-1',
+        verification_status: 'VERIFIED',
+      },
+    };
+    await expect(
+      handleOrderConnector(emptyOrderInvocation as unknown as SkillToolInvocation<unknown>, erpRead('SHIPPED'), async () => IDENTITY),
+    ).rejects.toMatchObject({
+      code: 'VALIDATION_FAILED',
+    });
+  });
 });
 

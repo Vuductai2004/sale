@@ -143,7 +143,7 @@ async function proxy(request: Request, context: RouteContext): Promise<Response>
 
   if (upstream.status === 401) {
     if (!path.startsWith('storefront/')) {
-      destroySession(request);
+      await destroySession(request);
       const response = unauthorizedResponse('expired');
       appendClearedCookies(response, request);
       return response;

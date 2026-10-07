@@ -146,4 +146,27 @@ describe('POST /provisioning/tenants', () => {
     }
   });
 
+  it('accepts x-idempotency-key header when idempotency-key header is absent', async () => {
+    const { app, createShell } = buildHarness();
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url: '/provisioning/tenants',
+        headers: {
+          authorization: `Bearer ${PLATFORM_TOKEN}`,
+          'x-idempotency-key': 'platform-x-key',
+        },
+        payload: { display_name: 'Provisioned with x-key' },
+      });
+
+      expect(response.statusCode).toBe(201);
+      expect(createShell).toHaveBeenCalledWith({
+        display_name: 'Provisioned with x-key',
+        idempotency_key: 'platform-x-key',
+      });
+    } finally {
+      await app.close();
+    }
+  });
+
 });

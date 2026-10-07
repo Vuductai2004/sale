@@ -884,5 +884,36 @@ describe('POST /conversations/:conversation_id/messages shared Care admission', 
 
     await app.close();
   });
+
+  it('defaults event_type to campaign.requested when marketing module admits without explicit event_type', async () => {
+    const originalModules = process.env.ENABLED_AGENT_MODULES;
+    process.env.ENABLED_AGENT_MODULES = 'support,marketing';
+    const { app, start } = buildHarness();
+    const url = `/conversations/${CONVERSATION_ID}/messages`;
+    const headers = { authorization: `Bearer ${SESSION_TOKEN}` };
+
+    try {
+      const response = await app.inject({
+        method: 'POST',
+        url,
+        headers,
+        payload: {
+          message: 'Run spring campaign',
+          idempotency_key: 'mkt-default-event-type-test',
+          module: 'marketing',
+        },
+      });
+      expect(response.statusCode).toBe(202);
+      expect(start).toHaveBeenCalledTimes(1);
+      expect(start.mock.calls[0]?.[0]).toMatchObject({
+        request_id: 'mkt-default-event-type-test',
+        event_type: 'campaign.requested',
+      });
+    } finally {
+      if (originalModules !== undefined) process.env.ENABLED_AGENT_MODULES = originalModules;
+      else delete process.env.ENABLED_AGENT_MODULES;
+      await app.close();
+    }
+  });
 });
 

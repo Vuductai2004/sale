@@ -7,7 +7,7 @@ import {
 import type { DurableTaskRecord, DurableWorkflowRepository } from '@agentos/database';
 import { RunStageEventsRepository } from '@agentos/database';
 
-import { processClaimedTask, startWorker } from './worker.js';
+import { processClaimedTask, releaseLeaseIfHeld, startWorker } from './worker.js';
 import { DurableRunStageRecorder } from './runtime/shared/stage-recorder.js';
 import { createExecutionLeaseAssertion } from './runtime/execution-lease.js';
 import { createWorkerPoller } from './worker-polling.js';
@@ -1409,5 +1409,52 @@ describe('startWorker', () => {
     expect(assertExecutionLease).toHaveBeenCalled();
   });
 
+  describe('releaseLeaseIfHeld', () => {
+    it('returns false early when task is awaiting_human without resume event', async () => {
+      const getTask = vi.fn().mockResolvedValue({
+        tenant_id: 't-1',
+        run_id: 'run-1',
+        lease_owner: 'worker-1',
+        state: 'awaiting_human',
+        task_version: 2,
+        state_payload: {},
+      });
+      const releaseTaskLease = vi.fn();
+
+      const result = await releaseLeaseIfHeld(
+        { getTask, releaseTaskLease },
+        't-1',
+        'run-1',
+        'worker-1',
+        true,
+      );
+
+      expect(result).toBe(false);
+      expect(releaseTaskLease).not.toHaveBeenCalled();
+    });
+
+    it('safely catches TASK_LEASE_RELEASE_STATE_INVALID and returns false without rethrowing', async () => {
+      const getTask = vi.fn().mockResolvedValue({
+        tenant_id: 't-1',
+        run_id: 'run-1',
+        lease_owner: 'worker-1',
+        state: 'waiting',
+        task_version: 2,
+        state_payload: {},
+      });
+      const releaseTaskLease = vi.fn().mockRejectedValue(new Error('TASK_LEASE_RELEASE_STATE_INVALID'));
+
+      const result = await releaseLeaseIfHeld(
+        { getTask, releaseTaskLease },
+        't-1',
+        'run-1',
+        'worker-1',
+        true,
+      );
+
+      expect(result).toBe(false);
+      expect(releaseTaskLease).toHaveBeenCalled();
+    });
+  });
 
 });
