@@ -96,6 +96,20 @@ describe('salesRequirementsFor', () => {
       use_case: 'office',
       budget: { amount: 500_000, currency: 'VND' },
     });
+    expect(salesRequirementsFor('laptop tầm 20 triệu cho đồ họa')).toEqual({
+      category: 'laptops',
+      use_case: 'do hoa',
+      budget: { amount: 20_000_000, currency: 'VND' },
+    });
+    expect(salesRequirementsFor('laptop khoảng 15tr cho văn phòng')).toEqual({
+      category: 'laptops',
+      use_case: 'van phong',
+      budget: { amount: 15_000_000, currency: 'VND' },
+    });
+    expect(salesRequirementsFor('laptop < 20 triệu')).toEqual({
+      category: 'laptops',
+      budget: { amount: 20_000_000, currency: 'VND' },
+    });
   });
   it('keeps direct inventory and price questions out of advisor clarification', () => {
     expect(shouldUseSalesAdvisor('Is SKU-LOCAL-1 in stock?', salesRequirementsFor('Is SKU-LOCAL-1 in stock?'))).toBe(false);

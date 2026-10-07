@@ -109,4 +109,24 @@ describe('createMarketingAudienceReader', () => {
     ).rejects.toThrow('campaign channel is required');
     expect(calls).toEqual([]);
   });
+
+  it('refuses invalid or missing rfm_criteria without touching the database', async () => {
+    const { readAudience, calls } = readerReturning([]);
+
+    await expect(
+      readAudience(
+        { tenant_id: TENANT, rfm_criteria: 'INVALID_COHORT' as any, min_days_inactive: 30, channel: 'EMAIL' },
+        context(),
+      ),
+    ).rejects.toThrow('rfm_criteria is required and must be a valid RFM segment');
+
+    await expect(
+      readAudience(
+        { tenant_id: TENANT, rfm_criteria: '' as any, min_days_inactive: 30, channel: 'EMAIL' },
+        context(),
+      ),
+    ).rejects.toThrow('rfm_criteria is required and must be a valid RFM segment');
+
+    expect(calls).toEqual([]);
+  });
 });

@@ -51,11 +51,11 @@ function resolveTenantIds(
 ): readonly string[] {
   const configured = raw ?? env.WORKER_TENANT_IDS;
   const ids = typeof configured === 'string'
-    ? configured.split(',').map((id) => id.trim()).filter(Boolean)
-    : configured === undefined
-      ? []
-      : [...configured];
-  return Object.freeze([...new Set(ids)]);
+    ? configured.split(',')
+    : Array.isArray(configured)
+      ? configured
+      : [];
+  return Object.freeze([...new Set(ids.map((id) => String(id).trim()).filter(Boolean))]);
 }
 
 /**

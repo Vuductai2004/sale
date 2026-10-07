@@ -13,6 +13,14 @@ import type { InputMktSegmentAudience, OutputMktSegmentAudience } from './skills
 
 const MARKETING_CONSENT_TYPE = 'marketing_messaging';
 export const DEFAULT_MARKETING_AUDIENCE_LIMIT = 100;
+const VALID_RFM_CRITERIA = new Set<string>([
+  'CHAMPIONS',
+  'LOYAL',
+  'POTENTIAL_LOYALIST',
+  'AT_RISK',
+  'HIBERNATING',
+]);
+
 const MARKETING_CHANNELS: Readonly<Record<NonNullable<InputMktSegmentAudience['channel']>, string>> = {
   LINE: 'line',
   WHATSAPP: 'whatsapp',
@@ -60,6 +68,10 @@ export function createMarketingAudienceReader(options: MarketingAudienceReaderOp
       throw new Error('TENANT_CONTEXT_MISMATCH: audience input tenant does not match the execution context');
     }
     assertTenantContext(tenant_id);
+
+    if (!input.rfm_criteria || !VALID_RFM_CRITERIA.has(input.rfm_criteria)) {
+      throw new Error('INVALID_SEGMENT_CRITERIA: rfm_criteria is required and must be a valid RFM segment');
+    }
 
     const minDaysInactive = input.min_days_inactive;
     if (!Number.isSafeInteger(minDaysInactive) || minDaysInactive < 0) {

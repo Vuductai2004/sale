@@ -96,4 +96,14 @@ describe('createApprovalExpirySweeper', () => {
     await stopPromise;
     expect(sweeper.isRunning).toBe(false);
   });
+
+  it('normalizes array tenant IDs by trimming whitespace and filtering empty strings', () => {
+    const repository = { expireOverdueApprovals: vi.fn().mockResolvedValue([]) };
+    const sweeper = createApprovalExpirySweeper({
+      tenantIds: ['  tenant-a  ', '', 'tenant-b', '  ', 'tenant-a'],
+      repository,
+      autoStart: false,
+    });
+    expect(sweeper.tenantIds).toEqual(['tenant-a', 'tenant-b']);
+  });
 });

@@ -43,6 +43,7 @@ export class SalesAdvisorExecutionState {
     this.runs.set(key, {
       requirements,
       stock: current?.stock ?? new Map<string, number>(),
+      candidate_sku: current?.candidate_sku,
     });
     this.prune();
   }
@@ -111,7 +112,7 @@ export function createSalesErpPriceFloorPort(erp_read: ErpReadPort | null): Sale
       if (!isRecord(value) || result.tenant_id !== query.tenant_id) {
         return { ok: false, owner_approved: false, reason: 'API-001 price floor response is not tenant-scoped' };
       }
-      const sku = stringValue(value.sku_id);
+      const sku = stringValue(value.sku_id) ?? stringValue(value.sku);
       const currency = stringValue(value.currency);
       const floor_source = stringValue(value.floor_source) ?? stringValue(value.floor_price_source);
       const list_price = numberValue(value.list_price) ?? numberValue(value.original_list_price);

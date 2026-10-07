@@ -630,6 +630,28 @@ Tính đến thời điểm hiện tại, remote `phong/feat/demo-live-3agent` (
    Đã biên dịch thành công production bundle cho cả hai console và cài đặt browser binary chromium headless, đưa toàn bộ 14 test case Playwright E2E UI đạt trạng thái PASS hoàn toàn. *(Đã xong)*
 
 ---
+
+### GIAI ĐOẠN 17: TIẾP TỤC QUÉT VÀ TRIỆT TIÊU TOÀN DIỆN CÁC BUG EDGE-CASE (B-99 ĐẾN B-102)
+
+1. **Sửa Bug B-99:** Tenant IDs Normalization trong Approval Expiry Sweeper (`apps/worker/src/approval-expiry-sweeper.ts`):
+   - **Hiện tượng:** Khi `options.tenantIds` được truyền dưới dạng mảng có chứa chuỗi rỗng hoặc có khoảng trắng đầu/cuối (ví dụ `[' tenant-a ', '']`), hàm `resolveTenantIds` giữ nguyên các phần tử chưa chuẩn hóa. Khi sweep các approval quá hạn qua hàm `expireOverdueApprovals(tenantId)`, câu lệnh truy vấn PostgreSQL bị crash với lỗi cú pháp UUID không hợp lệ.
+   - **Khắc phục:** Chuẩn hóa mảng tenant ID bằng `.map((id) => String(id).trim()).filter(Boolean)`. Bổ sung unit test kiểm chứng trong `apps/worker/src/approval-expiry-sweeper.test.ts`. *(Đã xong - 4/4 test pass)*
+
+2. **Sửa Bug B-100:** Nhận diện giới từ ngân sách hội thoại tiếng Việt và cô lập Use-Case Lookahead (`apps/api/src/routes/v1/turn-classifier.ts`):
+   - **Hiện tượng:** Trong thương mại điện tử tiếng Việt, khách hàng thường nói ngân sách theo kiểu *"tầm 20 triệu"*, *"khoảng 15tr"*, *"mức 20tr"*, *"giá 20 triệu"*, hoặc *"< 20 triệu"*. Bộ regex trước đây chỉ hỗ trợ các tiền tố trang trọng (`under`, `dưới`, `ngân sách`). Hơn nữa, lookahead của `useCaseHint` không dừng trước các từ khóa ngân sách thông tục (`tầm`, `khoảng`, `giá`, `<`, v.v.), khiến toàn bộ cụm ngân sách bị nuốt vào trường `use_case` (ví dụ: bóc tách ra `"do hoa tam 20 trieu"` thay vì `"do hoa"`), làm gãy chuỗi truy vấn danh mục sản phẩm phía sau.
+   - **Khắc phục:** Mở rộng regex `budgetHint` nhận diện `around`, `about`, `tam`, `tầm`, `khoang`, `khoảng`, `muc`, `mức`, `gia`, `giá`, `<`, `<=`. Cập nhật delimiter lookahead của `useCaseHint` để cô lập sạch sẽ use-case. Bổ sung bộ regression tests trong `apps/api/src/routes/v1/turn-classifier.test.ts`. *(Đã xong - 222/222 test pass)*
+
+3. **Sửa Bug B-101:** Bảo toàn `candidate_sku` khi cập nhật yêu cầu & Hỗ trợ alias `sku` cho ERP Price Floor (`apps/worker/src/runtime/sales/advisor-adapters.ts`):
+   - **Hiện tượng:**
+     - Trong `SalesAdvisorExecutionState`, khi gọi `setRequirements()`, đối tượng mới chỉ sao chép `requirements` và `stock`, làm mất sạch `candidate_sku` đã được ghi nhận trước đó từ chuỗi grounded reads. Khi bước recommendation kế tiếp đọc lại SKU đã thẩm định, nó bị `undefined`.
+     - Trong `createSalesErpPriceFloorPort()`, hàm chỉ kiểm tra trường `value.sku_id` mà không hỗ trợ alias `value.sku`, trong khi các connector ERP chuẩn (như Shopify, Mock-ERP) thường trả về trường `sku`. Dẫn đến việc kiểm tra `sku !== query.sku_id` thất bại và từ chối báo giá hợp lệ với lý do `"API-001 price floor is missing, invalid, or unapproved"`.
+   - **Khắc phục:** Bổ sung `candidate_sku: current?.candidate_sku` trong `setRequirements` và hỗ trợ `const sku = stringValue(value.sku_id) ?? stringValue(value.sku);`. Tạo mới bộ unit test trong `apps/worker/src/runtime/sales/advisor-adapters.test.ts`. *(Đã xong - 2/2 test pass)*
+
+4. **Sửa Bug B-102:** Thẩm định tham số `rfm_criteria` trong Marketing Audience Reader (`apps/worker/src/runtime/marketing/audience-adapter.ts`):
+   - **Hiện tượng:** Hàm `readAudience()` kiểm tra chặt chẽ `min_days_inactive`, `channel`, `max_segment_size`, nhưng bỏ sót hoàn toàn việc kiểm tra tính hợp lệ của `input.rfm_criteria`. Khi caller truyền giá trị rỗng, không hợp lệ hoặc thiếu `rfm_criteria`, tham số bị truyền thẳng vào câu truy vấn SQL `$2`, dẫn tới việc SQL so khớp `p.rfm_segment_hypothesis = $2` trả về 0 kết quả một cách im lặng mà không báo lỗi schema/tiêu chí phân khúc không hợp lệ.
+   - **Khắc phục:** Khai báo tập `VALID_RFM_CRITERIA` gồm 5 phân khúc RFM chuẩn (`CHAMPIONS`, `LOYAL`, `POTENTIAL_LOYALIST`, `AT_RISK`, `HIBERNATING`) và kiểm tra ném lỗi fail-closed `INVALID_SEGMENT_CRITERIA: rfm_criteria is required and must be a valid RFM segment`. Bổ sung unit test trong `apps/worker/src/runtime/marketing/audience-adapter.test.ts`. *(Đã xong - 6/6 test pass)*
+
+---
 *Báo cáo được lưu trữ và cập nhật trực tiếp tại: `docs/demo/BUG_AUDIT_REPORT.md`.*
 
 

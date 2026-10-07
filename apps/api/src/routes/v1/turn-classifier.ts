@@ -159,12 +159,12 @@ function budgetHint(normalized: string): SalesBudget | undefined {
   const currency = currencyHint(normalized);
   if (currency === undefined) return undefined;
   const match = normalized.match(
-    /(?:under|below|less than|up to|maximum|at most|budget|duoi|dưới|ngan sach|ngân sách)\s*(?:[$€£₫]\s*)?(?:([0-9]+(?:[.,][0-9]+)*)\s*(million|m|billion|b|thousand|k|trieu|triệu|nghin|nghìn|tr|d)?(?:\s*(?:d|dong|vnd))?|(?:[a-z]{3})\s*([0-9]+(?:[.,][0-9]+)*))/iu,
+    /(?:under|below|less than|up to|maximum|at most|budget|around|about|duoi|dưới|ngan sach|ngân sách|tam|tầm|khoang|khoảng|muc|mức|gia|giá|<=?)\s*(?:[$€£₫]\s*)?(?:([0-9]+(?:[.,][0-9]+)*)\s*(million|m|billion|b|thousand|k|trieu|triệu|nghin|nghìn|tr|d)?(?:\s*(?:d|dong|vnd))?|(?:[a-z]{3})\s*([0-9]+(?:[.,][0-9]+)*))|(?:[$€£₫]\s*)([0-9]+(?:[.,][0-9]+)*)\s*(million|m|billion|b|thousand|k|trieu|triệu|nghin|nghìn|tr|d)?|([0-9]+(?:[.,][0-9]+)*)\s*(million|m|billion|b|trieu|triệu|tr)(?:\s*(?:d|dong|vnd))?|([0-9]+(?:[.,][0-9]+)*)\s*(?:dong|vnd)\b/iu,
   );
   if (match === null) return undefined;
-  const raw = match[1] ?? match[3];
+  const raw = match[1] ?? match[3] ?? match[4] ?? match[6] ?? match[8];
   if (raw === undefined) return undefined;
-  const unit = match[2]?.toLowerCase();
+  const unit = (match[2] ?? match[5] ?? match[7])?.toLowerCase();
   const multiplier =
     unit === 'million' || unit === 'm' || unit === 'trieu' || unit === 'triệu' || unit === 'tr'
       ? 1_000_000
@@ -180,7 +180,7 @@ function budgetHint(normalized: string): SalesBudget | undefined {
 
 function useCaseHint(normalized: string): string | undefined {
   const match = normalized.match(
-    /\b(?:for|to use for|dung cho|dùng cho|cho|de|để)\s+([^.!?;,]{1,160}?)(?=\s+(?:under|below|up to|budget|duoi|dưới|ngan sach|ngân sách)\b|[.!?;,]|$)/iu,
+    /\b(?:for|to use for|dung cho|dùng cho|cho|de|để)\s+([^.!?;,]{1,160}?)(?=\s+(?:under|below|up to|budget|around|about|duoi|dưới|ngan sach|ngân sách|tam|tầm|khoang|khoảng|muc|mức|gia|giá|<=?|[$€£₫]|[0-9]+)\b|[.!?;,]|$)/iu,
   );
   if (match !== null) {
     const hint = textHint(match[1] ?? '', 160);
