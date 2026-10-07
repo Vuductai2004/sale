@@ -833,4 +833,51 @@ describe('SalesSkillServices - quote, price floor and payment-policy skills', ()
     // Ensure secret value is never exposed in output
     expect(JSON.stringify(output)).not.toContain(TEST_QUOTE_SECRET);
   });
+
+  it('create_order: accepts uppercase hex quote token (B-104)', async () => {
+    const orderPortMock = createOrderPort();
+    const createOrderSpy = vi.spyOn(orderPortMock, 'createOrder');
+    const validToken = computeQuoteToken(TEST_QUOTE_SECRET, {
+      tenant_id: TENANT_ID,
+      sku_id: 'SKU-1',
+      customer_id: CUSTOMER_ID,
+      final_price: 100,
+      p_floor: 80,
+      currency: 'TWD',
+      quote_expires_at: '2026-09-24T12:00:00.000Z',
+    });
+    const cartPortMock = createCartPort({ quote_token: validToken.toUpperCase() });
+    const services = createServices({
+      order: orderPortMock,
+      cart: cartPortMock,
+    });
+
+    const output = await services.tool_port.invoke({
+      skill_id: 'skill.sales.create_order',
+      tool_binding: 'API-001.OrderConnector',
+      input: {
+        tenant_id: TENANT_ID,
+        cart_id: 'cart-1',
+        customer_id: CUSTOMER_ID,
+        shipping_address: { street: 'Test St' },
+        payment_method: 'CREDIT_CARD',
+        effect_key: 'effect-order-uppercase-token',
+      },
+      context: {
+        run_id: 'run-uppercase-token',
+        tenant_id: TENANT_ID,
+        caller_agent: 'SAL-02',
+        correlation_id: CORRELATION_ID,
+        granted_authority: 'AUTH-3',
+        effect_key: 'effect-order-uppercase-token',
+      },
+    });
+
+    expect(output).toMatchObject({
+      order_number: 'ORD-2026-0001',
+      status: 'PENDING_PAYMENT',
+    });
+    expect(createOrderSpy).toHaveBeenCalledOnce();
+  });
 });
+

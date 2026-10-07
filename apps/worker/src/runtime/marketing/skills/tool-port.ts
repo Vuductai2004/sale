@@ -68,6 +68,17 @@ export function createMarketingSkillToolPort(
         throw new MarketingSkillToolError('VALIDATION_FAILED', 'Marketing tool invocation input must be an object');
       }
       const { skill_id, tool_binding, input, context } = invocation;
+      const inputRecord = input as Record<string, unknown>;
+      if (
+        typeof inputRecord['tenant_id'] === 'string' &&
+        inputRecord['tenant_id'].trim().length > 0 &&
+        inputRecord['tenant_id'] !== context.tenant_id
+      ) {
+        throw new MarketingSkillToolError(
+          'TENANT_CONTEXT_MISMATCH',
+          'Marketing tool input tenant must match the server-resolved execution tenant',
+        );
+      }
 
       // 1. skill.mkt.analyze_market_signal -> API-002.EventIngestion
       if (

@@ -119,21 +119,36 @@ export async function handleOrderConnector<TOutput>(
     );
   }
 
-  const rawStatus = (order.fulfillment_status ?? order.status);
-  const statusStr = typeof rawStatus === 'string' ? rawStatus.toUpperCase().trim() : '';
-  let status: 'PENDING' | 'PROCESSING' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED' | 'RETURNED' | null = null;
-  if (statusStr === 'SHIPPED' || statusStr === 'FULFILLED') status = 'SHIPPED';
-  else if (statusStr === 'DELIVERED' || statusStr === 'COMPLETED') status = 'DELIVERED';
-  else if (statusStr === 'PAID' || statusStr === 'CONFIRMED') status = 'PROCESSING';
-  else if (statusStr === 'PENDING') status = 'PENDING';
-  else if (statusStr === 'PROCESSING') status = 'PROCESSING';
-  else if (statusStr === 'CANCELLED' || statusStr === 'CANCELED') status = 'CANCELLED';
-  else if (statusStr === 'RETURNED') status = 'RETURNED';
+  const fulfillmentStatusStr = typeof order.fulfillment_status === 'string'
+    ? order.fulfillment_status.toUpperCase().trim()
+    : '';
+  const orderStatusStr = typeof order.status === 'string'
+    ? order.status.toUpperCase().trim()
+    : '';
+
+  const mapStatus = (str: string): 'PENDING' | 'PROCESSING' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED' | 'RETURNED' | null => {
+    if (str === 'SHIPPED' || str === 'FULFILLED') return 'SHIPPED';
+    if (str === 'DELIVERED' || str === 'COMPLETED') return 'DELIVERED';
+    if (
+      str === 'PAID'
+      || str === 'CONFIRMED'
+      || str === 'PROCESSING'
+      || str === 'UNFULFILLED'
+      || str === 'PARTIALLY_FULFILLED'
+      || str === 'PARTIALLY_SHIPPED'
+    ) return 'PROCESSING';
+    if (str === 'PENDING') return 'PENDING';
+    if (str === 'CANCELLED' || str === 'CANCELED') return 'CANCELLED';
+    if (str === 'RETURNED' || str === 'REFUNDED') return 'RETURNED';
+    return null;
+  };
+
+  const status = mapStatus(fulfillmentStatusStr) ?? mapStatus(orderStatusStr);
 
   if (!status) {
     throw new CareSkillToolError(
       'AUTHORITATIVE_SOURCE_UNAVAILABLE',
-      `Unmappable provider order status: ${String(rawStatus)}`,
+      `Unmappable provider order status: ${String(order.fulfillment_status ?? order.status)}`,
     );
   }
 

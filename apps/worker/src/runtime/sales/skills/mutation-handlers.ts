@@ -336,7 +336,7 @@ export async function handleCreateOrder(
     quote_expires_at: quoteExpiresAt,
   });
 
-  if (!timingSafeCompare(quoteToken, expectedToken)) {
+  if (!timingSafeCompare(quoteToken.toLowerCase(), expectedToken)) {
     throw new SalesSkillToolError(
       'PRICE_MISMATCH',
       'Price quote token signature verification failed',

@@ -73,9 +73,12 @@ describe('handleOrderConnector ERP status mapping', () => {
     ['CONFIRMED', 'PROCESSING'],
     ['PENDING', 'PENDING'],
     ['PROCESSING', 'PROCESSING'],
+    ['UNFULFILLED', 'PROCESSING'],
+    ['PARTIALLY_FULFILLED', 'PROCESSING'],
     ['CANCELLED', 'CANCELLED'],
     ['CANCELED', 'CANCELLED'],
     ['RETURNED', 'RETURNED'],
+    ['REFUNDED', 'RETURNED'],
   ] as const)('maps ERP %s to %s', async (erpStatus, expectedStatus) => {
     const output = await handleOrderConnector<{ status: string }>(
       invocation(erpStatus),

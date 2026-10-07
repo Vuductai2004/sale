@@ -198,6 +198,32 @@ describe('VerifiedResponseFinalizer', () => {
     ).rejects.toMatchObject({ code: 'RESPONSE_UNGROUNDED' });
   });
 
+  it('accepts a quote with uppercase hex quote_token (B-104)', async () => {
+    const quoteExpiresAt = '2026-09-28T00:15:00.000Z';
+    const rawToken = computeQuoteToken(QUOTE_SECRET, {
+      tenant_id: TENANT,
+      sku_id: 'NM-L01-BLK',
+      customer_id: 'customer-1',
+      final_price: 18_900_000,
+      p_floor: 18_900_000,
+      currency: 'VND',
+      quote_expires_at: quoteExpiresAt,
+    });
+    const quote = verified({
+      sku_id: 'NM-L01-BLK',
+      list_price: 18_900_000,
+      final_price: 18_900_000,
+      p_floor: 18_900_000,
+      currency: 'VND',
+      quote_token: rawToken.toUpperCase(),
+      quote_expires_at: quoteExpiresAt,
+      customer_id: 'customer-1',
+    });
+    const result = await new VerifiedResponseFinalizer(() => NOW, QUOTE_SECRET).finalize(input('sales', [quote]));
+    expect(result.answer).toContain('NM-L01-BLK');
+    expect(result.answer).toContain('VND 18900000');
+  });
+
   it('refuses a quote whose total differs from the verified cart subtotal', async () => {
     const quoteExpiresAt = '2026-09-28T00:15:00.000Z';
     const quote = verified({

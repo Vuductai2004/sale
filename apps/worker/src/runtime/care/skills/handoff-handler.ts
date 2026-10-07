@@ -41,8 +41,16 @@ export async function handleHandoff<TOutput>(
     readonly customer_id?: string;
     readonly escalation_reason: string;
     readonly summary_context?: string;
+    readonly effect_key?: string;
   };
+  const { effect_key: callerEffectKey, ...businessInput } = input;
   const trustedTenantId = invocation.context.tenant_id;
+  if (callerEffectKey !== undefined && callerEffectKey !== invocation.context.effect_key) {
+    throw new CareSkillToolError(
+      'EFFECT_KEY_MISMATCH',
+      'Caller-supplied effect key does not match the server-derived effect key for handoff',
+    );
+  }
   if (input.tenant_id !== trustedTenantId) {
     throw new CareSkillToolError(
       'TENANT_SCOPE_MISMATCH',
@@ -53,7 +61,7 @@ export async function handleHandoff<TOutput>(
   const enqueueInput: EnqueueCareHandoffInput = {
     tenant_id: trustedTenantId,
     effect_key: invocation.context.effect_key,
-    request_fingerprint: computeRequestFingerprint(invocation.input as Record<string, unknown>),
+    request_fingerprint: computeRequestFingerprint(businessInput as Record<string, unknown>),
     run_id: invocation.context.run_id,
     session_id: input.session_id,
     conversation_id: input.conversation_id,

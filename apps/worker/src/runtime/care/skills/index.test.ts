@@ -249,6 +249,25 @@ describe('CareSkillServices', () => {
       expect(reconcile).not.toHaveBeenCalled();
     });
 
+    it('rejects caller effect_key mismatch before queue access (B-105)', async () => {
+      const enqueue = vi.fn(async (_input: EnqueueCareHandoffInput) => ({
+        disposition: 'CREATED' as const, output: HANDOFF_OUTPUT, receipt: HANDOFF_RECEIPT,
+      }));
+      const reconcile = vi.fn(async () => ({ state: 'NOT_COMMITTED' as const }));
+      const services = createCareSkillServices(createMockOptions({
+        handoff_repository: { enqueue, reconcile },
+      }));
+
+      await expect(services.tool_port.invoke({
+        skill_id: 'skill.care.escalate_to_human',
+        tool_binding: 'Orchestrator.HandoffBus',
+        input: { ...HANDOFF_INPUT, effect_key: 'mismatched-caller-effect-key' },
+        context: handoffContext(),
+      })).rejects.toMatchObject({ code: 'EFFECT_KEY_MISMATCH' });
+      expect(enqueue).not.toHaveBeenCalled();
+      expect(reconcile).not.toHaveBeenCalled();
+    });
+
     it('reads the receipt after a pre-aborted invocation without starting a new enqueue', async () => {
       const controller = new AbortController();
       controller.abort();

@@ -932,6 +932,21 @@ describe('Marketing Skill Services and Dispatcher', () => {
       });
     });
 
+    it('fails closed with TENANT_CONTEXT_MISMATCH when dispatch input tenant does not match context tenant (B-106)', async () => {
+      const services = createServices();
+
+      await expect(
+        services.tool_port.invoke({
+          skill_id: 'skill.mkt.dispatch_campaign',
+          tool_binding: 'API-003.CommunicationConnector',
+          input: { ...validDispatchInput, tenant_id: '99999999-9999-9999-9999-999999999999' },
+          context: dummyContext,
+        }),
+      ).rejects.toMatchObject({
+        code: 'TENANT_CONTEXT_MISMATCH',
+      });
+    });
+
     it('fails closed with AUDIENCE_RESOLVER_REQUIRED when communication connector is bound but has no audience resolver configured', async () => {
       const communication: MarketingCommunicationPort = {
         dispatchCampaign: vi.fn(async () => ({

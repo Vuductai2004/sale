@@ -97,7 +97,7 @@ function hasValidQuoteSignature(
     currency,
     quote_expires_at: expiry,
   });
-  return timingSafeCompare(token, expected);
+  return timingSafeCompare(token.toLowerCase(), expected);
 }
 
 function refusal(code: string, message: string): never {

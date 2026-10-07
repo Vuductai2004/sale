@@ -651,8 +651,27 @@ Tính đến thời điểm hiện tại, remote `phong/feat/demo-live-3agent` (
    - **Hiện tượng:** Hàm `readAudience()` kiểm tra chặt chẽ `min_days_inactive`, `channel`, `max_segment_size`, nhưng bỏ sót hoàn toàn việc kiểm tra tính hợp lệ của `input.rfm_criteria`. Khi caller truyền giá trị rỗng, không hợp lệ hoặc thiếu `rfm_criteria`, tham số bị truyền thẳng vào câu truy vấn SQL `$2`, dẫn tới việc SQL so khớp `p.rfm_segment_hypothesis = $2` trả về 0 kết quả một cách im lặng mà không báo lỗi schema/tiêu chí phân khúc không hợp lệ.
    - **Khắc phục:** Khai báo tập `VALID_RFM_CRITERIA` gồm 5 phân khúc RFM chuẩn (`CHAMPIONS`, `LOYAL`, `POTENTIAL_LOYALIST`, `AT_RISK`, `HIBERNATING`) và kiểm tra ném lỗi fail-closed `INVALID_SEGMENT_CRITERIA: rfm_criteria is required and must be a valid RFM segment`. Bổ sung unit test trong `apps/worker/src/runtime/marketing/audience-adapter.test.ts`. *(Đã xong - 6/6 test pass)*
 
+### GIAI ĐOẠN 18: CHUẨN HÓA TRẠNG THÁI ĐƠN HÀNG ERP, TOKEN BÁO GIÁ HEX & CÔ LẬP BẢO MẬT ĐA KHÁCH THUÊ (B-103 ĐẾN B-106)
+
+1. **Sửa Bug B-103:** Thiếu ánh xạ trạng thái fulfillment đơn hàng ERP (`UNFULFILLED`, `PARTIALLY_FULFILLED`, `REFUNDED`) trong Care Order Lookup (`apps/worker/src/runtime/care/skills/order-handler.ts`):
+   - **Hiện tượng:** Trong dữ liệu sàn thương mại điện tử thực tế và hồ sơ mẫu `novamart.json`, đơn hàng thường có trường `fulfillment_status` mang các giá trị như `"UNFULFILLED"`, `"PARTIALLY_FULFILLED"` hoặc `"REFUNDED"`. Trước đây `order-handler.ts` chỉ nhận diện các giá trị `SHIPPED`, `FULFILLED`, `DELIVERED`, `PAID`, `CONFIRMED`, `PENDING`, `PROCESSING`, `CANCELLED`, `RETURNED`. Bất kỳ yêu cầu tra cứu nào với đơn hàng đang chờ giao hoặc hoàn tiền đều ném lỗi fail-closed `CareSkillToolError('AUTHORITATIVE_SOURCE_UNAVAILABLE', 'Unmappable provider order status: UNFULFILLED')`.
+   - **Khắc phục:** Bổ sung ánh xạ `UNFULFILLED`, `PARTIALLY_FULFILLED`, `PARTIALLY_SHIPPED` sang `'PROCESSING'`, và `REFUNDED` sang `'RETURNED'`. Cho phép fallback từ `fulfillment_status` sang `status`. Bổ sung unit test toàn diện trong `apps/worker/src/runtime/care/skills/order-handler.test.ts`. *(Đã xong - 19/19 test pass)*
+
+2. **Sửa Bug B-104:** Bất đối xứng phân biệt hoa/thường giữa Regex Hex và `timingSafeEqual` khi thẩm định chữ ký Token Báo giá (`apps/worker/src/runtime/shared/response.ts` & `apps/worker/src/runtime/sales/skills/mutation-handlers.ts`):
+   - **Hiện tượng:** Biểu thức regex xác thực `quoteToken` và `token` cho phép cả ký tự hoa và thường (flag `/i` hoặc `[0-9a-fA-F]{64}`). Tuy nhiên, thuật toán `computeQuoteToken` luôn sinh digest chữ thường (`createHmac.digest('hex')`). Khi gọi hàm so sánh an toàn thời gian thực `timingSafeCompare`, hàm so khớp mảng byte UTF-8. Nếu client hoặc upstream service gửi token dạng chữ hoa (ví dụ `4A1B...`), regex thông qua nhưng `timingSafeCompare` trả về `false` do khác mã byte ASCII (`0x41` vs `0x61`), dẫn tới việc từ chối oan token hợp lệ với lỗi `PRICE_MISMATCH: Price quote token signature verification failed`.
+   - **Khắc phục:** Chuẩn hóa token về chữ thường (`token.toLowerCase()`, `quoteToken.toLowerCase()`) trước khi so sánh qua `timingSafeCompare`. Bổ sung regression tests trong `response.test.ts` và `quote-price.test.ts`. *(Đã xong - 100% test pass)*
+
+3. **Sửa Bug B-105:** Thiếu thẩm định `effect_key` của caller và ô nhiễm `request_fingerprint` trong Care Handoff Skill (`apps/worker/src/runtime/care/skills/handoff-handler.ts`):
+   - **Hiện tượng:** Khác với `case-handler.ts` và `mutation-handlers.ts`, `handoff-handler.ts` không kiểm tra `callerEffectKey !== invocation.context.effect_key`, khiến caller có thể truyền khóa hiệu ứng mâu thuẫn mà không bị chặn sớm. Đồng thời, hàm tính `request_fingerprint` trực tiếp trên `invocation.input` mà không bóc tách `effect_key`, làm ô nhiễm mã băm yêu cầu kinh doanh bằng khóa định danh hiệu ứng.
+   - **Khắc phục:** Tách `effect_key` thành `callerEffectKey`, kiểm tra ném lỗi `EFFECT_KEY_MISMATCH` khi không khớp với server-derived context, và chỉ tính `computeRequestFingerprint` trên `businessInput`. Bổ sung unit test kiểm chứng trong `apps/worker/src/runtime/care/skills/index.test.ts`. *(Đã xong - 32/32 test pass)*
+
+4. **Sửa Bug B-106:** Thiếu kiểm tra ranh giới đa khách thuê (Cross-Tenant Boundary) trên toàn bộ Marketing Skill Tool Port (`apps/worker/src/runtime/marketing/skills/tool-port.ts`):
+   - **Hiện tượng:** Trong `createMarketingSkillToolPort`, chỉ có skill `check_consent` kiểm tra `typedConsentInput.tenant_id !== context.tenant_id`. Các skill trọng yếu khác như `dispatch_campaign`, `segment_audience`, `evaluate_attribution`, `analyze_market_signal` hoàn toàn bỏ qua việc xác thực này, cho phép payload của Tenant A yêu cầu xử lý dữ liệu của Tenant B trong cùng ngữ cảnh thực thi.
+   - **Khắc phục:** Bổ sung cơ chế phòng vệ tự động ở đầu hàm `invoke()`: nếu `inputRecord['tenant_id'] !== context.tenant_id`, lập tức từ chối và ném `MarketingSkillToolError('TENANT_CONTEXT_MISMATCH')`. Bổ sung regression test trong `apps/worker/src/runtime/marketing/skills/dispatcher.test.ts`. *(Đã xong - 35/35 test pass)*
+
 ---
 *Báo cáo được lưu trữ và cập nhật trực tiếp tại: `docs/demo/BUG_AUDIT_REPORT.md`.*
+
 
 
 
