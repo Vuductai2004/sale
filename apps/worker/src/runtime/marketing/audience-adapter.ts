@@ -81,7 +81,12 @@ export function createMarketingAudienceReader(options: MarketingAudienceReaderOp
     if (channel === undefined) {
       throw new Error('INVALID_SEGMENT_CRITERIA: campaign channel is required and must be contactable');
     }
-    const ownerLimit = await options.audiencePolicy?.getApprovedAudienceLimit(tenant_id);
+    let ownerLimit: number | undefined;
+    try {
+      ownerLimit = await options.audiencePolicy?.getApprovedAudienceLimit(tenant_id);
+    } catch {
+      throw new Error('ASM_003_UNAVAILABLE: owner-approved audience limit is unavailable or invalid');
+    }
     const audienceLimit = ownerLimit === undefined ? DEFAULT_MARKETING_AUDIENCE_LIMIT : ownerLimit;
     if (!Number.isSafeInteger(audienceLimit) || audienceLimit < 1) {
       throw new Error('ASM_003_UNAVAILABLE: owner-approved audience limit is unavailable or invalid');

@@ -102,7 +102,11 @@ export function registerOperationRoutes(
           reason = rawReason.trim();
         }
 
-        const run_id = request.params.run_id;
+        const rawRunId = request.params.run_id;
+        if (typeof rawRunId !== 'string' || rawRunId.trim().length === 0) {
+          fail('VALIDATION_FAILED', 'run_id is required in the path');
+        }
+        const run_id = rawRunId.trim();
         const classification = await runtime.runs.classifyRetry(principal.tenant_id, run_id);
 
         if (!classification.retryable) {
@@ -187,10 +191,20 @@ export function registerOperationRoutes(
       const rawLimit = request.query.limit;
       let parsedLimit: number | undefined;
       if (rawLimit !== undefined) {
-        if (!/^\d+$/.test(rawLimit) || rawLimit === '0') {
+        if (typeof rawLimit === 'number') {
+          if (!Number.isSafeInteger(rawLimit) || rawLimit <= 0) {
+            fail('VALIDATION_FAILED', 'limit must be a positive integer');
+          }
+          parsedLimit = rawLimit;
+        } else if (typeof rawLimit === 'string') {
+          const trimmed = rawLimit.trim();
+          if (!/^\d+$/.test(trimmed) || trimmed === '0') {
+            fail('VALIDATION_FAILED', 'limit must be a positive integer');
+          }
+          parsedLimit = Number.parseInt(trimmed, 10);
+        } else {
           fail('VALIDATION_FAILED', 'limit must be a positive integer');
         }
-        parsedLimit = Number.parseInt(rawLimit, 10);
       }
       const page = await runtime.runs.list({
         tenant_id: principal.tenant_id,
@@ -262,7 +276,11 @@ export function registerOperationRoutes(
         if (receipt !== undefined && !isPlainRecord(receipt)) {
           fail('VALIDATION_FAILED', 'receipt must be a JSON object when supplied');
         }
-        const run_id = request.params.run_id;
+        const rawRunId = request.params.run_id;
+        if (typeof rawRunId !== 'string' || rawRunId.trim().length === 0) {
+          fail('VALIDATION_FAILED', 'run_id is required in the path');
+        }
+        const run_id = rawRunId.trim();
 
         const accepted = await runtime.runs.reconcile({
           tenant_id: principal.tenant_id,

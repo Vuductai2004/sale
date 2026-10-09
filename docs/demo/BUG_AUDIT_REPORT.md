@@ -723,8 +723,27 @@ Tính đến thời điểm hiện tại, remote `phong/feat/demo-live-3agent` (
    - **Hiện tượng:** Trong hàm `dispatch`, khi `dispatchOptions?.timeout_ms` được truyền vào, code gọi thẳng `AbortSignal.timeout(dispatchOptions.timeout_ms)` mà không kiểm tra giá trị. Nếu `timeout_ms` là số âm (ví dụ `-100`) hoặc `NaN`, Node.js ném lỗi `RangeError: "timeout" must be greater than 0` làm sập luồng điều phối của worker.
    - **Khắc phục:** Bổ sung điều kiện kiểm tra nghiêm ngặt `typeof dispatchOptions?.timeout_ms === 'number' && Number.isFinite(dispatchOptions.timeout_ms) && dispatchOptions.timeout_ms >= 0`. Nếu không thỏa mãn, bỏ qua timeout signal để tránh ném `RangeError`. Bổ sung unit test trong `apps/worker/src/runtime/shared/skill-dispatcher.test.ts`. *(Đã xong - 4/4 test pass)*
 
+### GIAI ĐOẠN 22: CHUẨN HÓA TIMESTAMP PURCHASE EVIDENCE, NUMERIC QUERY LIMIT & PATH SANITIZATION, BẢO VỆ AUDIENCE POLICY VÀ PHÒNG VỆ FAQ SCORER (B-119 ĐẾN B-122)
+
+1. **Sửa Bug B-119:** Customer Event Purchase Evidence Port từ chối đơn hàng khi trường thời gian là đối tượng `Date` (`apps/worker/src/runtime/sales/context-aggregator.ts`):
+   - **Hiện tượng:** Hàm `createCustomerEventPurchaseEvidencePort` kiểm tra nghiêm ngặt `typeof item.occurred_at === 'string'`, `typeof payload.order_date === 'string'`, và `typeof payload.created_at === 'string'`. Khi database driver (như node-postgres `pg`), ORM hoặc mock trả về instance `Date` cho các cột timestamp này, `rawOrderDate` bị gán `null`, khiến hệ thống ném lỗi vô cớ `Error('purchase evidence missing or stale: purchase evidence missing')` và làm rớt bằng chứng mua hàng hợp lệ.
+   - **Khắc phục:** Bổ sung hàm tiện ích `toIsoDateString` chuẩn hóa an toàn cả kiểu chuỗi lẫn `Date` instance (`value instanceof Date && !Number.isNaN(value.getTime()) ? value.toISOString() : ...`). Bổ sung unit test kiểm chứng trong `apps/worker/src/runtime/sales/context-aggregator.test.ts`. *(Đã xong - 17/17 test pass)*
+
+2. **Sửa Bug B-120:** Tuyến `/campaigns` và `/operations` bỏ qua tham số `limit` dạng số và không cắt tỉa (trim) `runId`/`run_id` (`apps/api/src/routes/v1/campaigns.ts` & `apps/api/src/routes/v1/operations.ts`):
+   - **Hiện tượng:** Tuyến `GET /campaigns` sử dụng `queryString(request, 'limit')` chỉ nhận chuỗi, dẫn tới việc nếu client gửi `limit` dạng số thì bị bỏ qua hoàn toàn. Đồng thời tuyến `GET /campaigns/:runId`, `POST /operations/runs/:run_id/retry` và `POST /operations/runs/:run_id/reconciliation` không kiểm tra cắt tỉa khoảng trắng `runId`/`run_id`, khiến các request mang khoảng trắng vô tình bị tra cứu sai hoặc ném lỗi 404 không đáng có.
+   - **Khắc phục:** Viết lại `queryLimit` chấp nhận cả kiểu số nguyên dương (`Number.isSafeInteger(rawLimit) && rawLimit > 0`) lẫn chuỗi số; đồng thời thẩm định và cắt tỉa `runId.trim()` và `run_id.trim()`. Bổ sung unit test trong `apps/api/src/routes/v1/campaigns-read.test.ts`. *(Đã xong - 4/4 test pass)*
+
+3. **Sửa Bug B-121:** Reader Audience bị crash văng lỗi unhandled raw exception khi Audience Policy gặp sự cố (`apps/worker/src/runtime/marketing/audience-adapter.ts`):
+   - **Hiện tượng:** Trong `readAudience`, lệnh gọi `options.audiencePolicy?.getApprovedAudienceLimit(tenant_id)` không được bao bọc trong khối `try...catch`. Nếu policy service bị lỗi kết nối DB hoặc timeout, ngoại lệ bị văng ra ngoài dưới dạng lỗi thô (unhandled exception) thay vì mã lỗi miền chuẩn fail-closed `ASM_003_UNAVAILABLE: owner-approved audience limit is unavailable or invalid`.
+   - **Khắc phục:** Bọc lời gọi `getApprovedAudienceLimit` trong `try...catch` và ném đúng lỗi `ASM_003_UNAVAILABLE`. Bổ sung unit test trong `apps/worker/src/runtime/marketing/audience-adapter.test.ts`. *(Đã xong - 7/7 test pass)*
+
+4. **Sửa Bug B-122:** Hàm tính điểm khớp câu hỏi FAQ `scoreFaqMatch` bị crash `TypeError` khi input không hợp lệ (`apps/worker/src/runtime/care/skills/faq-parser.ts`):
+   - **Hiện tượng:** Khi caller truyền `queryTokens` không phải là mảng hoặc `queryText` không phải là chuỗi (hoặc `entry` bị null/undefined/thiếu trường), code gọi trực tiếp `queryTokens.map()` hoặc `queryText.trim()` hoặc `entry.question.toLowerCase()`, dẫn đến việc Node.js ném `TypeError: Cannot read properties of undefined` làm sập tiến trình xử lý FAQ.
+   - **Khắc phục:** Bổ sung các guard clause kiểm tra tính hợp lệ của `entry`, `queryText`, và `Array.isArray(queryTokens)`. Nếu không hợp lệ, trả về điểm số `0` an toàn thay vì ném ngoại lệ. Bổ sung unit test trong `apps/worker/src/runtime/care/skills/faq-parser.test.ts`. *(Đã xong - 5/5 test pass)*
+
 ---
 *Báo cáo được lưu trữ và cập nhật trực tiếp tại: `docs/demo/BUG_AUDIT_REPORT.md`.*
+
 
 
 

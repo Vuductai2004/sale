@@ -44,4 +44,15 @@ Approved answer: Standard and express delivery are available.
     expect(result.entries[0]?.approved_answer).toContain('Use the tracking link');
     expect(result.entries[1]?.faq_id).toBe('FAQ-02');
   });
+
+  it('safely returns 0 without throwing TypeError when passed invalid entry, queryTokens or queryText (B-122)', () => {
+    expect(scoreFaqMatch(null as any, ['tokens'], 'query')).toBe(0);
+    expect(scoreFaqMatch(undefined as any, ['tokens'], 'query')).toBe(0);
+    expect(scoreFaqMatch({} as any, ['tokens'], 'query')).toBe(0);
+    expect(scoreFaqMatch(sampleFaq, undefined as any, 'query')).toBe(0);
+    expect(scoreFaqMatch(sampleFaq, 'not-an-array' as any, 'query')).toBe(0);
+    expect(scoreFaqMatch(sampleFaq, ['tokens'], undefined as any)).toBe(0);
+    expect(scoreFaqMatch(sampleFaq, ['tokens'], 12345 as any)).toBe(0);
+  });
 });
+

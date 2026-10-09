@@ -280,6 +280,26 @@ function queryString(request: FastifyRequest, key: string): string | undefined {
   return typeof value === 'string' && value.length > 0 ? value : undefined;
 }
 
+function queryLimit(request: FastifyRequest): number | undefined {
+  if (typeof request.query !== 'object' || request.query === null || Array.isArray(request.query)) return undefined;
+  const rawLimit = (request.query as Record<string, unknown>)['limit'];
+  if (rawLimit === undefined) return undefined;
+  if (typeof rawLimit === 'number') {
+    if (!Number.isSafeInteger(rawLimit) || rawLimit <= 0) {
+      fail('VALIDATION_FAILED', 'limit must be a positive integer');
+    }
+    return rawLimit;
+  }
+  if (typeof rawLimit === 'string') {
+    const trimmed = rawLimit.trim();
+    if (!/^\d+$/.test(trimmed) || trimmed === '0') {
+      fail('VALIDATION_FAILED', 'limit must be a positive integer');
+    }
+    return Number.parseInt(trimmed, 10);
+  }
+  fail('VALIDATION_FAILED', 'limit must be a positive integer');
+}
+
 async function handleCampaignList(
   request: FastifyRequest,
   reply: FastifyReply,
@@ -288,14 +308,7 @@ async function handleCampaignList(
   const runtime = deps.runtime;
   try {
     const principal = requireCampaignReader(request);
-    const rawLimit = queryString(request, 'limit');
-    let limit: number | undefined;
-    if (rawLimit !== undefined) {
-      if (!/^\d+$/.test(rawLimit) || rawLimit === '0') {
-        fail('VALIDATION_FAILED', 'limit must be a positive integer');
-      }
-      limit = Number.parseInt(rawLimit, 10);
-    }
+    const limit = queryLimit(request);
     const cursor = queryString(request, 'cursor');
     const page = await campaignProjectionPort(runtime).listCampaigns({
       tenant_id: principal.tenant_id,
@@ -325,10 +338,11 @@ async function handleCampaignDetail(
   const runtime = deps.runtime;
   try {
     const principal = requireCampaignReader(request);
-    const run_id = typeof request.params === 'object' && request.params !== null
+    const rawRunId = typeof request.params === 'object' && request.params !== null
       ? (request.params as Record<string, unknown>)['runId']
       : undefined;
-    if (typeof run_id !== 'string' || run_id.length === 0) fail('VALIDATION_FAILED', 'runId is required in the path');
+    if (typeof rawRunId !== 'string' || rawRunId.trim().length === 0) fail('VALIDATION_FAILED', 'runId is required in the path');
+    const run_id = rawRunId.trim();
     const row = await campaignProjectionPort(runtime).getCampaign(principal.tenant_id, run_id);
     if (row === null) fail('NOT_FOUND', 'the campaign run was not found');
     await runtime.audit.record({

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import type { ExecutionContext } from '@agentos/skills';
 import type { TenantTransactionRunner } from '@agentos/database';
 
@@ -129,4 +129,22 @@ describe('createMarketingAudienceReader', () => {
 
     expect(calls).toEqual([]);
   });
+
+  it('fails closed with ASM_003_UNAVAILABLE when audience policy throws (B-121)', async () => {
+    const readAudience = createMarketingAudienceReader({
+      audiencePolicy: {
+        getApprovedAudienceLimit: vi.fn(async () => {
+          throw new Error('Database connection failed');
+        }),
+      },
+    });
+
+    await expect(
+      readAudience(
+        { tenant_id: TENANT, rfm_criteria: 'HIBERNATING', min_days_inactive: 30, channel: 'EMAIL' },
+        context(),
+      ),
+    ).rejects.toThrow('ASM_003_UNAVAILABLE: owner-approved audience limit is unavailable or invalid');
+  });
 });
+

@@ -61,6 +61,16 @@ export function parseFaqMarkdown(content: string, source_file: string): ParsedFa
 
 /** Deterministic token-overlap scoring for query matching. */
 export function scoreFaqMatch(entry: FaqEntry, queryTokens: readonly string[], queryText: string): number {
+  if (
+    !entry ||
+    typeof entry.question !== 'string' ||
+    typeof entry.approved_answer !== 'string' ||
+    typeof queryText !== 'string' ||
+    !Array.isArray(queryTokens)
+  ) {
+    return 0;
+  }
+
   const normalizedQuery = queryText.trim().toLowerCase();
   const validTokens = queryTokens
     .map((t) => (typeof t === 'string' ? t.trim().toLowerCase() : ''))

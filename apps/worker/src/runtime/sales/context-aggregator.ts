@@ -31,6 +31,12 @@ import type {
  */
 const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}(?::?\d{2})?)$/;
 
+function toIsoDateString(value: unknown): string | null {
+  if (typeof value === 'string' && value.trim().length > 0) return value.trim();
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return value.toISOString();
+  return null;
+}
+
 function isValidIsoTimestamp(ts: unknown): ts is string {
   if (typeof ts !== 'string' || !ISO_TIMESTAMP.test(ts.trim())) return false;
   const ms = new Date(ts.trim()).getTime();
@@ -82,9 +88,9 @@ export function createCustomerEventPurchaseEvidencePort(
         }
 
         const rawOrderDate =
-          (typeof item.occurred_at === 'string' && item.occurred_at.trim().length > 0 ? item.occurred_at.trim() : null) ??
-          (typeof payload.order_date === 'string' && payload.order_date.trim().length > 0 ? payload.order_date.trim() : null) ??
-          (typeof payload.created_at === 'string' && payload.created_at.trim().length > 0 ? payload.created_at.trim() : null);
+          toIsoDateString(item.occurred_at) ??
+          toIsoDateString(payload.order_date) ??
+          toIsoDateString(payload.created_at);
 
         if (!rawOrderDate || !isValidIsoTimestamp(rawOrderDate)) {
           throw new Error('purchase evidence missing or stale: purchase evidence missing');

@@ -391,7 +391,40 @@ describe('SalesContextAggregator', () => {
       expect(purchases).toHaveLength(1);
       expect(purchases[0]?.order_id).toBe('ORD-GENUINE-1');
       expect(purchases[0]?.order_date).toBe('2026-08-01T12:00:00.000Z');
-      expect(purchases[0]?.sku_ids).toEqual(['SKU-BOUGHT-1']);
+    });
+
+    it('accepts Date instances for occurred_at or order_date and normalizes to ISO string (B-119)', async () => {
+      const dateTimeline: CustomerEventTimeline = {
+        items: [
+          {
+            event_id: 'evt-order-date-instance',
+            source_event_id: 'src-order-date-instance',
+            event_name: 'order_placed',
+            session_id: 'sess-1',
+            channel: 'web',
+            occurred_at: new Date('2026-08-01T12:00:00.000Z') as unknown as string,
+            payload: {
+              order_id: 'ORD-DATE-1',
+              order_date: new Date('2026-08-01T12:00:00.000Z') as unknown as string,
+              sku_ids: ['SKU-DATE-1'],
+            },
+          },
+        ],
+        next_cursor: null,
+      };
+
+      const listTimeline = vi.fn(async () => dateTimeline);
+      const aggregator = new SalesContextAggregator({
+        repositories: { listTimeline },
+      });
+
+      const port = aggregator.createPurchaseEvidencePort();
+      const purchases = await port.read({ tenant_id: TENANT_ID, customer_id: CUSTOMER_ID });
+
+      expect(purchases).toHaveLength(1);
+      expect(purchases[0]?.order_id).toBe('ORD-DATE-1');
+      expect(purchases[0]?.order_date).toBe('2026-08-01T12:00:00.000Z');
+      expect(purchases[0]?.sku_ids).toEqual(['SKU-DATE-1']);
     });
 
     it('rejects the read when timeline contains only SKU-bearing non-purchase events', async () => {

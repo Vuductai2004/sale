@@ -90,4 +90,29 @@ describe('campaign read permissions', () => {
       await app.close();
     }
   });
+
+  it('accepts numeric limit and trims runId path param (B-120)', async () => {
+    const { app, runtime } = buildHarness();
+    try {
+      const headers = { authorization: `Bearer ${DRAFT_TOKEN}` };
+      const list = await app.inject({
+        method: 'GET',
+        url: '/campaigns',
+        query: { limit: '25' },
+        headers,
+      });
+      expect(list.statusCode).toBe(200);
+      expect(runtime.companyCrm?.listCampaigns).toHaveBeenCalledWith({ tenant_id: TENANT, limit: 25 });
+
+      const detail = await app.inject({
+        method: 'GET',
+        url: '/campaigns/  run-1  ',
+        headers,
+      });
+      expect(detail.statusCode).toBe(200);
+      expect(runtime.companyCrm?.getCampaign).toHaveBeenCalledWith(TENANT, 'run-1');
+    } finally {
+      await app.close();
+    }
+  });
 });
