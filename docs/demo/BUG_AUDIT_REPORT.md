@@ -669,8 +669,27 @@ Tính đến thời điểm hiện tại, remote `phong/feat/demo-live-3agent` (
    - **Hiện tượng:** Trong `createMarketingSkillToolPort`, chỉ có skill `check_consent` kiểm tra `typedConsentInput.tenant_id !== context.tenant_id`. Các skill trọng yếu khác như `dispatch_campaign`, `segment_audience`, `evaluate_attribution`, `analyze_market_signal` hoàn toàn bỏ qua việc xác thực này, cho phép payload của Tenant A yêu cầu xử lý dữ liệu của Tenant B trong cùng ngữ cảnh thực thi.
    - **Khắc phục:** Bổ sung cơ chế phòng vệ tự động ở đầu hàm `invoke()`: nếu `inputRecord['tenant_id'] !== context.tenant_id`, lập tức từ chối và ném `MarketingSkillToolError('TENANT_CONTEXT_MISMATCH')`. Bổ sung regression test trong `apps/worker/src/runtime/marketing/skills/dispatcher.test.ts`. *(Đã xong - 35/35 test pass)*
 
+### GIAI ĐOẠN 19: BẢO VỆ CHUẨN THỜI GIAN PROFILE, CHUẨN HÓA CORS ALLOWLIST, TỪ CHỐI SỚM APPROVAL & CÔ LẬP TENANT CATALOG (B-107 ĐẾN B-110)
+
+1. **Sửa Bug B-107:** Sales Context Aggregator bị crash ngầm rớt customer thành null khi trường ngày là chuỗi ISO (`apps/worker/src/runtime/sales/context-aggregator.ts`):
+   - **Hiện tượng:** Trong `SalesContextAggregator.hydrateContext`, các trường `profile.consent_updated_at` và `profile.created_at` bị gọi trực tiếp phương thức `.toISOString()`. Khi dữ liệu profile được đọc từ cache/Redis hoặc qua serialization dạng JSON (trong đó ngày tháng là chuỗi ISO String chứ không phải đối tượng `Date`), hàm văng lỗi `TypeError: profile.created_at.toISOString is not a function`. Lỗi này bị khối `try...catch` bao quanh nuốt chửng và đặt `customer = null`, khiến phiên bán hàng bị mất trắng dữ liệu khách hàng 360 một cách âm thầm.
+   - **Khắc phục:** Xử lý an toàn cả hai trường hợp `instanceof Date` và chuỗi chuỗi (`instanceof Date ? profile.created_at.toISOString() : String(profile.created_at)`), đồng bộ với cách xử lý của `CareContextAggregator`. Bổ sung unit test trong `apps/worker/src/runtime/sales/context-aggregator.test.ts`. *(Đã xong - 16/16 test pass)*
+
+2. **Sửa Bug B-108:** CORS Allowlist từ chối request hợp lệ do dấu gạch chéo cuối (`/`) trong biến môi trường (`apps/api/src/gateway/cors.ts`):
+   - **Hiện tượng:** Trình duyệt web khi gửi header `Origin` theo chuẩn RFC 6454 không bao giờ đính kèm dấu gạch chéo cuối (ví dụ luôn là `http://localhost:3000`). Nếu biến môi trường `CORS_ALLOWED_ORIGINS` được cấu hình dạng `http://localhost:3000/, http://localhost:3001/`, hàm `parseAllowedOrigins` trước đây giữ nguyên dấu gạch chéo này, dẫn đến việc so khớp `isAllowedOrigin` trả về `false` và chặn toàn bộ request CORS / Preflight OPTIONS của trình duyệt.
+   - **Khắc phục:** Bổ sung bước chuẩn hóa loại bỏ dấu gạch chéo cuối (`.replace(/\/+$/, '')`) cho từng origin trong danh sách cấu hình. Bổ sung unit test kiểm chứng trong `apps/api/src/gateway/cors.test.ts`. *(Đã xong - 6/6 test pass)*
+
+3. **Sửa Bug B-109:** Thiếu từ chối sớm cho Approval đã có quyết định (`APPROVED`, `REJECTED`, `CANCELLED`) trước khi gọi DB transaction (`apps/api/src/routes/v1/approvals.ts`):
+   - **Hiện tượng:** Tại route `POST /api/v1/approvals/:approval_id/decision`, code chỉ kiểm tra sớm nếu `status === 'EXPIRED'`. Đối với các phê duyệt đã được xử lý xong (`APPROVED`, `REJECTED`, `CANCELLED`), hệ thống vẫn tiếp tục gọi service governance, đọc draft run, và mở transaction khóa nhiều bảng trong database rồi mới ném lỗi `APPROVAL_NOT_CLAIMABLE`.
+   - **Khắc phục:** Bổ sung kiểm tra từ chối sớm: nếu `detail.status !== 'PENDING'`, lập tức ném lỗi `fail('APPROVAL_NOT_CLAIMABLE', ...)` trả về mã HTTP 409 ngay lập tức, tiết kiệm tài nguyên mạng và tránh lock database không cần thiết. Bổ sung unit test trong `apps/api/src/routes/v1/approvals.test.ts`. *(Đã xong - 23/23 test pass)*
+
+4. **Sửa Bug B-110:** Catalog & Inventory SOR Readers lọc bỏ sản phẩm hợp lệ khi item envelope không lặp lại tenant_id (`apps/worker/src/runtime/sales/skills/read-handlers.ts` & `apps/worker/src/runtime/sales/skills/sor-readers.ts`):
+   - **Hiện tượng:** Trong `handleSearchProduct` và `readInventoryFromSor`, khi đọc danh sách sản phẩm/tồn kho từ phong bì phản hồi ERP đã được thẩm định tenant ở cấp envelope, code yêu cầu ngặt nghèo từng dòng item con phải có `product.tenant_id === tenant_id` và `candidate.tenant_id === tenant_id`. Đối với các hệ thống ERP chuẩn (nơi trường `tenant_id` chỉ nằm ở cấp envelope và không lặp lại ở từng dòng sản phẩm con), toàn bộ sản phẩm hợp lệ bị lọc bỏ hoàn toàn (`products: []` hoặc ném `AUTHORITATIVE_SOURCE_UNAVAILABLE`).
+   - **Khắc phục:** Nới lỏng kiểm tra để chấp nhận cả trường hợp `tenant_id === undefined` ở cấp item (miễn là không khác `tenant_id` của phiên khi được khai báo). Bổ sung unit test kiểm chứng trong `apps/worker/src/runtime/sales/skills/read-skills.test.ts`. *(Đã xong - 17/17 test pass)*
+
 ---
 *Báo cáo được lưu trữ và cập nhật trực tiếp tại: `docs/demo/BUG_AUDIT_REPORT.md`.*
+
 
 
 

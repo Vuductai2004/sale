@@ -379,6 +379,86 @@ describe('SalesSkillServices - read, recommendation and customer skills', () => 
       checked_at: SNAPSHOT_AT,
     });
   });
+
+  it('searches products and checks stock when item rows omit tenant_id (B-110)', async () => {
+    const erp_read: ErpReadPort = {
+      read: vi.fn(async ({ resource, tenant_id, key }) => {
+        if (resource === 'products') {
+          return {
+            resource,
+            tenant_id,
+            observed_at: SNAPSHOT_AT,
+            value: {
+              tenant_id,
+              snapshot_at: SNAPSHOT_AT,
+              items: [{
+                product_id: 'product-no-tenant-field',
+                sku: 'SKU-ENVELOPE',
+                name: 'Envelope Scoped Accessory',
+                currency: 'TWD',
+                original_list_price: 150,
+                is_active: true,
+              }],
+            },
+          };
+        }
+        if (resource === 'inventory') {
+          return {
+            resource,
+            tenant_id,
+            observed_at: SNAPSHOT_AT,
+            value: {
+              tenant_id,
+              snapshot_at: SNAPSHOT_AT,
+              items: [{ sku_id: key, total_available_to_promise: 7 }],
+            },
+          };
+        }
+        throw new Error(`Unexpected resource ${resource}`);
+      }),
+    };
+    const services = createServices({ erp_read });
+    const context = {
+      run_id: 'run-b110',
+      tenant_id: TENANT_ID,
+      caller_agent: 'SAL-02' as const,
+      correlation_id: CORRELATION_ID,
+      granted_authority: 'AUTH-1' as const,
+      effect_key: 'effect-read-b110',
+    };
+
+    const search = await services.tool_port.invoke({
+      skill_id: 'skill.sales.search_product',
+      tool_binding: 'API-001.CatalogConnector',
+      input: { tenant_id: TENANT_ID, query: 'accessory' },
+      context,
+    });
+    expect(search).toEqual({
+      products: [{
+        product_id: 'product-no-tenant-field',
+        sku: 'SKU-ENVELOPE',
+        name: 'Envelope Scoped Accessory',
+        list_price: 150,
+        currency: 'TWD',
+        in_stock: true,
+      }],
+      total_found: 1,
+    });
+
+    const stock = await services.tool_port.invoke({
+      skill_id: 'skill.sales.check_stock',
+      tool_binding: 'API-001.InventoryConnector',
+      input: { tenant_id: TENANT_ID, sku_id: 'SKU-ENVELOPE' },
+      context,
+    });
+    expect(stock).toEqual({
+      sku_id: 'SKU-ENVELOPE',
+      available_quantity: 7,
+      in_stock: true,
+      checked_at: SNAPSHOT_AT,
+    });
+  });
+
   it('searches with bounded deduplicated inventory reads and keeps failed stock unknown', async () => {
     const inventoryKeys: string[] = [];
     const erp_read: ErpReadPort = {

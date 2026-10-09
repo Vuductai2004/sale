@@ -262,9 +262,13 @@ export class SalesContextAggregator implements IContextAggregator {
             order_count: profile.order_count,
             rfm_segment_hypothesis: profile.rfm_segment_hypothesis,
             consent_marketing: profile.consent_marketing,
-            consent_updated_at: profile.consent_updated_at?.toISOString() ?? null,
-            suppression_active: profile.suppression_active,
-            created_at: profile.created_at.toISOString(),
+            consent_updated_at: profile.consent_updated_at instanceof Date
+              ? profile.consent_updated_at.toISOString()
+              : (profile.consent_updated_at ? String(profile.consent_updated_at) : null),
+            suppression_active: Boolean(profile.suppression_active),
+            created_at: profile.created_at instanceof Date
+              ? profile.created_at.toISOString()
+              : (profile.created_at ? String(profile.created_at) : this.now().toISOString()),
           };
 
           try {

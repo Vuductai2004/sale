@@ -653,6 +653,50 @@ describe('POST /approvals/:approval_id/decision (R05 approvals.decide)', () => {
         await app.close();
       }
     });
+
+    it('refuses decision early when approval detail is already decided (B-109)', async () => {
+      const { app, decide } = buildHarness({
+        approvalDetail: {
+          approval_id: APPROVAL_ID,
+          tenant_id: TENANT,
+          run_id: RUN_ID,
+          action_id: 'action-1',
+          effect_key: EFFECT_KEY,
+          payload: { order_id: 'ord-123' },
+          reason: 'Already decided',
+          status: 'APPROVED',
+          is_paused: false,
+          decided_by: 'op-1',
+          decided_at: '2026-09-24T10:00:00.000Z',
+          decision_notes: 'Approved earlier',
+          created_at: '2026-09-23T00:00:00.000Z',
+          payload_sha256: PAYLOAD_SHA256,
+          expires_at: '2026-09-26T00:00:00.000Z',
+        },
+      });
+
+      try {
+        const response = await app.inject({
+          method: 'POST',
+          url: `/approvals/${APPROVAL_ID}/decision`,
+          headers: { authorization: `Bearer ${OPERATOR_TOKEN}` },
+          payload: {
+            decision: 'APPROVE',
+            reason: 'Verified again',
+            expected_payload_sha256: PAYLOAD_SHA256,
+          },
+        });
+
+        expect(response.statusCode).toBe(409);
+        expect(response.json()).toMatchObject({
+          error_code: 'APPROVAL_NOT_CLAIMABLE',
+          retryable: false,
+        });
+        expect(decide).not.toHaveBeenCalled();
+      } finally {
+        await app.close();
+      }
+    });
   });
 
   describe('refusal mapping', () => {

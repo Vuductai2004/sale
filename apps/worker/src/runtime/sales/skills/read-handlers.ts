@@ -139,7 +139,7 @@ export async function handleSearchProduct(
     .filter((product) => {
       if (
         !isActiveProduct(product)
-        || product.tenant_id !== tenant_id
+        || (product.tenant_id !== undefined && product.tenant_id !== tenant_id)
         || !categoryMatches(product, input.category_id)
       ) {
         return false;

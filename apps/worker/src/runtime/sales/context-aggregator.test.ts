@@ -69,6 +69,26 @@ describe('SalesContextAggregator', () => {
     expect(aggregator.verifiedTimelineFor(TENANT_ID, CORRELATION_ID)?.items[0]?.event_id).toBe('event-verified-1');
   });
 
+  it('hydrates profile successfully when created_at and consent_updated_at are strings (B-107)', async () => {
+    const stringProfile = {
+      ...profile(),
+      created_at: '2025-01-01T00:00:00.000Z' as unknown as Date,
+      consent_updated_at: '2026-01-01T00:00:00.000Z' as unknown as Date,
+    };
+    const getProfile = vi.fn(async () => stringProfile);
+    const listTimeline = vi.fn(async () => timeline);
+    const aggregator = new SalesContextAggregator({
+      repositories: { getProfile, listTimeline },
+      now: () => NOW,
+    });
+
+    const context = await aggregator.hydrateContext(TENANT_ID, subject(CUSTOMER_ID), 'string-dates-corr');
+
+    expect(context.customer).not.toBeNull();
+    expect(context.customer?.created_at).toBe('2025-01-01T00:00:00.000Z');
+    expect(context.customer?.consent_updated_at).toBe('2026-01-01T00:00:00.000Z');
+  });
+
   it('does not query profile or timeline when identity is absent or malformed', async () => {
     const getProfile = vi.fn(async () => profile());
     const listTimeline = vi.fn(async () => timeline);

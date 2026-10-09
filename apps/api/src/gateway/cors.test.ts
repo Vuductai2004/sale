@@ -22,7 +22,7 @@ function buildApp(rawAllowlist: string | undefined) {
 
 describe('browser origin policy', () => {
   it('parses an exact allowlist and ignores wildcards', () => {
-    expect(parseAllowedOrigins(' http://localhost:3000 ,http://localhost:3001,,*')).toEqual([
+    expect(parseAllowedOrigins(' http://localhost:3000/ ,http://localhost:3001///,,*')).toEqual([
       ORIGIN,
       OTHER,
     ]);

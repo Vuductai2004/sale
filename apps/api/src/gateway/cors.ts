@@ -61,7 +61,7 @@ export function parseAllowedOrigins(raw: string | undefined): readonly string[] 
   if (typeof raw !== 'string') return [];
   return raw
     .split(',')
-    .map((value) => value.trim())
+    .map((value) => value.trim().replace(/\/+$/, ''))
     .filter((value) => value.length > 0 && value !== '*');
 }
 

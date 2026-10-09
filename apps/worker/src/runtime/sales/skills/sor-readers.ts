@@ -258,7 +258,7 @@ export async function readInventoryFromSor(
 
   const item = envelope.items.find((candidate) =>
     (candidate.sku_id === sku_id || candidate.sku === sku_id)
-    && candidate.tenant_id === tenant_id
+    && (candidate.tenant_id === undefined || candidate.tenant_id === tenant_id)
     && Number.isSafeInteger(candidate.total_available_to_promise)
     && candidate.total_available_to_promise >= 0,
   );

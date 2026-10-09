@@ -207,6 +207,9 @@ export function registerApprovalRoutes(
         if (detail.status === 'EXPIRED') {
           fail('APPROVAL_EXPIRED', 'this approval crossed its review deadline and cannot receive a decision');
         }
+        if (detail.status !== 'PENDING') {
+          fail('APPROVAL_NOT_CLAIMABLE', `this approval is already ${detail.status.toLowerCase()}`);
+        }
 
 
         let require_distinct_approver = false;
