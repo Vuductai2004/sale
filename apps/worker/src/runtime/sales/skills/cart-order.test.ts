@@ -1129,5 +1129,37 @@ describe('SalesSkillServices - cart and order skills', () => {
       code: 'INVALID_INPUT',
     });
   });
+
+  it('accepts Date objects in cart and order outputs and normalizes to ISO strings (B-117)', async () => {
+    const cartPortMock = {
+      createCart: vi.fn(async () => ({
+        cart_id: 'cart-date-1',
+        item_count: 1,
+        subtotal: 100,
+        currency: 'TWD',
+        updated_at: new Date('2026-09-24T10:00:00Z') as unknown as string,
+      })),
+    };
+    const services = createServices({ cart: cartPortMock as unknown as SalesCartPort });
+    const cartResult = await services.tool_port.invoke({
+      skill_id: 'skill.sales.create_cart',
+      tool_binding: 'API-002.CommerceCartAPI',
+      input: {
+        tenant_id: TENANT_ID,
+        customer_id: CUSTOMER_ID,
+        items: [{ sku_id: 'SKU-1', quantity: 1 }],
+      },
+      context: {
+        run_id: 'run-date-cart',
+        tenant_id: TENANT_ID,
+        caller_agent: 'SAL-02',
+        correlation_id: CORRELATION_ID,
+        granted_authority: 'AUTH-3',
+        effect_key: 'effect-cart-date',
+      },
+    }) as { updated_at: string };
+
+    expect(cartResult.updated_at).toBe('2026-09-24T10:00:00.000Z');
+  });
 });
 

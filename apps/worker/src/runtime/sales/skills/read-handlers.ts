@@ -416,7 +416,7 @@ export async function handleRecommendProduct(
       const sku = productSku(product);
       return (
         isActiveProduct(product)
-        && product.tenant_id === tenant_id
+        && (product.tenant_id === undefined || product.tenant_id === tenant_id)
         && sku !== undefined
         && (advisorSku === undefined || sku === advisorSku)
         && !cartSkus.has(sku)

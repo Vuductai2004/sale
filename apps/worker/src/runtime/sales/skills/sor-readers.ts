@@ -61,7 +61,8 @@ export interface InventoryRead {
   readonly item: InventoryItem;
 }
 
-export function isValidIsoDate(value: unknown): value is string {
+export function isValidIsoDate(value: unknown): boolean {
+  if (value instanceof Date) return !Number.isNaN(value.getTime());
   if (typeof value !== 'string' || value.trim().length === 0) return false;
   return !Number.isNaN(new Date(value).getTime());
 }

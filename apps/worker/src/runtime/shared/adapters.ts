@@ -779,7 +779,8 @@ export function createDurableAdapters(options: {
       if (task.state !== 'running' && !eventBearingWaiting) {
         return false;
       }
-      if (task.lease_expires_at === null || Date.parse(task.lease_expires_at) <= now.getTime()) {
+      const leaseExpiresMs = task.lease_expires_at === null ? NaN : Date.parse(task.lease_expires_at);
+      if (Number.isNaN(leaseExpiresMs) || leaseExpiresMs <= now.getTime()) {
         return false;
       }
       try {

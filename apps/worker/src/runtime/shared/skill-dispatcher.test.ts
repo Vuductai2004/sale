@@ -101,4 +101,27 @@ describe('shared skill adapter dispatcher', () => {
     }
   });
 
+  it('safely handles negative or invalid timeout_ms without throwing RangeError (B-118)', async () => {
+    const dispatch = vi.fn(async (request: SkillDispatchRequest) => ({
+      effect_key: request.effect_key,
+      output: { status: 'ok' },
+      latency_ms: 0,
+      attempts: 1,
+    }));
+    const dispatcher = createSkillAdapterDispatcher({
+      engine: { dispatch } as unknown as SkillRuntimeEngine,
+      resolve_correlation_id: async () => 'corr-dispatcher-test',
+      resolve_grant: async () => 'AUTH-3',
+    });
+
+    // Negative timeout must not crash
+    await expect(
+      dispatcher.dispatch(action({ tenant_id: TENANT_ID }), { timeout_ms: -100 }),
+    ).resolves.toBeDefined();
+
+    // NaN timeout must not crash
+    await expect(
+      dispatcher.dispatch(action({ tenant_id: TENANT_ID }), { timeout_ms: Number.NaN }),
+    ).resolves.toBeDefined();
+  });
 });

@@ -95,9 +95,11 @@ export function createSkillAdapterDispatcher(options: SkillAdapterDispatcherOpti
         skillInput = serverInput;
       }
 
-      const timeoutSignal = dispatchOptions?.timeout_ms === undefined
-        ? undefined
-        : AbortSignal.timeout(dispatchOptions.timeout_ms);
+      const timeoutSignal = typeof dispatchOptions?.timeout_ms === 'number'
+        && Number.isFinite(dispatchOptions.timeout_ms)
+        && dispatchOptions.timeout_ms >= 0
+        ? AbortSignal.timeout(dispatchOptions.timeout_ms)
+        : undefined;
       const signal = dispatchOptions?.signal === undefined
         ? timeoutSignal
         : timeoutSignal === undefined

@@ -564,6 +564,20 @@ describe('createDurableAdapters', () => {
       expect(workflowRepository.renewTaskLease).not.toHaveBeenCalled();
     });
 
+    it('acquireLease returns false when lease_expires_at is invalid or NaN timestamp (B-115)', async () => {
+      const { adapters, workflowRepository } = setupFakeRepos();
+      const invalidTask = createFakeTaskRecord({
+        state: 'running',
+        lease_owner: 'worker-1',
+        lease_expires_at: 'not-a-valid-timestamp',
+      });
+      vi.mocked(workflowRepository.getTask).mockResolvedValueOnce(invalidTask);
+
+      const acquired = await adapters.leaseManager.acquireLease('tenant-1', 'run-1', 'worker-1');
+      expect(acquired).toBe(false);
+      expect(workflowRepository.renewTaskLease).not.toHaveBeenCalled();
+    });
+
     it('acquireLease returns false when renewTaskLease throws (e.g. concurrent collision)', async () => {
       const { adapters, workflowRepository } = setupFakeRepos();
       const runningTask = createFakeTaskRecord({

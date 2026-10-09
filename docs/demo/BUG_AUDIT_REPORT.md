@@ -705,8 +705,27 @@ Tính đến thời điểm hiện tại, remote `phong/feat/demo-live-3agent` (
    - **Hiện tượng:** Hàm `runIdOf` kiểm tra `run_id.trim().length === 0` nhưng lại trả về nguyên trạng `run_id` chưa cắt tỉa khoảng trắng. Nếu URL hoặc query mang khoảng trắng (ví dụ `%20run-123%20`), chuỗi có khoảng trắng này được truyền vào câu truy vấn database `runtime.runs.read({ tenant_id, run_id })`, khiến hệ thống không tìm thấy tác vụ và trả về 404 `TASK_NOT_FOUND`.
    - **Khắc phục:** Chuẩn hóa trả về `run_id.trim()`. Bổ sung unit test trong `apps/api/src/routes/v1/demo-readiness.test.ts`. *(Đã xong - 8/8 test pass)*
 
+### GIAI ĐOẠN 21: BẢO VỆ THỜI HẠN LEASE KHI NAN, HỖ TRỢ CATALOG TENANT UNDEFINED, CHUẨN HÓA NGÀY MUTATION & CHỐNG LỖI TIMEOUT DISPATCHER (B-115 ĐẾN B-118)
+
+1. **Sửa Bug B-115:** Thẩm định tính hợp lệ của timestamp hết hạn lease (`lease_expires_at`) trong Care Lease Manager (`apps/worker/src/runtime/shared/adapters.ts`):
+   - **Hiện tượng:** Biểu thức `Date.parse(task.lease_expires_at) <= now.getTime()` trả về `false` khi `task.lease_expires_at` là chuỗi ngày không hợp lệ (ví dụ `"invalid-date"`, `Date.parse` trả về `NaN`). Phép so sánh `NaN <= number` trong JavaScript luôn là `false`. Hậu quả là một task có timestamp lease bị hỏng/lỗi cú pháp bị coi nhầm là lease còn hạn và thuộc về worker khác, khiến task bị kẹt vĩnh viễn không bao giờ được cấp quyền thực thi lại (never re-acquired).
+   - **Khắc phục:** Thẩm định `Number.isNaN(leaseExpiresMs)`. Nếu `task.lease_expires_at === null` hoặc chuỗi bị `NaN`, hoặc thời gian nhỏ hơn/bằng `now`, lập tức cho phép acquire lại lease. Bổ sung unit test trong `apps/worker/src/runtime/care/adapters.test.ts`. *(Đã xong - 31/31 test pass)*
+
+2. **Sửa Bug B-116:** Sales Recommend Product lọc bỏ sản phẩm hợp lệ khi catalog item không có trường `tenant_id` (`apps/worker/src/runtime/sales/skills/read-handlers.ts`):
+   - **Hiện tượng:** Trong `handleRecommendProduct`, điều kiện lọc sản phẩm kiểm tra `product.tenant_id === tenant_id`. Đối với danh mục sản phẩm từ hệ thống ERP chuẩn (nơi `tenant_id` chỉ nằm ở cấp phong bì danh mục và bị lược bỏ ở từng mục sản phẩm con), `product.tenant_id` mang giá trị `undefined`. Dẫn đến toàn bộ sản phẩm tiềm năng bị loại bỏ, hệ thống ném lỗi `AUTHORITATIVE_SOURCE_UNAVAILABLE: No candidate has complete authoritative inventory and revenue evidence`.
+   - **Khắc phục:** Cập nhật điều kiện lọc cho phép `(product.tenant_id === undefined || product.tenant_id === tenant_id)`. Bổ sung unit test kiểm chứng trong `apps/worker/src/runtime/sales/skills/read-skills.test.ts`. *(Đã xong - 18/18 test pass)*
+
+3. **Sửa Bug B-117:** Thẩm định ngày ISO và chuẩn hóa thời gian phản hồi connector trong Sales Mutate Cart / Order / Message (`apps/worker/src/runtime/sales/skills/sor-readers.ts` & `apps/worker/src/runtime/sales/skills/mutation-handlers.ts`):
+   - **Hiện tượng:** Hàm `isValidIsoDate` chỉ chấp nhận kiểu chuỗi, từ chối đối tượng `Date` (`typeof value !== 'string'`). Khi các connector ERP hoặc mock trả về đối tượng `Date` cho các trường `updated_at`, `created_at`, hoặc `delivered_at`, hàm `isValidIsoDate` trả về `false`, khiến thao tác giỏ hàng, đơn hàng hoặc gửi tin nhắn ném lỗi `AUTHORITATIVE_SOURCE_UNAVAILABLE`.
+   - **Khắc phục:** Cập nhật `isValidIsoDate` chấp nhận cả `Date` instance hợp lệ (`value instanceof Date && !Number.isNaN(value.getTime())`), và chuẩn hóa các trường ngày trả về thành chuỗi ISO string trong `handleMutateCart`, `handleCreateOrder`, và `handleSendMessage`. Bổ sung unit test trong `apps/worker/src/runtime/sales/skills/cart-order.test.ts`. *(Đã xong - 19/19 test pass)*
+
+4. **Sửa Bug B-118:** Thiếu bảo vệ an toàn cho tham số timeout trong Skill Dispatcher (`apps/worker/src/runtime/shared/skill-dispatcher.ts`):
+   - **Hiện tượng:** Trong hàm `dispatch`, khi `dispatchOptions?.timeout_ms` được truyền vào, code gọi thẳng `AbortSignal.timeout(dispatchOptions.timeout_ms)` mà không kiểm tra giá trị. Nếu `timeout_ms` là số âm (ví dụ `-100`) hoặc `NaN`, Node.js ném lỗi `RangeError: "timeout" must be greater than 0` làm sập luồng điều phối của worker.
+   - **Khắc phục:** Bổ sung điều kiện kiểm tra nghiêm ngặt `typeof dispatchOptions?.timeout_ms === 'number' && Number.isFinite(dispatchOptions.timeout_ms) && dispatchOptions.timeout_ms >= 0`. Nếu không thỏa mãn, bỏ qua timeout signal để tránh ném `RangeError`. Bổ sung unit test trong `apps/worker/src/runtime/shared/skill-dispatcher.test.ts`. *(Đã xong - 4/4 test pass)*
+
 ---
 *Báo cáo được lưu trữ và cập nhật trực tiếp tại: `docs/demo/BUG_AUDIT_REPORT.md`.*
+
 
 
 

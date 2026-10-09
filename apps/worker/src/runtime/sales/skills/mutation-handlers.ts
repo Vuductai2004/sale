@@ -180,12 +180,14 @@ export async function handleCreateCart(
     );
   }
 
+  const updated_at = out.updated_at instanceof Date ? out.updated_at.toISOString() : out.updated_at;
+
   return {
     cart_id: out.cart_id,
     item_count: out.item_count,
     subtotal: out.subtotal,
     currency: out.currency,
-    updated_at: out.updated_at,
+    updated_at,
   };
 }
 
@@ -386,6 +388,7 @@ export async function handleCreateOrder(
       `Order total (${out.total_amount} ${out.currency}) does not match authoritative quote (${quote.total_amount} ${quote.currency})`,
     );
   }
+  const created_at = out.created_at instanceof Date ? out.created_at.toISOString() : out.created_at;
   return {
     order_id: out.order_id,
     order_number: out.order_number,
@@ -393,7 +396,7 @@ export async function handleCreateOrder(
     currency: out.currency,
     status: out.status,
     ...(out.payment_url ? { payment_url: out.payment_url } : {}),
-    created_at: out.created_at,
+    created_at,
   };
 }
 
@@ -605,9 +608,11 @@ export async function handleSendMessage(
     );
   }
 
+  const delivered_at = out.delivered_at instanceof Date ? out.delivered_at.toISOString() : out.delivered_at;
+
   return {
     message_id: out.message_id,
     provider_reference: out.provider_reference,
-    delivered_at: out.delivered_at,
+    delivered_at,
   };
 }

@@ -1348,4 +1348,66 @@ describe('SalesSkillServices - read, recommendation and customer skills', () => 
       }),
     ).rejects.toMatchObject({ code: 'INVALID_INPUT' });
   });
+
+  it('recommend_product: does not drop products when item tenant_id is undefined (B-116)', async () => {
+    const catalogWithoutItemTenant = {
+      tenant_id: TENANT_ID,
+      snapshot_at: SNAPSHOT_AT,
+      items: [
+        {
+          sku: 'SKU-REC-1',
+          name: 'Wireless Charger',
+          currency: 'TWD',
+          original_list_price: 29.99,
+          is_active: true,
+          // item tenant_id is omitted (undefined)
+        },
+      ],
+    };
+    const erp = {
+      read: vi.fn(async ({ resource, tenant_id, key }: { resource: string; tenant_id: string; key?: string }) => {
+        if (resource === 'products') {
+          return {
+            resource,
+            tenant_id,
+            observed_at: SNAPSHOT_AT,
+            value: catalogWithoutItemTenant,
+          };
+        }
+        return {
+          resource,
+          tenant_id,
+          observed_at: SNAPSHOT_AT,
+          value: {
+            tenant_id,
+            snapshot_at: SNAPSHOT_AT,
+            items: [{ tenant_id, sku_id: key, total_available_to_promise: 3 }],
+          },
+        };
+      }),
+    };
+    const services = createFullyBoundServices({
+      erp_read: erp as unknown as ErpReadPort,
+    });
+
+    const result = await services.tool_port.invoke({
+      skill_id: 'skill.sales.recommend_product',
+      tool_binding: 'Core.RecommendationEngine',
+      input: {
+        tenant_id: TENANT_ID,
+        customer_id: CUSTOMER_ID,
+        current_cart_skus: [],
+      },
+      context: {
+        run_id: 'run-rec-b116',
+        tenant_id: TENANT_ID,
+        caller_agent: 'SAL-02' as const,
+        correlation_id: CORRELATION_ID,
+        granted_authority: 'AUTH-1' as const,
+        effect_key: 'effect-test-b116',
+      },
+    }) as { product: { sku: string } };
+
+    expect(result.product).toMatchObject({ sku: 'SKU-REC-1' });
+  });
 });
