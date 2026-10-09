@@ -225,10 +225,10 @@ function projectProviderCalls(calls: readonly ProviderCallLedgerRecord[]): reado
 
 function runIdOf(request: FastifyRequest<{ Params: { run_id: string } }>): string {
   const run_id = request.params.run_id;
-  if (typeof run_id !== 'string' || run_id.trim().length === 0 || run_id.length > 64) {
+  if (typeof run_id !== 'string' || run_id.trim().length === 0 || run_id.trim().length > 64) {
     fail('VALIDATION_FAILED', 'run_id must be a non-empty bounded identifier');
   }
-  return run_id;
+  return run_id.trim();
 }
 
 /** Registers local demo readiness and the redacted tenant-scoped run trace projection. */

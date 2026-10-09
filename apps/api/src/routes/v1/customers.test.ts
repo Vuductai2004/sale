@@ -84,4 +84,28 @@ describe('customer projection routes', () => {
       await app.close();
     }
   });
+
+  it('supports numeric limit query value and rejects invalid numeric limits (B-113)', async () => {
+    const { app, runtime } = buildHarness();
+    try {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/customers',
+        query: { limit: '25' },
+        headers: { authorization: `Bearer ${TOKEN}` },
+      });
+      expect(response.statusCode).toBe(200);
+      expect(runtime.companyCrm?.listCustomers).toHaveBeenCalledWith({ tenant_id: TENANT, limit: 25 });
+
+      const invalidResponse = await app.inject({
+        method: 'GET',
+        url: '/customers?limit=0',
+        headers: { authorization: `Bearer ${TOKEN}` },
+      });
+      expect(invalidResponse.statusCode).toBe(400);
+      expect(invalidResponse.json().error_code).toBe('VALIDATION_FAILED');
+    } finally {
+      await app.close();
+    }
+  });
 });

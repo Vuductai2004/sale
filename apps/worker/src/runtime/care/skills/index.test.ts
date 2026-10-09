@@ -1243,5 +1243,102 @@ describe('CareSkillServices', () => {
       expect(result).toHaveProperty('answers');
       expect(result).toHaveProperty('match_confidence');
     });
+
+    it('Customer360.AnalyticsLayer enforces tenant scope and input validation (B-111)', async () => {
+      const mockAnalyticsLayer = {
+        analyzeChurnRisk: vi.fn().mockResolvedValue({
+          customer_id: CUSTOMER_ID,
+          churn_probability: 0.15,
+          risk_tier: 'LOW',
+          primary_risk_factors: ['long_tenure'],
+          classification: 'HYPOTHESIS',
+        }),
+      };
+      const services = createCareSkillServices(createMockOptions({
+        analytics_layer: mockAnalyticsLayer,
+      }));
+
+      // 1. Rejects invalid input shape
+      await expect(
+        services.tool_port.invoke({
+          skill_id: 'skill.care.analyze_churn_risk',
+          tool_binding: 'Customer360.AnalyticsLayer',
+          input: null as unknown as Record<string, unknown>,
+          context: {
+            run_id: 'run-churn-1',
+            tenant_id: TENANT_ID,
+            caller_agent: 'CAR-01',
+            correlation_id: 'corr-churn',
+            granted_authority: 'AUTH-1',
+            effect_key: 'effect-churn-1',
+          },
+        }),
+      ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+
+      // 2. Rejects mismatched tenant_id
+      await expect(
+        services.tool_port.invoke({
+          skill_id: 'skill.care.analyze_churn_risk',
+          tool_binding: 'Customer360.AnalyticsLayer',
+          input: {
+            tenant_id: 'wrong-tenant',
+            customer_id: CUSTOMER_ID,
+          },
+          context: {
+            run_id: 'run-churn-1',
+            tenant_id: TENANT_ID,
+            caller_agent: 'CAR-01',
+            correlation_id: 'corr-churn',
+            granted_authority: 'AUTH-1',
+            effect_key: 'effect-churn-1',
+          },
+        }),
+      ).rejects.toMatchObject({ code: 'TENANT_SCOPE_MISMATCH' });
+
+      // 3. Rejects empty customer_id
+      await expect(
+        services.tool_port.invoke({
+          skill_id: 'skill.care.analyze_churn_risk',
+          tool_binding: 'Customer360.AnalyticsLayer',
+          input: {
+            tenant_id: TENANT_ID,
+            customer_id: '   ',
+          },
+          context: {
+            run_id: 'run-churn-1',
+            tenant_id: TENANT_ID,
+            caller_agent: 'CAR-01',
+            correlation_id: 'corr-churn',
+            granted_authority: 'AUTH-1',
+            effect_key: 'effect-churn-1',
+          },
+        }),
+      ).rejects.toMatchObject({ code: 'VALIDATION_FAILED' });
+
+      // 4. Succeeds when tenant and customer_id are valid
+      const result = await services.tool_port.invoke({
+        skill_id: 'skill.care.analyze_churn_risk',
+        tool_binding: 'Customer360.AnalyticsLayer',
+        input: {
+          tenant_id: TENANT_ID,
+          customer_id: CUSTOMER_ID,
+        },
+        context: {
+          run_id: 'run-churn-1',
+          tenant_id: TENANT_ID,
+          caller_agent: 'CAR-01',
+          correlation_id: 'corr-churn',
+          granted_authority: 'AUTH-1',
+          effect_key: 'effect-churn-1',
+        },
+      });
+
+      expect(result).toMatchObject({
+        customer_id: CUSTOMER_ID,
+        churn_probability: 0.15,
+        risk_tier: 'LOW',
+      });
+      expect(mockAnalyticsLayer.analyzeChurnRisk).toHaveBeenCalledOnce();
+    });
   });
 });

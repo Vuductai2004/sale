@@ -18,6 +18,14 @@ function stringField(value: unknown, key: string): string | null {
 }
 
 function limitField(value: unknown, key: string): number | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
+  const rawValue = (value as Record<string, unknown>)[key];
+  if (typeof rawValue === 'number') {
+    if (!Number.isSafeInteger(rawValue) || rawValue < 1) {
+      fail('VALIDATION_FAILED', `${key} must be a positive integer`);
+    }
+    return rawValue;
+  }
   const raw = stringField(value, key);
   if (raw === null) return null;
   if (!/^\d+$/.test(raw) || raw === '0') {

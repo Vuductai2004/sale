@@ -227,5 +227,39 @@ describe('handleOrderConnector ERP status mapping', () => {
       code: 'VALIDATION_FAILED',
     });
   });
+
+  it('accepts order with Date instance for order_date (B-112)', async () => {
+    const dateErp: ErpReadPort = {
+      read: vi.fn().mockResolvedValue({
+        resource: 'orders',
+        observed_at: '2026-01-04T10:00:00Z',
+        tenant_id: TENANT_ID,
+        value: {
+          order_id: 'ORD-DATE-1',
+          customer_id: CUSTOMER_ID,
+          status: 'SHIPPED',
+          total_price: 150,
+          currency: 'TWD',
+          order_date: new Date('2026-01-05T14:30:00Z'),
+          line_items: [
+            {
+              sku_id: 'SKU-1',
+              product_name: 'Standard Widget',
+              quantity: 1,
+              unit_price: 150,
+              currency: 'TWD',
+            },
+          ],
+        },
+      }),
+    };
+
+    const result = await handleOrderConnector<{ order_date: string }>(
+      invocation('SHIPPED'),
+      dateErp,
+      async () => IDENTITY,
+    );
+    expect(result.order_date).toBe('2026-01-05T14:30:00.000Z');
+  });
 });
 

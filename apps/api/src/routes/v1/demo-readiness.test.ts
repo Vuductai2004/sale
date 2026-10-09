@@ -366,4 +366,21 @@ describe('GET /runs/:run_id/trace', () => {
       await app.close();
     }
   });
+
+  it('trims run_id when querying trace (B-114)', async () => {
+    const { app, runRead } = buildHarness();
+
+    try {
+      const response = await app.inject({
+        method: 'GET',
+        url: `/runs/%20${RUN_ID}%20/trace`,
+        headers: { authorization: `Bearer ${RUN_READER_TOKEN}` },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(runRead).toHaveBeenCalledWith({ tenant_id: TENANT, run_id: RUN_ID });
+    } finally {
+      await app.close();
+    }
+  });
 });

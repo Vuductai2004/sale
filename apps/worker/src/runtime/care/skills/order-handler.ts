@@ -237,9 +237,15 @@ export async function handleOrderConnector<TOutput>(
     ? order.tracking_number.trim()
     : null;
 
-  const rawDate = typeof order.order_date === 'string'
-    ? order.order_date
-    : (typeof order.created_at === 'string' ? order.created_at : null);
+  const rawDate = order.order_date instanceof Date
+    ? order.order_date.toISOString()
+    : typeof order.order_date === 'string'
+      ? order.order_date
+      : order.created_at instanceof Date
+        ? order.created_at.toISOString()
+        : typeof order.created_at === 'string'
+          ? order.created_at
+          : null;
   if (!rawDate || isNaN(Date.parse(rawDate))) {
     throw new CareSkillToolError(
       'AUTHORITATIVE_SOURCE_UNAVAILABLE',

@@ -687,6 +687,24 @@ Tính đến thời điểm hiện tại, remote `phong/feat/demo-live-3agent` (
    - **Hiện tượng:** Trong `handleSearchProduct` và `readInventoryFromSor`, khi đọc danh sách sản phẩm/tồn kho từ phong bì phản hồi ERP đã được thẩm định tenant ở cấp envelope, code yêu cầu ngặt nghèo từng dòng item con phải có `product.tenant_id === tenant_id` và `candidate.tenant_id === tenant_id`. Đối với các hệ thống ERP chuẩn (nơi trường `tenant_id` chỉ nằm ở cấp envelope và không lặp lại ở từng dòng sản phẩm con), toàn bộ sản phẩm hợp lệ bị lọc bỏ hoàn toàn (`products: []` hoặc ném `AUTHORITATIVE_SOURCE_UNAVAILABLE`).
    - **Khắc phục:** Nới lỏng kiểm tra để chấp nhận cả trường hợp `tenant_id === undefined` ở cấp item (miễn là không khác `tenant_id` của phiên khi được khai báo). Bổ sung unit test kiểm chứng trong `apps/worker/src/runtime/sales/skills/read-skills.test.ts`. *(Đã xong - 17/17 test pass)*
 
+### GIAI ĐOẠN 20: BẢO VỆ CÔ LẬP KHÁCH THUÊ CHURN ANALYTICS, ĐỒNG BỘ THỜI GIAN ERP ORDER, HỖ TRỢ NUMERIC LIMIT & SANITIZE RUN ID (B-111 ĐẾN B-114)
+
+1. **Sửa Bug B-111:** Thiếu thẩm định ranh giới đa khách thuê và schema input trong `Customer360.AnalyticsLayer` (`apps/worker/src/runtime/care/skills/tool-port.ts`):
+   - **Hiện tượng:** Trong `createCareSkillToolPort`, tất cả các binding như `API-001.OrderConnector`, `PostgreSQL.CaseManagementStore`, `Orchestrator.HandoffBus`, và `SecondBrain.FAQEngine` đều kiểm tra nghiêm ngặt `input.tenant_id === context.tenant_id`. Duy nhất binding `Customer360.AnalyticsLayer` truyền thẳng `invocation.input` sang hàm `analyzeChurnRisk` mà không kiểm tra xem input có phải object hợp lệ hay không, và không kiểm tra `input.tenant_id !== contextTenantId`. Điều này tạo ra lỗ hổng rò rỉ dữ liệu hoặc đọc nhầm chỉ số nguy cơ rời bỏ (churn risk) của khách thuê khác.
+   - **Khắc phục:** Thêm bước thẩm định input: kiểm tra `typeof invocation.input === 'object'`, ném lỗi `TENANT_SCOPE_MISMATCH` nếu `input.tenant_id !== contextTenantId`, và ném `VALIDATION_FAILED` nếu `customer_id` bị rỗng. Bổ sung unit test toàn diện trong `apps/worker/src/runtime/care/skills/index.test.ts`. *(Đã xong - 33/33 test pass)*
+
+2. **Sửa Bug B-112:** ERP Order Lookup từ chối đơn hàng khi `order_date` là đối tượng `Date` thay vì chuỗi (`apps/worker/src/runtime/care/skills/order-handler.ts`):
+   - **Hiện tượng:** Hàm `handleOrderConnector` kiểm tra thời gian đơn hàng bằng `typeof order.order_date === 'string'` và `typeof order.created_at === 'string'`. Khi connector ERP trả về đối tượng `Date` (hoặc driver database phân tích timestamp thành instance `Date`), `rawDate` bị gán bằng `null`, dẫn đến việc ném lỗi vô cớ `CareSkillToolError('AUTHORITATIVE_SOURCE_UNAVAILABLE', 'Provider order missing or invalid order_date timestamp')`.
+   - **Khắc phục:** Bổ sung hỗ trợ `order.order_date instanceof Date ? order.order_date.toISOString() : ...` và `order.created_at instanceof Date ? order.created_at.toISOString() : ...`. Bổ sung unit test trong `apps/worker/src/runtime/care/skills/order-handler.test.ts`. *(Đã xong - 20/20 test pass)*
+
+3. **Sửa Bug B-113:** Tuyến `/api/v1/customers` bỏ qua tham số `limit` khi được cung cấp dưới dạng số (`apps/api/src/routes/v1/customers.ts`):
+   - **Hiện tượng:** Hàm `limitField` chỉ ủy quyền đọc dữ liệu cho hàm `stringField(value, key)`. Nếu caller hoặc schema của framework cung cấp `limit` dưới dạng số (number) thay vì chuỗi (string), `stringField` trả về `null` vì kiểm tra `typeof field === 'string'`. Hậu quả là tham số phân trang `limit` bị bỏ qua một cách im lặng và luôn rơi về giới hạn mặc định của hệ thống.
+   - **Khắc phục:** Thêm kiểm tra `typeof rawValue === 'number'` trong `limitField`, thẩm định `Number.isSafeInteger(rawValue) && rawValue >= 1` trước khi fallback sang chuỗi. Bổ sung unit test kiểm chứng trong `apps/api/src/routes/v1/customers.test.ts`. *(Đã xong - 3/3 test pass)*
+
+4. **Sửa Bug B-114:** Tuyến `/runs/:run_id/trace` không chuẩn hóa cắt khoảng trắng (trim) tham số `run_id` (`apps/api/src/routes/v1/demo-readiness.ts`):
+   - **Hiện tượng:** Hàm `runIdOf` kiểm tra `run_id.trim().length === 0` nhưng lại trả về nguyên trạng `run_id` chưa cắt tỉa khoảng trắng. Nếu URL hoặc query mang khoảng trắng (ví dụ `%20run-123%20`), chuỗi có khoảng trắng này được truyền vào câu truy vấn database `runtime.runs.read({ tenant_id, run_id })`, khiến hệ thống không tìm thấy tác vụ và trả về 404 `TASK_NOT_FOUND`.
+   - **Khắc phục:** Chuẩn hóa trả về `run_id.trim()`. Bổ sung unit test trong `apps/api/src/routes/v1/demo-readiness.test.ts`. *(Đã xong - 8/8 test pass)*
+
 ---
 *Báo cáo được lưu trữ và cập nhật trực tiếp tại: `docs/demo/BUG_AUDIT_REPORT.md`.*
 

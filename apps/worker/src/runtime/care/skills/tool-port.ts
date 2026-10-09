@@ -114,11 +114,34 @@ export function createCareSkillToolPort(options: CareSkillOptions): SkillToolPor
           );
         }
 
+        if (typeof invocation.input !== 'object' || invocation.input === null) {
+          throw new CareSkillToolError(
+            'VALIDATION_FAILED',
+            'tool invocation input must be an object',
+          );
+        }
+
         const input = invocation.input as {
           readonly tenant_id: string;
           readonly customer_id: string;
           readonly recent_message_snippets?: string[];
         };
+
+        const contextTenantId = invocation.context?.tenant_id;
+        if (typeof contextTenantId !== 'string' || contextTenantId.length === 0 || input.tenant_id !== contextTenantId) {
+          throw new CareSkillToolError(
+            'TENANT_SCOPE_MISMATCH',
+            'churn risk analysis tenant_id must match the orchestrator-bound tenant',
+          );
+        }
+
+        if (typeof input.customer_id !== 'string' || input.customer_id.trim().length === 0) {
+          throw new CareSkillToolError(
+            'VALIDATION_FAILED',
+            'customer_id is required and must be a non-empty string',
+          );
+        }
+
         return (await options.analytics_layer.analyzeChurnRisk(input, invocation.context)) as TOutput;
       }
 
