@@ -1161,5 +1161,49 @@ describe('SalesSkillServices - cart and order skills', () => {
 
     expect(cartResult.updated_at).toBe('2026-09-24T10:00:00.000Z');
   });
+
+  it('create_order: accepts Date instance for quote_expires_at (B-124)', async () => {
+    const futureDate = new Date('2026-09-24T18:00:00.000Z');
+    const quote_token = computeQuoteToken(TEST_QUOTE_SECRET, {
+      tenant_id: TENANT_ID,
+      sku_id: 'SKU-1',
+      customer_id: CUSTOMER_ID,
+      final_price: 100,
+      p_floor: 80,
+      currency: 'TWD',
+      quote_expires_at: futureDate.toISOString(),
+    });
+    const cartPortMock = createCartPort({
+      quote_token,
+      quote_expires_at: futureDate as unknown as string,
+    });
+    const services = createServices({
+      order: createOrderPort(),
+      cart: cartPortMock,
+      now: () => new Date(SNAPSHOT_AT),
+    });
+
+    const orderResult = await services.tool_port.invoke({
+      skill_id: 'skill.sales.create_order',
+      tool_binding: 'API-001.OrderConnector',
+      input: {
+        tenant_id: TENANT_ID,
+        cart_id: 'cart-1',
+        customer_id: CUSTOMER_ID,
+        shipping_address: { street: '123 Market St' },
+        payment_method: 'CREDIT_CARD',
+      },
+      context: {
+        run_id: 'run-date-order',
+        tenant_id: TENANT_ID,
+        caller_agent: 'SAL-02',
+        correlation_id: CORRELATION_ID,
+        granted_authority: 'AUTH-3',
+        effect_key: 'effect-order-date',
+      },
+    }) as { order_id: string };
+
+    expect(orderResult.order_id).toBeDefined();
+  });
 });
 

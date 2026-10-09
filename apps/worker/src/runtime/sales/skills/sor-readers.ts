@@ -151,9 +151,12 @@ export async function readCatalogFromSor(options: SalesSkillToolPortOptions, ten
     );
   }
 
+  const normalizedSnapshotAt = snapshot_at instanceof Date ? snapshot_at.toISOString() : String(snapshot_at);
+  const normalizedObservedAt = readResult.observed_at instanceof Date ? (readResult.observed_at as unknown as Date).toISOString() : String(readResult.observed_at);
+
   return {
-    snapshot_at,
-    observed_at: readResult.observed_at,
+    snapshot_at: normalizedSnapshotAt,
+    observed_at: normalizedObservedAt,
     tenant_id,
     items: envelope.items,
   };
@@ -270,9 +273,12 @@ export async function readInventoryFromSor(
     );
   }
 
+  const normalizedSnapshotAt = snapshot_at instanceof Date ? snapshot_at.toISOString() : String(snapshot_at);
+  const normalizedObservedAt = readResult.observed_at instanceof Date ? (readResult.observed_at as unknown as Date).toISOString() : String(readResult.observed_at);
+
   return {
-    snapshot_at,
-    observed_at: readResult.observed_at,
+    snapshot_at: normalizedSnapshotAt,
+    observed_at: normalizedObservedAt,
     tenant_id,
     item,
   };

@@ -333,6 +333,22 @@ describe('conversation takeover durable handoff coordination', () => {
     expect(response.json()).toMatchObject({ error_code: 'VALIDATION_FAILED' });
     await app.close();
   });
+
+  it('trims conversation_id in takeover path param (B-123)', async () => {
+    const { app, acquire } = buildTakeoverHarness();
+    const response = await app.inject({
+      method: 'POST',
+      url: `/conversations/  ${CONVERSATION_ID}  /takeover`,
+      headers: { authorization: 'Bearer operator-token' },
+      payload: {
+        reason: 'Customer requested human agent',
+        takeover_mode: 'FULL_CONTROL',
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(acquire).toHaveBeenCalledWith(expect.objectContaining({ conversation_id: CONVERSATION_ID }));
+    await app.close();
+  });
 });
 
 

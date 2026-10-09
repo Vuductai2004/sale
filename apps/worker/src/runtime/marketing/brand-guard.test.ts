@@ -242,4 +242,15 @@ status: approved
     expect(cleanResult.violations).toHaveLength(0);
     expect(cleanResult.confidence_score).toBe(1.0);
   });
+
+  it('fails closed with MISSING_APPROVED_POLICY_DOC when approvedDocs is undefined or non-array (B-125)', () => {
+    expect(() => auditMarketingBrand(baseAuditInput, undefined as any)).toThrowError(
+      MarketingRuntimeError,
+    );
+    try {
+      auditMarketingBrand(baseAuditInput, undefined as any);
+    } catch (err) {
+      expect((err as MarketingRuntimeError).code).toBe('MISSING_APPROVED_POLICY_DOC');
+    }
+  });
 });

@@ -53,7 +53,11 @@ export function registerConversationTakeoverRoutes(
       try {
         const principal = requireOperator(request, 'conversation:takeover');
         const operator_id = requireOperatorIdentifier(principal.operator_id);
-        const conversation_id = request.params.conversation_id;
+        const rawConvId = request.params.conversation_id;
+        if (typeof rawConvId !== 'string' || rawConvId.trim().length === 0) {
+          fail('VALIDATION_FAILED', 'conversation_id is required in the path');
+        }
+        const conversation_id = rawConvId.trim();
 
         const body = request.body as Record<string, unknown> | undefined;
         const reason = requiredString(body, 'reason', MAX_REASON_LENGTH);
@@ -151,7 +155,11 @@ export function registerConversationTakeoverRoutes(
       try {
         const principal = requireOperator(request, 'conversation:takeover');
         const operator_id = requireOperatorIdentifier(principal.operator_id);
-        const conversation_id = request.params.conversation_id;
+        const rawConvId = request.params.conversation_id;
+        if (typeof rawConvId !== 'string' || rawConvId.trim().length === 0) {
+          fail('VALIDATION_FAILED', 'conversation_id is required in the path');
+        }
+        const conversation_id = rawConvId.trim();
 
         const body = request.body as Record<string, unknown> | undefined;
         const raw_extend = body?.['extend_seconds'];
@@ -218,7 +226,11 @@ export function registerConversationTakeoverRoutes(
       try {
         const principal = requireOperator(request, 'conversation:takeover');
         const operator_id = requireOperatorIdentifier(principal.operator_id);
-        const conversation_id = request.params.conversation_id;
+        const rawConvId = request.params.conversation_id;
+        if (typeof rawConvId !== 'string' || rawConvId.trim().length === 0) {
+          fail('VALIDATION_FAILED', 'conversation_id is required in the path');
+        }
+        const conversation_id = rawConvId.trim();
 
         const body = request.body as Record<string, unknown> | undefined;
         let handoff_summary: string | null = null;
@@ -323,8 +335,8 @@ export function registerConversationTakeoverRoutes(
 
 /** An operator principal always carries its identifier; a missing one is a refusal, not a default. */
 function requireOperatorIdentifier(operator_id: string | undefined): string {
-  if (operator_id === undefined || operator_id.length === 0) {
+  if (operator_id === undefined || operator_id.trim().length === 0) {
     fail('AUTHENTICATION_FAILED', 'the authenticated operator principal carries no operator identifier');
   }
-  return operator_id;
+  return operator_id.trim();
 }

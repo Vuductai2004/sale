@@ -741,8 +741,27 @@ Tính đến thời điểm hiện tại, remote `phong/feat/demo-live-3agent` (
    - **Hiện tượng:** Khi caller truyền `queryTokens` không phải là mảng hoặc `queryText` không phải là chuỗi (hoặc `entry` bị null/undefined/thiếu trường), code gọi trực tiếp `queryTokens.map()` hoặc `queryText.trim()` hoặc `entry.question.toLowerCase()`, dẫn đến việc Node.js ném `TypeError: Cannot read properties of undefined` làm sập tiến trình xử lý FAQ.
    - **Khắc phục:** Bổ sung các guard clause kiểm tra tính hợp lệ của `entry`, `queryText`, và `Array.isArray(queryTokens)`. Nếu không hợp lệ, trả về điểm số `0` an toàn thay vì ném ngoại lệ. Bổ sung unit test trong `apps/worker/src/runtime/care/skills/faq-parser.test.ts`. *(Đã xong - 5/5 test pass)*
 
+### GIAI ĐOẠN 23: CHUẨN HÓA PATH VÀ BODY SANITIZATION TRONG CONVERSATIONS, HỖ TRỢ NGÀY BÁO GIÁ ĐỐI TƯỢNG DATE, BẢO VỆ APPROVED DOCS ARRAY VÀ CHUẨN HÓA ERP TIMESTAMPS (B-123 ĐẾN B-126)
+
+1. **Sửa Bug B-123:** Thiếu cắt tỉa khoảng trắng và thẩm định ranh giới cho `task_id`, `conversation_id`, `requiredString` và `requireOperatorIdentifier` (`apps/api/src/routes/v1/conversations.ts` & `apps/api/src/routes/v1/conversations-takeover.ts`):
+   - **Hiện tượng:** Hàm `requiredString` kiểm tra `value.trim().length === 0` nhưng lại trả về `value` thô nguyên bản chưa cắt tỉa khoảng trắng. Điều này khiến các trường như `customer_identifier`, `idempotency_key` mang theo khoảng trắng thừa dẫn tới tính sai effect key. Đồng thời, các tuyến `GET /tasks/:task_id`, `POST /conversations/:conversation_id/messages`, `takeover`, `heartbeat`, `resume` không kiểm tra cắt tỉa khoảng trắng cho `task_id` và `conversation_id`, và `requireOperatorIdentifier` không trim `operator_id`.
+   - **Khắc phục:** Cập nhật `requiredString` trả về `value.trim()`; bổ sung thẩm định và cắt tỉa `task_id.trim()`, `conversation_id.trim()`, và `operator_id.trim()`. Bổ sung unit test trong `apps/api/src/routes/v1/conversations-takeover.test.ts`. *(Đã xong - 13/13 test pass)*
+
+2. **Sửa Bug B-124:** `handleCreateOrder` từ chối thời hạn báo giá khi `quote_expires_at` là đối tượng `Date` (`apps/worker/src/runtime/sales/skills/mutation-handlers.ts`):
+   - **Hiện tượng:** Mặc dù `isValidIsoDate` đã hỗ trợ đối tượng `Date`, hàm `handleCreateOrder` lại có điều kiện kiểm tra cứng `typeof quoteExpiresAt !== 'string'` trước khi gọi `isValidIsoDate`. Khi cart hoặc quote repository trả về trường `quote_expires_at` dưới dạng instance `Date`, hệ thống lập tức ném lỗi fail-closed `PRICE_MISMATCH: Price quote expiration timestamp is missing or malformed`.
+   - **Khắc phục:** Loại bỏ kiểm tra ràng buộc chỉ nhận chuỗi, cho phép `quoteExpiresAtRaw instanceof Date` và chuẩn hóa thành chuỗi ISO string trước khi kiểm tra hết hạn và sinh HMAC quote token. Bổ sung unit test trong `apps/worker/src/runtime/sales/skills/cart-order.test.ts`. *(Đã xong - 20/20 test pass)*
+
+3. **Sửa Bug B-125:** Hàm kiểm tra tuân thủ thương hiệu `auditMarketingBrand` bị crash `TypeError` khi `approvedDocs` không phải là mảng (`apps/worker/src/runtime/marketing/brand-guard.ts`):
+   - **Hiện tượng:** Khi caller truyền `approvedDocs` là `undefined` hoặc đối tượng không phải mảng, code gọi trực tiếp `approvedDocs.find(...)`, dẫn tới việc Node.js ném `TypeError: Cannot read properties of undefined (reading 'find')` làm sập tiến trình thay vì ném lỗi miền chính thức của Marketing Guard.
+   - **Khắc phục:** Thêm kiểm tra `!Array.isArray(approvedDocs)` ở đầu hàm và ném lỗi fail-closed miền chuẩn `MarketingRuntimeError('MISSING_APPROVED_POLICY_DOC')`. Bổ sung unit test trong `apps/worker/src/runtime/marketing/brand-guard.test.ts`. *(Đã xong - 12/12 test pass)*
+
+4. **Sửa Bug B-126:** ERP Catalog & Inventory SOR Readers trả về instance `Date` thô trong trường `snapshot_at` và `observed_at` (`apps/worker/src/runtime/sales/skills/sor-readers.ts`):
+   - **Hiện tượng:** Khi connector ERP hoặc cache trả về các trường `snapshot_at`, `updated_at`, hoặc `observed_at` dưới dạng instance `Date`, các hàm `readCatalogFromSor` và `readInventoryFromSor` gán trực tiếp đối tượng này vào kết quả đầu ra được định kiểu tĩnh là `string`. Điều này gây ra lỗi Type/Serialization bất đối xứng cho các tầng logic tiếp theo (như so sánh chuỗi, hash SHA-256).
+   - **Khắc phục:** Chuẩn hóa các trường `snapshot_at` và `observed_at` thành chuỗi ISO string (`instanceof Date ? value.toISOString() : String(value)`) trước khi trả về từ các reader SOR. Bổ sung unit test trong `apps/worker/src/runtime/sales/skills/read-skills.test.ts`. *(Đã xong - 19/19 test pass)*
+
 ---
 *Báo cáo được lưu trữ và cập nhật trực tiếp tại: `docs/demo/BUG_AUDIT_REPORT.md`.*
+
 
 
 

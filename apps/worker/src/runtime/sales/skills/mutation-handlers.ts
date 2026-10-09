@@ -283,13 +283,16 @@ export async function handleCreateOrder(
     );
   }
 
-  const quoteExpiresAt = (inputRecord['quote_expires_at'] ?? quoteRecord['quote_expires_at']) as string | undefined;
-  if (!quoteExpiresAt || typeof quoteExpiresAt !== 'string' || !isValidIsoDate(quoteExpiresAt)) {
+  const quoteExpiresAtRaw = inputRecord['quote_expires_at'] ?? quoteRecord['quote_expires_at'];
+  if (!quoteExpiresAtRaw || !isValidIsoDate(quoteExpiresAtRaw)) {
     throw new SalesSkillToolError(
       'PRICE_MISMATCH',
       'Price quote expiration timestamp is missing or malformed',
     );
   }
+  const quoteExpiresAt = quoteExpiresAtRaw instanceof Date
+    ? quoteExpiresAtRaw.toISOString()
+    : String(quoteExpiresAtRaw);
 
   const clock = options.now ?? (() => new Date());
   if (new Date(quoteExpiresAt).getTime() <= clock().getTime()) {

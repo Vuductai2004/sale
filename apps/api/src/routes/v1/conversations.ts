@@ -72,11 +72,12 @@ function requiredString(body: unknown, field: string, max_length?: number): stri
   if (typeof value !== 'string' || value.trim().length === 0) {
     fail('VALIDATION_FAILED', `${field} is required and must be a non-empty string`);
   }
-  if (max_length !== undefined && value.length > max_length) {
+  const trimmed = value.trim();
+  if (max_length !== undefined && trimmed.length > max_length) {
     fail('VALIDATION_FAILED', `${field} exceeds the ${String(max_length)} character limit`);
   }
 
-  return value;
+  return trimmed;
 }
 
 /** Reads `attachments`: an array of strings, or absent. Anything else fails validation. */
@@ -253,8 +254,12 @@ export function registerConversationRoutes(
             'customer messages require a channel session or storefront widget principal',
           );
         }
+        const rawConvId = request.params.conversation_id;
+        if (typeof rawConvId !== 'string' || rawConvId.trim().length === 0) {
+          fail('VALIDATION_FAILED', 'conversation_id is required in the path');
+        }
+        const conversation_id = rawConvId.trim();
         const body = request.body as Partial<PostMessageRequest> | undefined;
-        const conversation_id = request.params.conversation_id;
         const message = requiredString(body, 'message', MESSAGE_MAX_LENGTH);
         const idempotency_key = requiredString(body, 'idempotency_key', IDEMPOTENCY_KEY_MAX_LENGTH);
         const rawModule = body?.module;
@@ -325,7 +330,12 @@ export function registerConversationRoutes(
       if (principal.kind === 'OPERATOR') {
         requireOperator(request, 'run:read');
       }
-      const task = await runtime.runs.read({ tenant_id: principal.tenant_id, run_id: request.params.task_id });
+      const rawTaskId = request.params.task_id;
+      if (typeof rawTaskId !== 'string' || rawTaskId.trim().length === 0) {
+        fail('VALIDATION_FAILED', 'task_id is required in the path');
+      }
+      const task_id = rawTaskId.trim();
+      const task = await runtime.runs.read({ tenant_id: principal.tenant_id, run_id: task_id });
 
       if (task === null) {
         fail('TASK_NOT_FOUND', 'this tenant holds no durable task with that identifier');

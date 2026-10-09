@@ -14,6 +14,7 @@ import { type ErpReadPort } from '../../connectors.js';
 import { SalesAdvisorExecutionState } from '../advisor-adapters.js';
 import { type AssignableAuthority } from '@agentos/core-engine/contracts';
 import { createSalesSkillServices, GATE_SALES_SKILLS, computeQuoteToken, type SalesCartPort, type SalesCommunicationPort, type SalesConsentPort, type SalesCustomer360Fact, type SalesFrequencyCapConfig, type SalesFrequencyCapPort, type SalesOrderPort, type SalesPaymentPolicyPort, type SalesPriceFloorApproved, type SalesPriceFloorDecision, type SalesPriceFloorPort, type SalesPriceFloorRefused, type SalesQuotePort, type SalesRecommendationRevenueEvidencePort, type SalesReplenishmentPolicyPort } from './index.js';
+import { readCatalogFromSor, readInventoryFromSor } from './sor-readers.js';
 
 const TENANT_ID = '00000000-0000-4000-8000-000000000001';
 
@@ -1409,5 +1410,49 @@ describe('SalesSkillServices - read, recommendation and customer skills', () => 
     }) as { product: { sku: string } };
 
     expect(result.product).toMatchObject({ sku: 'SKU-REC-1' });
+  });
+
+  it('readCatalogFromSor and readInventoryFromSor: accept Date instances for snapshot_at and observed_at and normalize to ISO string (B-126)', async () => {
+    const erp = {
+      read: vi.fn(async ({ resource, tenant_id, key }: { resource: string; tenant_id: string; key?: string }) => {
+        if (resource === 'products') {
+          return {
+            resource,
+            tenant_id,
+            observed_at: new Date(SNAPSHOT_AT) as unknown as string,
+            value: {
+              tenant_id,
+              snapshot_at: new Date(SNAPSHOT_AT) as unknown as string,
+              items: [{
+                tenant_id,
+                sku: 'SKU-DATE-1',
+                name: 'Date Product',
+                currency: 'TWD',
+                original_list_price: 50,
+                is_active: true,
+              }],
+            },
+          };
+        }
+        return {
+          resource,
+          tenant_id,
+          observed_at: new Date(SNAPSHOT_AT) as unknown as string,
+          value: {
+            tenant_id,
+            snapshot_at: new Date(SNAPSHOT_AT) as unknown as string,
+            items: [{ tenant_id, sku_id: key, total_available_to_promise: 5 }],
+          },
+        };
+      }),
+    };
+
+    const catalog = await readCatalogFromSor({ erp_read: erp as any }, TENANT_ID);
+    expect(catalog.snapshot_at).toBe(SNAPSHOT_AT);
+    expect(catalog.observed_at).toBe(SNAPSHOT_AT);
+
+    const inventory = await readInventoryFromSor({ erp_read: erp as any }, TENANT_ID, 'SKU-DATE-1');
+    expect(inventory.snapshot_at).toBe(SNAPSHOT_AT);
+    expect(inventory.observed_at).toBe(SNAPSHOT_AT);
   });
 });

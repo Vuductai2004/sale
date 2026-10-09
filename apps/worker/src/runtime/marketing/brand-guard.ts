@@ -116,6 +116,13 @@ export function auditMarketingBrand(
     }
   }
 
+  if (!Array.isArray(approvedDocs)) {
+    throw new MarketingRuntimeError(
+      'MISSING_APPROVED_POLICY_DOC',
+      'Required approved policy document brand/prohibited-claims.md is missing, unapproved, or empty for compliance analysis.',
+    );
+  }
+
   const prohibitedClaimsDoc = approvedDocs.find(
     (doc) => doc.path === 'brand/prohibited-claims.md',
   );
