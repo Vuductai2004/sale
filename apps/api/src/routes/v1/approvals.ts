@@ -129,7 +129,12 @@ export function registerApprovalRoutes(
 
         // A cross-tenant identifier resolves to `null` and is answered `404`: the row is not
         // redacted into existence, because its absence is itself information the caller may not have.
-        const detail = await runtime.approvals.detail(principal.tenant_id, request.params.approval_id);
+        const rawApprovalId = request.params.approval_id;
+        if (typeof rawApprovalId !== 'string' || rawApprovalId.trim().length === 0) {
+          fail('NOT_FOUND', 'this tenant holds no approval with that identifier');
+        }
+        const approval_id = rawApprovalId.trim();
+        const detail = await runtime.approvals.detail(principal.tenant_id, approval_id);
         if (detail === null) {
           fail('NOT_FOUND', 'this tenant holds no approval with that identifier');
         }
@@ -183,15 +188,17 @@ export function registerApprovalRoutes(
         if (typeof candidate.reason !== 'string' || candidate.reason.trim().length === 0) {
           fail('VALIDATION_FAILED', 'reason is mandatory for every decision');
         }
+        const reason = candidate.reason.trim();
         if (candidate.reason.length > MAX_REASON_LENGTH) {
           fail('VALIDATION_FAILED', `reason exceeds the ${MAX_REASON_LENGTH} character limit`);
         }
-        if (typeof candidate.expected_payload_sha256 !== 'string' || candidate.expected_payload_sha256.length === 0) {
+        if (typeof candidate.expected_payload_sha256 !== 'string' || candidate.expected_payload_sha256.trim().length === 0) {
           fail(
             'VALIDATION_FAILED',
             'expected_payload_sha256 is required: the decision must restate the payload digest the approver reviewed',
           );
         }
+        const expected_payload_sha256 = candidate.expected_payload_sha256.trim();
         if (decision === 'MODIFY' && !isPlainRecord(candidate.modified_payload)) {
           fail('VALIDATION_FAILED', 'modified_payload must be a JSON object for a MODIFY decision');
         }
@@ -199,7 +206,11 @@ export function registerApprovalRoutes(
           fail('VALIDATION_FAILED', 'modified_payload is only valid on a MODIFY decision');
         }
 
-        const approval_id = request.params.approval_id;
+        const rawApprovalId = request.params.approval_id;
+        if (typeof rawApprovalId !== 'string' || rawApprovalId.trim().length === 0) {
+          fail('NOT_FOUND', 'this tenant holds no approval with that identifier');
+        }
+        const approval_id = rawApprovalId.trim();
         const detail = await runtime.approvals.detail(principal.tenant_id, approval_id);
         if (detail === null) {
           fail('NOT_FOUND', 'this tenant holds no approval with that identifier');
@@ -243,10 +254,10 @@ export function registerApprovalRoutes(
           approval_id,
           run_id: detail.run_id,
           effect_key: detail.effect_key,
-          expected_payload_sha256: candidate.expected_payload_sha256,
+          expected_payload_sha256,
           decision,
           operator_id,
-          reason: candidate.reason,
+          reason,
           ...(candidate.modified_payload === undefined ? {} : { modified_payload: candidate.modified_payload }),
         });
 

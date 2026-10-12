@@ -828,5 +828,51 @@ describe('POST /approvals/:approval_id/decision (R05 approvals.decide)', () => {
         await app.close();
       }
     });
+
+    it('trims approval_id and expected_payload_sha256 and rejects whitespace-only sha256 (B-132)', async () => {
+      const { app, decide } = buildHarness();
+
+      try {
+        // 1. Whitespace only expected_payload_sha256 fails validation
+        const badShaResponse = await app.inject({
+          method: 'POST',
+          url: `/approvals/${APPROVAL_ID}/decision`,
+          headers: { authorization: `Bearer ${OPERATOR_TOKEN}` },
+          payload: {
+            decision: 'APPROVE',
+            reason: 'Approving valid payload',
+            expected_payload_sha256: '   ',
+          },
+        });
+
+        expect(badShaResponse.statusCode).toBe(400);
+        expect(badShaResponse.json()).toMatchObject({
+          error_code: 'VALIDATION_FAILED',
+          retryable: false,
+        });
+
+        // 2. Untrimmed expected_payload_sha256 and approval_id are trimmed cleanly
+        const successResponse = await app.inject({
+          method: 'POST',
+          url: `/approvals/${APPROVAL_ID}/decision`,
+          headers: { authorization: `Bearer ${OPERATOR_TOKEN}` },
+          payload: {
+            decision: 'APPROVE',
+            reason: '  Approving valid payload with padding  ',
+            expected_payload_sha256: `  ${PAYLOAD_SHA256}  `,
+          },
+        });
+
+        expect(successResponse.statusCode).toBe(202);
+        expect(decide).toHaveBeenCalledWith(expect.objectContaining({
+          approval_id: APPROVAL_ID,
+          expected_payload_sha256: PAYLOAD_SHA256,
+          reason: 'Approving valid payload with padding',
+        }));
+      } finally {
+        await app.close();
+      }
+    });
   });
 });
+

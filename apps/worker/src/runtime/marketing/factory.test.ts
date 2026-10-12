@@ -218,6 +218,25 @@ describe('default Marketing context aggregation', () => {
     });
   });
 
+  it('hydrates customer profile when timestamps are ISO strings instead of Date instances (B-131)', async () => {
+    getProfile.mockResolvedValueOnce({
+      ...profile(),
+      consent_updated_at: '2026-01-01T00:00:00.000Z' as unknown as Date,
+      created_at: '2025-01-01T00:00:00.000Z' as unknown as Date,
+    });
+
+    const orchestrator = await makeFactory()(TENANT);
+    const context = await internals(orchestrator).dependencies.contextAggregator.hydrateContext(
+      TENANT,
+      subject,
+      'correlation-marketing-string-dates',
+    );
+
+    expect(context.customer).not.toBeNull();
+    expect(context.customer?.consent_updated_at).toBe('2026-01-01T00:00:00.000Z');
+    expect(context.customer?.created_at).toBe('2025-01-01T00:00:00.000Z');
+  });
+
   it('fails closed when the authoritative profile is missing', async () => {
     getProfile.mockResolvedValueOnce(null);
 

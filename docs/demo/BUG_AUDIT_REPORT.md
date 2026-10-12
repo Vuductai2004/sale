@@ -777,8 +777,19 @@ Tính đến thời điểm hiện tại, remote `phong/feat/demo-live-3agent` (
    - **Hiện tượng:** `invocation.input` dạng generic `TInput & object` không thể ép kiểu trực tiếp sang đối tượng churn risk mà không qua `unknown` (TS2352). Ngoài ra, `readCatalogFromSor` và `readInventoryFromSor` yêu cầu toàn bộ `SalesSkillToolPortOptions` dù chỉ dùng `erp_read`, gây lỗi TS2345 trong testcases.
    - **Khắc phục:** Ép kiểu an toàn qua `unknown` trong Care Tool Port; nới lỏng tham số của `readCatalogFromSor` và `readInventoryFromSor` thành `Pick<SalesSkillToolPortOptions, 'erp_read'>`. Toàn bộ monorepo typecheck vượt qua 19/19 package.
 
+### GIAI ĐOẠN 25: BẢO VỆ CHUẨN THỜI GIAN MARKETING CONTEXT VÀ CHUẨN HÓA INPUT SANITIZATION CHO APPROVAL ROUTES (B-131 ĐẾN B-132)
+
+1. **Sửa Bug B-131:** Marketing Context Aggregator bị crash ngầm rớt customer thành null khi trường ngày của profile là chuỗi ISO (`apps/worker/src/runtime/marketing/factory.ts`):
+   - **Hiện tượng:** Trong hàm `hydrateContext` của Marketing Orchestrator Factory, `profile.consent_updated_at?.toISOString()` và `profile.created_at.toISOString()` bị gọi trực tiếp mà không kiểm tra kiểu dữ liệu. Khi dữ liệu profile được đọc từ cache hoặc đối tượng serialized JSON (trong đó ngày tháng là chuỗi ISO string chứ không phải đối tượng `Date`), Node.js ném ngoại lệ `TypeError: ...toISOString is not a function`. Lỗi này rơi vào khối `catch` và đặt `customer = null`, khiến phiên marketing mất trắng dữ liệu khách hàng 360 một cách âm thầm.
+   - **Khắc phục:** Xử lý chuẩn hóa an toàn cho cả hai trường hợp `instanceof Date` và chuỗi ISO (`instanceof Date ? value.toISOString() : (value ? String(value) : ...)`), đồng bộ với `SalesContextAggregator` và `CareContextAggregator`. Bổ sung unit test trong `apps/worker/src/runtime/marketing/factory.test.ts`. *(Đã xong - 12/12 test pass)*
+
+2. **Sửa Bug B-132:** Thiếu cắt tỉa khoảng trắng và thẩm định ranh giới cho `approval_id`, `expected_payload_sha256` và `reason` trong Approvals API (`apps/api/src/routes/v1/approvals.ts`):
+   - **Hiện tượng:** Tại các tuyến `GET /api/v1/approvals/:approval_id` và `POST /api/v1/approvals/:approval_id/decision`, tham số đường dẫn `request.params.approval_id` được truyền trực tiếp xuống database mà không cắt tỉa khoảng trắng thừa, dẫn tới tìm kiếm sai lệch. Đồng thời, trường `expected_payload_sha256` chỉ kiểm tra độ dài `length === 0` thay vì kiểm tra chuỗi rỗng sau khi trim (`trim().length === 0`), cho phép chuỗi toàn khoảng trắng vượt qua tầng validation; và `reason` không được trim trước khi lưu audit log / decision record.
+   - **Khắc phục:** Bổ sung thẩm định bắt buộc và cắt tỉa `approval_id.trim()`, `expected_payload_sha256.trim()` và `reason.trim()`; từ chối các chuỗi chỉ chứa khoảng trắng với lỗi `VALIDATION_FAILED`. Bổ sung unit test trong `apps/api/src/routes/v1/approvals.test.ts`. *(Đã xong - 24/24 test pass)*
+
 ---
 *Báo cáo được lưu trữ và cập nhật trực tiếp tại: `docs/demo/BUG_AUDIT_REPORT.md`.*
+
 
 
 
