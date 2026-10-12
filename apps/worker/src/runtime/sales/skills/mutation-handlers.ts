@@ -180,7 +180,8 @@ export async function handleCreateCart(
     );
   }
 
-  const updated_at = out.updated_at instanceof Date ? out.updated_at.toISOString() : out.updated_at;
+  const rawUpdated = out.updated_at as unknown;
+  const updated_at = rawUpdated instanceof Date ? rawUpdated.toISOString() : String(rawUpdated);
 
   return {
     cart_id: out.cart_id,
@@ -391,7 +392,8 @@ export async function handleCreateOrder(
       `Order total (${out.total_amount} ${out.currency}) does not match authoritative quote (${quote.total_amount} ${quote.currency})`,
     );
   }
-  const created_at = out.created_at instanceof Date ? out.created_at.toISOString() : out.created_at;
+  const rawCreated = out.created_at as unknown;
+  const created_at = rawCreated instanceof Date ? rawCreated.toISOString() : String(rawCreated);
   return {
     order_id: out.order_id,
     order_number: out.order_number,
@@ -611,7 +613,8 @@ export async function handleSendMessage(
     );
   }
 
-  const delivered_at = out.delivered_at instanceof Date ? out.delivered_at.toISOString() : out.delivered_at;
+  const rawDelivered = out.delivered_at as unknown;
+  const delivered_at = rawDelivered instanceof Date ? rawDelivered.toISOString() : String(rawDelivered);
 
   return {
     message_id: out.message_id,

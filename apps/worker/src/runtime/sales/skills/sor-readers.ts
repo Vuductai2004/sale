@@ -94,7 +94,10 @@ export function categoryMatches(product: ProductItem, category_id: string | unde
   return product.categories?.includes(category_id) ?? false;
 }
 
-export async function readCatalogFromSor(options: SalesSkillToolPortOptions, tenant_id: string): Promise<CatalogRead> {
+export async function readCatalogFromSor(
+  options: Pick<SalesSkillToolPortOptions, 'erp_read'>,
+  tenant_id: string,
+): Promise<CatalogRead> {
   if (options.erp_read === null) {
     throw new SalesSkillToolError(
       'AUTHORITATIVE_SOURCE_UNAVAILABLE',
@@ -151,8 +154,8 @@ export async function readCatalogFromSor(options: SalesSkillToolPortOptions, ten
     );
   }
 
-  const normalizedSnapshotAt = snapshot_at instanceof Date ? snapshot_at.toISOString() : String(snapshot_at);
-  const normalizedObservedAt = readResult.observed_at instanceof Date ? (readResult.observed_at as unknown as Date).toISOString() : String(readResult.observed_at);
+  const normalizedSnapshotAt = (snapshot_at as unknown) instanceof Date ? ((snapshot_at as unknown) as Date).toISOString() : String(snapshot_at);
+  const normalizedObservedAt = (readResult.observed_at as unknown) instanceof Date ? ((readResult.observed_at as unknown) as Date).toISOString() : String(readResult.observed_at);
 
   return {
     snapshot_at: normalizedSnapshotAt,
@@ -200,7 +203,7 @@ export async function readInventoryFromSorBatch(
 
 
 export async function readInventoryFromSor(
-  options: SalesSkillToolPortOptions,
+  options: Pick<SalesSkillToolPortOptions, 'erp_read'>,
   tenant_id: string,
   sku_id: string,
 ): Promise<InventoryRead> {
@@ -273,8 +276,8 @@ export async function readInventoryFromSor(
     );
   }
 
-  const normalizedSnapshotAt = snapshot_at instanceof Date ? snapshot_at.toISOString() : String(snapshot_at);
-  const normalizedObservedAt = readResult.observed_at instanceof Date ? (readResult.observed_at as unknown as Date).toISOString() : String(readResult.observed_at);
+  const normalizedSnapshotAt = (snapshot_at as unknown) instanceof Date ? ((snapshot_at as unknown) as Date).toISOString() : String(snapshot_at);
+  const normalizedObservedAt = (readResult.observed_at as unknown) instanceof Date ? ((readResult.observed_at as unknown) as Date).toISOString() : String(readResult.observed_at);
 
   return {
     snapshot_at: normalizedSnapshotAt,

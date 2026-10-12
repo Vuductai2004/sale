@@ -121,7 +121,7 @@ export function createCareSkillToolPort(options: CareSkillOptions): SkillToolPor
           );
         }
 
-        const input = invocation.input as {
+        const input = (invocation.input as unknown) as {
           readonly tenant_id: string;
           readonly customer_id: string;
           readonly recent_message_snippets?: string[];

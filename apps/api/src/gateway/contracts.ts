@@ -377,8 +377,14 @@ export interface ApprovalDecisionResponse {
 
 /** The only supported baseline filter (`06` §8.1.3 R14). */
 export type ApprovalQueueFilter = 'PENDING';
-/** Detail reads may report an approval that crossed its deadline. */
-export type ApprovalQueueStatus = ApprovalQueueFilter | 'EXPIRED';
+/** Detail reads may report an approval that crossed its deadline or has already been decided. */
+export type ApprovalQueueStatus =
+  | ApprovalQueueFilter
+  | 'APPROVED'
+  | 'REJECTED'
+  | 'MODIFIED'
+  | 'CANCELLED'
+  | 'EXPIRED';
 export interface ApprovalQueueItem {
   readonly approval_id: string;
   readonly run_id: string;

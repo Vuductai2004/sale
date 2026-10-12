@@ -40,6 +40,7 @@ describe('createSalesErpPriceFloorPort', () => {
         tenant_id: 'tenant-1',
         resource: 'prices',
         key: 'SKU-001',
+        observed_at: '2026-10-09T00:00:00.000Z',
         value: {
           tenant_id: 'tenant-1',
           sku: 'SKU-001', // uses sku instead of sku_id

@@ -759,8 +759,27 @@ Tính đến thời điểm hiện tại, remote `phong/feat/demo-live-3agent` (
    - **Hiện tượng:** Khi connector ERP hoặc cache trả về các trường `snapshot_at`, `updated_at`, hoặc `observed_at` dưới dạng instance `Date`, các hàm `readCatalogFromSor` và `readInventoryFromSor` gán trực tiếp đối tượng này vào kết quả đầu ra được định kiểu tĩnh là `string`. Điều này gây ra lỗi Type/Serialization bất đối xứng cho các tầng logic tiếp theo (như so sánh chuỗi, hash SHA-256).
    - **Khắc phục:** Chuẩn hóa các trường `snapshot_at` và `observed_at` thành chuỗi ISO string (`instanceof Date ? value.toISOString() : String(value)`) trước khi trả về từ các reader SOR. Bổ sung unit test trong `apps/worker/src/runtime/sales/skills/read-skills.test.ts`. *(Đã xong - 19/19 test pass)*
 
+### GIAI ĐOẠN 24: ĐỒNG BỘ TRẠNG THÁI APPROVAL QUEUE, CHUẨN HÓA KIỂU DỮ LIỆU NGÀY VÀ FIX LỖI BIÊN DỊCH TYPESCRIPT TOÀN DỰ ÁN (B-127 ĐẾN B-130)
+
+1. **Sửa Bug B-127:** Kiểu `ApprovalQueueStatus` thiếu các trạng thái đã quyết định (`APPROVED`, `REJECTED`, `MODIFIED`, `CANCELLED`) gây lỗi type narrowing `never` (`apps/api/src/gateway/contracts.ts`):
+   - **Hiện tượng:** `ApprovalQueueStatus` được định nghĩa chỉ gồm `ApprovalQueueFilter | 'EXPIRED'`. Khi `approvals.ts` kiểm tra `detail.status !== 'PENDING'`, TypeScript tự động thu hẹp kiểu của `detail.status` về `never`, khiến phương thức `.toLowerCase()` báo lỗi biên dịch TS2339. Đồng thời, bài test B-109 trong `approvals.test.ts` truyền `status: 'APPROVED'` bị TypeScript từ chối với lỗi TS2322.
+   - **Khắc phục:** Mở rộng `ApprovalQueueStatus` bao gồm đầy đủ các trạng thái thực tế từ cơ sở dữ liệu (`'APPROVED' | 'REJECTED' | 'MODIFIED' | 'CANCELLED' | 'EXPIRED' | ApprovalQueueFilter`). Giúp `typecheck` của `@agentos/api` vượt qua 100%.
+
+2. **Sửa Bug B-128:** Vi phạm chế độ `exactOptionalPropertyTypes` trong `AdvisorRunState` và thiếu `observed_at` trong mock ERP (`apps/worker/src/runtime/sales/advisor-adapters.ts` & `advisor-adapters.test.ts`):
+   - **Hiện tượng:** Compiler TypeScript bật cờ `exactOptionalPropertyTypes: true`, do đó các thuộc tính tùy chọn `candidate_sku?: string` không thể gán giá trị `undefined` từ biểu thức `current?.candidate_sku`. Đồng thời, mock trong `advisor-adapters.test.ts` thiếu trường bắt buộc `observed_at` của `ConnectorReadResult`.
+   - **Khắc phục:** Cập nhật khai báo kiểu `candidate_sku?: string | undefined` và `requirements?: SalesAdvisorRequirements | undefined`; bổ sung trường `observed_at` vào fixture test.
+
+3. **Sửa Bug B-129:** Toán tử `instanceof Date` áp dụng trực tiếp trên kiểu nguyên thủy gây lỗi TS2358 (`apps/worker/src/runtime/sales/skills/mutation-handlers.ts` & `sor-readers.ts`):
+   - **Hiện tượng:** Các biến `out.updated_at`, `out.created_at`, `out.delivered_at`, `snapshot_at`, `readResult.observed_at` có kiểu tĩnh là chuỗi nguyên thủy (`string`). TypeScript áp dụng quy tắc ngặt nghèo không cho phép vế trái của `instanceof` là kiểu nguyên thủy (TS2358).
+   - **Khắc phục:** Thực hiện chuyển đổi qua `unknown` an toàn trước khi kiểm tra `instanceof Date` và chuẩn hóa về ISO string.
+
+4. **Sửa Bug B-130:** Lỗi ép kiểu `invocation.input` trong Care Tool Port và thiếu phân tách ràng buộc options SOR Readers (`apps/worker/src/runtime/care/skills/tool-port.ts` & `sor-readers.ts`):
+   - **Hiện tượng:** `invocation.input` dạng generic `TInput & object` không thể ép kiểu trực tiếp sang đối tượng churn risk mà không qua `unknown` (TS2352). Ngoài ra, `readCatalogFromSor` và `readInventoryFromSor` yêu cầu toàn bộ `SalesSkillToolPortOptions` dù chỉ dùng `erp_read`, gây lỗi TS2345 trong testcases.
+   - **Khắc phục:** Ép kiểu an toàn qua `unknown` trong Care Tool Port; nới lỏng tham số của `readCatalogFromSor` và `readInventoryFromSor` thành `Pick<SalesSkillToolPortOptions, 'erp_read'>`. Toàn bộ monorepo typecheck vượt qua 19/19 package.
+
 ---
 *Báo cáo được lưu trữ và cập nhật trực tiếp tại: `docs/demo/BUG_AUDIT_REPORT.md`.*
+
 
 
 

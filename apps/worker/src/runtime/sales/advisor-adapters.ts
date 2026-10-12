@@ -24,9 +24,9 @@ export interface SalesAdvisorRequirements {
 }
 
 interface AdvisorRunState {
-  readonly requirements?: SalesAdvisorRequirements;
+  readonly requirements?: SalesAdvisorRequirements | undefined;
   readonly stock: Map<string, number>;
-  candidate_sku?: string;
+  candidate_sku?: string | undefined;
 }
 
 /**
